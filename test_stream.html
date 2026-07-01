@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Localhost Capture Card Stream</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #111; color: #fff; }
+        video { background: #000; border: 2px solid #333; max-width: 90%; margin-top: 20px; }
+        button { padding: 10px 20px; font-size: 16px; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Localhost Capture Card Feed</h1>
+    <video id="videoPlayer" autoplay playsinline muted></video>
+    <br>
+    <button id="startButton" onclick="startStream()">Start Stream</button>
+
+    <script>
+        let pc = null;
+
+        async function startStream() {
+            document.getElementById('startButton').disabled = true;
+            pc = new RTCPeerConnection();
+
+            // Handle incoming video stream track from Python server
+            pc.ontrack = function(event) {
+                if (event.track.kind === 'video') {
+                    document.getElementById('videoPlayer').srcObject = event.streams[0];
+                }
+            };
+
+            // Request video transceiver from connection
+            pc.addTransceiver('video', { direction: 'recvonly' });
+
+            // Create WebRTC local offer session description
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            // Send local offer to Python server backend
+            const response = await fetch('/offer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type })
+            });
+
+            // Receive WebRTC local answer session description from server
+            const answer = await response.json();
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+    </script>
+</body>
+</html>

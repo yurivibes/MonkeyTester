@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VisualTest Viewer</title>
+<style>
+{{CSS}}
+</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>VisualTest Viewer</h1>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <select id="sort-select" onchange="handleSortChange(this.value)" style="background:var(--surface);border:1px solid #444;color:var(--text);padding:4px 8px;border-radius:4px;font-size:0.8rem;">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="name_asc">Name A-Z</option>
+                <option value="name_desc">Name Z-A</option>
+            </select>
+        </div>
+    </header>
+    <div id="content"></div>
+</div>
+<script>
+{{JS}}
+async function showRuns() {
+    document.getElementById('content').innerHTML = '<div class="loading">Loading results...</div>';
+    const runs = await fetchJSON('/api/runs?sort=' + encodeURIComponent(currentSort));
+    if (!runs.length) {
+        document.getElementById('content').innerHTML = '<div class="loading">No test results found</div>';
+        return;
+    }
+    let html = '<div class="run-list">';
+    for (const run of runs) {
+        html += '<div class="run-item" onclick="location.href=\'test.html?run=' + encodeURIComponent(run) + '\'">' +
+            '<span class="run-id">' + escapeHtml(run) + '</span>' +
+            '<span class="run-meta" id="meta-' + escapeHtml(run) + '"></span>' +
+            '</div>';
+    }
+    html += '</div>';
+    document.getElementById('content').innerHTML = html;
+
+    // Load stats for each run (async, non-blocking)
+    for (const run of runs) {
+        const id = 'meta-' + run;
+        fetchJSON('/api/stats/' + encodeURIComponent(run))
+            .then(stats => {
+                const el = document.getElementById(id);
+                if (el && stats.total > 0) {
+                    el.textContent = stats.passed + ' passed, ' + stats.failed + ' failed';
+                }
+            })
+            .catch(() => {});
+    }
+}
+
+function handleSortChange(value) {
+    currentSort = value;
+    showRuns();
+}
+
+showRuns();
+</script>
+</body>
+</html>

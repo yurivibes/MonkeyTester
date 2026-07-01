@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VisualTest Viewer - Run Detail</title>
+<style>
+{{CSS}}
+</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>VisualTest Viewer</h1>
+        <div id="breadcrumb" class="breadcrumb"></div>
+    </header>
+    <div id="content">
+        <div class="loading">Loading run...</div>
+    </div>
+</div>
+<script>
+{{JS}}
+function getQueryParam(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
+}
+
+function updateBreadcrumb(runName) {
+    const bc = document.getElementById('breadcrumb');
+    bc.innerHTML = '<span onclick="location.href=\'index.html\'">Home</span>' +
+        ' <span class="sep">/</span> ' +
+        '<span>' + escapeHtml(runName) + '</span>';
+}
+
+async function loadRun() {
+    const run = getQueryParam('run');
+    if (!run) {
+        document.getElementById('content').innerHTML = '<div class="loading">No run specified</div>';
+        return;
+    }
+
+    updateBreadcrumb(run);
+    console.log('loadRun: got run param:', run);
+
+    // Load metadata
+    let metaHtml = '';
+    try {
+        const metadata = await fetchJSON('/api/metadata/' + encodeURIComponent(run));
+        if (metadata) {
+            const meta = metadata;
+            let items = [];
+            if (meta.timestamp) items.push('Start: ' + escapeHtml(meta.timestamp));
+            if (meta.end_time) items.push('End: ' + escapeHtml(meta.end_time));
+            if (meta.script) items.push('Script: ' + escapeHtml(meta.script));
+            if (meta.apk) {
+                const apk = meta.apk;
+                let apkInfo = 'APK: ' + (apk.build_type || '');
+                if (apk.version && apk.version !== 'unspecified') apkInfo += ' v' + escapeHtml(apk.version);
+                if (apk.build_time) apkInfo += ' (' + escapeHtml(apk.build_time) + ')';
+                items.push(apkInfo);
+            }
+            if (meta.device) {
+                items.push('Device: ' + escapeHtml(meta.device.model || meta.device.serial || ''));
+            } else if (meta.emulator) {
+                items.push('Emulator: ' + escapeHtml(meta.emulator.image || ''));
+            }
+            if (meta.vision_model && meta.vision_model.name) {
+                items.push('Vision: ' + escapeHtml(meta.vision_model.name));
+            }
+            const options = meta.options || {};
+            if (options.debug) items.push('Debug');
+            if (options.skip_backend) items.push('No backend');
+            if (items.length) {
+                metaHtml = '<div class="run-meta-bar">' + items.map(i => '<span class="run-meta-item">' + i + '</span>').join('') + '</div>';
+            }
+        }
+    } catch(e) {
+        console.warn('Failed to load metadata:', e);
+    }
+
+    // Load stats
+    let statsHtml = '';
+    try {
+        const stats = await fetchJSON('/api/stats/' + encodeURIComponent(run));
+        if (stats.total > 0) {
+            statsHtml = '<div class="stats-bar">' +
+                '<div class="stat-item total"><span class="count">' + stats.total + '</span> total</div>' +
+                '<div class="stat-item pass"><span class="count">' + stats.passed + '</span> passed</div>' +
+                '<div class="stat-item fail"><span class="count">' + stats.failed + '</span> failed</div>' +
+                '</div>';
+        }
+    } catch(e) {
+        console.warn('Failed to load stats:', e);
+    }
+
+    // Load files
+    console.log('loadRun: fetching run files...');
+    const files = await fetchJSON('/api/run/' + encodeURIComponent(run));
+    console.log('loadRun: got', files.length, 'files');
+    console.log('loadRun: building test case panels...');
+
+    // Group files by test name
+    const tests = {};
+    for (const f of files) {
+        const basename = f.name.split('/').pop();
+        if (basename.endsWith('_result.json')) {
+            const testName = basename.replace('_result.json', '');
+            tests[testName] = { json: f, video: null, screenshots: [] };
+        } else if (f.type === 'image') {
+            for (const tn of Object.keys(tests)) {
+                if (basename.startsWith(tn)) {
+                    tests[tn].screenshots.push(f);
+                    break;
+                }
+            }
+        }
+    }
+
+    const testNames = Object.keys(tests).sort();
+
+    // Build test case panels
+    let testsHtml = '<div class="tests-list">';
+    for (const testName of testNames) {
+        const data = tests[testName];
+        const statusLabel = data.json ? 'LOADING' : 'NO DATA';
+        const statusClass = data.json ? '' : 'unknown';
+        testsHtml += '<div class="test-case" id="test-' + escapeHtml(testName) + '">';
+        testsHtml += '<div class="test-case-header">';
+        testsHtml += '<span class="test-case-name">' + escapeHtml(testName) + '</span>';
+        testsHtml += '<span class="badge ' + statusClass + '" id="badge-' + escapeHtml(testName) + '">' + statusLabel + '</span>';
+        testsHtml += '</div>';
+        testsHtml += '<div class="test-case-body" id="body-' + escapeHtml(testName) + '">';
+        testsHtml += '<div class="loading" style="padding:0">Loading...</div>';
+        testsHtml += '</div>';
+        testsHtml += '</div>';
+    }
+    testsHtml += '</div>';
+
+    // Inject everything
+    console.log('loadRun: injecting HTML...');
+    const container = document.getElementById('content');
+    console.log('loadRun: container found:', !!container);
+    container.innerHTML =
+        '<div class="tests-panel">' +
+            '<div class="run-summary">' + metaHtml + statsHtml + '</div>' +
+            testsHtml +
+        '</div>';
+
+    // Load test data for each test case (async)
+    for (const testName of testNames) {
+        loadTestCase(run, testName, tests[testName], files);
+    }
+}
+
+async function loadTestCase(run, testName, fileInfo, files) {
+    const bodyEl = document.getElementById('body-' + testName);
+    const badgeEl = document.getElementById('badge-' + testName);
+    if (!bodyEl || !badgeEl) return;
+
+    let resultData = null;
+    try {
+        const data = await fetchJSON('/api/test/' + encodeURIComponent(run) + '/' + encodeURIComponent(testName));
+        resultData = data;
+    } catch(e) {
+        badgeEl.className = 'badge unknown';
+        badgeEl.textContent = 'ERROR';
+        bodyEl.innerHTML = '<div class="loading" style="padding:0">Failed to load test data</div>';
+        return;
+    }
+
+    if (!resultData) {
+        badgeEl.className = 'badge unknown';
+        badgeEl.textContent = 'NO DATA';
+        bodyEl.innerHTML = '';
+        return;
+    }
+
+    const status = (resultData.status || '').toLowerCase();
+    badgeEl.className = 'badge ' + (status || 'unknown');
+    badgeEl.textContent = (resultData.status || '--').toUpperCase();
+
+    // Build steps HTML
+    let stepsHtml = '';
+    const steps = resultData.steps || [];
+    if (steps.length > 0) {
+        stepsHtml += '<div class="steps-section"><h3>Steps</h3>';
+        stepsHtml += '<div class="steps-list">';
+        for (const step of steps) {
+            const stepStatus = (step.status || '').toLowerCase();
+            const s = step.step || step;
+            stepsHtml += '<div class="step-row">';
+            stepsHtml += '<span class="step-status ' + stepStatus + '"></span>';
+            stepsHtml += '<div class="step-content">';
+            if (s.command) stepsHtml += '<div class="step-command">' + escapeHtml(s.command) + '</div>';
+            if (s.args) stepsHtml += '<div class="step-args">' + escapeHtml(s.args) + '</div>';
+            if (s.description) stepsHtml += '<div class="step-description">' + escapeHtml(s.description) + '</div>';
+            if (step.reason) stepsHtml += '<div class="step-reason">' + escapeHtml(step.reason) + '</div>';
+            stepsHtml += '</div></div>';
+        }
+        stepsHtml += '</div></div>';
+    }
+
+    // Build screenshots HTML
+    if (resultData.screenshots && resultData.screenshots.length > 0) {
+        stepsHtml += '<div class="screenshots-section"><h3>Screenshots</h3>';
+        stepsHtml += '<div class="screenshot-grid">';
+        for (const ss of resultData.screenshots) {
+            const ssUrl = '/static/' + run + '/' + encodeURIComponent(ss.name);
+            stepsHtml += '<img src="' + ssUrl + '" alt="screenshot" loading="lazy">';
+        }
+        stepsHtml += '</div></div>';
+    }
+
+    // Build full JSON if available
+    if (resultData.full_json) {
+        stepsHtml += '<details class="json-details"><summary>Show raw JSON</summary>';
+        stepsHtml += '<pre class="json-view">' + escapeHtml(JSON.stringify(resultData.full_json, null, 2)) + '</pre>';
+        stepsHtml += '</details>';
+    }
+
+    // Add video (find any mp4 in this run, typically only one per run)
+    var videoUrl = '';
+    for (var i = 0; i < files.length; i++) {
+        if (files[i].name.endsWith('.mp4')) {
+            videoUrl = '/static/' + run + '/' + files[i].name;
+            break;
+        }
+    }
+
+    if (videoUrl) {
+        bodyEl.innerHTML =
+            '<div class="test-body-layout">' +
+                '<div class="test-content">' +
+                    (stepsHtml || '<div class="loading" style="padding:0">No steps</div>') +
+                '</div>' +
+                '<div class="video-section">' +
+                    '<div class="video-container">' +
+                        '<video controls preload="metadata">' +
+                            '<source src="' + videoUrl + '" type="video/mp4">' +
+                            'Your browser does not support the video tag.' +
+                        '</video>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+    } else {
+        bodyEl.innerHTML = stepsHtml || '<div class="loading" style="padding:0">No data</div>';
+    }
+}
+
+loadRun();
+</script>
+</body>
+</html>
