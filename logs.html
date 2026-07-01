@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VisualTest Viewer - Test Logs</title>
+<style>
+{{CSS}}
+</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>VisualTest Viewer</h1>
+        <div id="breadcrumb" class="breadcrumb"></div>
+    </header>
+    <div id="content"></div>
+</div>
+<script>
+{{JS}}
+function getQueryParam(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
+}
+
+function updateBreadcrumb(runName, testName) {
+    const bc = document.getElementById('breadcrumb');
+    bc.innerHTML = '<span onclick="location.href=\'index.html\'">Home</span>' +
+        ' <span class="sep">/</span> ' +
+        '<span onclick="location.href=\'test.html?run=' + encodeURIComponent(runName) + '\'">' + escapeHtml(runName) + '</span>' +
+        ' <span class="sep">/</span> ' +
+        '<span>' + escapeHtml(testName) + '</span>';
+}
+
+async function loadTest() {
+    const run = getQueryParam('run');
+    const testName = getQueryParam('test');
+
+    if (!run || !testName) {
+        document.getElementById('content').innerHTML = '<div class="loading">Missing run or test parameter</div>';
+        return;
+    }
+
+    updateBreadcrumb(run, testName);
+    document.getElementById('content').innerHTML = '<div class="loading">Loading test...</div>';
+
+    // Get test data
+    const testData = await fetchJSON('/api/test/' + encodeURIComponent(run) + '/' + encodeURIComponent(testName));
+
+    let html = '<a class="dl-btn" href="test.html?run=' + encodeURIComponent(run) + '" style="margin-bottom:16px;display:inline-flex;">← Back to Run</a><br>';
+
+    // Test name + status badge
+    const statusClass = (testData.status || '').toLowerCase();
+    html += '<div class="test-name">' + escapeHtml(testName) +
+        ' <span class="badge ' + statusClass + '">' + escapeHtml(testData.status || 'UNKNOWN').toUpperCase() + '</span></div>';
+
+    // Steps view
+    if (testData.steps && testData.steps.length) {
+        html += '<div class="steps-view">';
+        for (const s of testData.steps) {
+            const stepStatusClass = (s.status || '').toLowerCase();
+            const command = s.step ? s.step.command : '';
+            const args = s.step ? s.step.args : '';
+            const reason = s.reason || '';
+            html += '<div class="step-row">';
+            html += '<div class="step-status ' + stepStatusClass + '"></div>';
+            html += '<div class="step-content">';
+            html += '<div class="step-command">' + escapeHtml(command) + '</div>';
+            if (args) html += '<div class="step-args">' + escapeHtml(args) + '</div>';
+            if (reason) html += '<div class="step-reason">' + escapeHtml(reason) + '</div>';
+            html += '</div></div>';
+        }
+        html += '</div>';
+    }
+
+    // Download JSON button
+    if (testData.result_file) {
+        html += '<a class="dl-btn" href="/static/' + run + '/' + encodeURIComponent(testData.result_file.name) + '" download>Download JSON</a>';
+    }
+
+    // Screenshots
+    if (testData.screenshots && testData.screenshots.length) {
+        html += '<h2>Screenshots</h2>';
+        html += '<div class="screenshot-grid">';
+        for (const s of testData.screenshots) {
+            html += '<img src="/static/' + run + '/' + encodeURIComponent(s.name) + '" alt="' + escapeHtml(s.name) + '">';
+        }
+        html += '</div>';
+    }
+
+    // Full JSON view
+    if (testData.full_json) {
+        html += '<h2>Full JSON</h2>';
+        html += '<div class="json-view">' + escapeHtml(JSON.stringify(testData.full_json, null, 2)) + '</div>';
+    }
+
+    document.getElementById('content').innerHTML = html;
+}
+
+loadTest();
+</script>
+</body>
+</html>

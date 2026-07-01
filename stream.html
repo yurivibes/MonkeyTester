@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Stream - VisualTest Viewer</title>
+{{CSS}}
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>VisualTest Viewer</h1>
+      <div class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="sep">›</span>
+        <span>Live Stream</span>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="/">Runs</a>
+      <a href="/player.html">Player</a>
+      <a href="/logs.html">Logs</a>
+      <a href="/stream.html" class="active">Stream</a>
+    </nav>
+  </header>
+
+  <div class="stream-layout">
+    <div class="stream-controls">
+      <label for="device-select">Capture Device</label>
+      <select id="device-select">
+        <option value="">Loading devices...</option>
+      </select>
+      <div class="device-info" id="device-info"></div>
+      <div class="stream-status" id="stream-status">
+        <span class="status-dot"></span>
+        <span>Ready</span>
+      </div>
+    </div>
+    <div class="stream-viewport">
+      <div class="stream-player">
+        <img id="stream-video" autoplay style="width:100%;height:100%;object-fit:contain;background:#000;" crossorigin="anonymous" />
+        <div class="stream-overlay" id="stream-overlay">
+          <div class="overlay-spinner"></div>
+          <p>Select a device to start streaming</p>
+        </div>
+      </div>
+      <div class="stream-meta">
+        <span id="stream-url"></span>
+      </div>
+    </div>
+  </div>
+</div>
+{{JS}}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const select = document.getElementById('device-select');
+  const info = document.getElementById('device-info');
+  const status = document.getElementById('stream-status');
+  const video = document.getElementById('stream-video');
+  const overlay = document.getElementById('stream-overlay');
+  const urlDisplay = document.getElementById('stream-url');
+  let currentUrl = null;
+
+  // Load devices
+  async function loadDevices() {
+    try {
+      const res = await fetch('/api/capture-devices');
+      const devices = await res.json();
+      select.innerHTML = '';
+      if (!devices || devices.length === 0) {
+        select.innerHTML = '<option value="">No capture devices found</option>';
+        return;
+      }
+      devices.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.path;
+        opt.textContent = d.name || d.path;
+        opt.dataset.formats = d.formats || '';
+        select.appendChild(opt);
+      });
+      // Auto-select first device
+      select.value = devices[0].path;
+      showDeviceInfo(devices[0]);
+      startStream(devices[0].path);
+    } catch (e) {
+      select.innerHTML = '<option value="">Failed to load devices</option>';
+      console.error(e);
+    }
+  }
+
+  function showDeviceInfo(device) {
+    if (device.formats) {
+      info.textContent = device.formats;
+    } else {
+      info.textContent = '';
+    }
+  }
+
+  function setStatus(text, connected) {
+    const dot = status.querySelector('.status-dot');
+    const span = status.querySelector('span:last-child');
+    dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
+    span.textContent = text;
+  }
+
+  function startStream(devicePath) {
+    // Stop any existing stream
+    if (currentUrl) {
+      video.src = '';
+      currentUrl = null;
+    }
+
+     // Start new stream
+    const streamUrl = 'http://localhost:8088/stream';
+    video.src = streamUrl;
+    currentUrl = streamUrl;
+    urlDisplay.textContent = streamUrl;
+    overlay.style.display = 'none';
+    setStatus('Streaming', true);
+
+    video.onerror = () => {
+      setStatus('Stream error', false);
+      overlay.style.display = 'flex';
+      overlay.querySelector('p').textContent = 'Stream connection failed';
+    };
+  }
+
+  select.addEventListener('change', async () => {
+    const opt = select.selectedOptions[0];
+    const device = { path: opt.value, formats: opt.dataset.formats };
+    showDeviceInfo(device);
+    startStream(device.path);
+  });
+
+  // Initial load
+  await loadDevices();
+});
+</script>
+</body>
+</html>
