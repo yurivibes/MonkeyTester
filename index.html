@@ -35,6 +35,10 @@
 .delete-btn:hover { opacity: 0.9; }
 .run-project { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .run-project.unassigned { font-style: italic; }
+/* Commit under test: short id + subject line, full message on hover */
+.run-commit { display: flex; gap: 6px; font-size: 0.8rem; color: var(--text); min-width: 0; }
+.run-commit-sha { font-family: var(--mono); color: var(--text-muted); flex-shrink: 0; }
+.run-commit-msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 </style>
 </head>
 <body>
@@ -273,6 +277,20 @@ let runOrder = [];              // run names in current display order
 
 // Runs live on disk as run_<n>; the dashboard labels them #<n>. Only display:
 // selection, links and API payloads keep the raw run_<n> name.
+// The run row's commit line: short id + the message's subject line, the
+// whole message as the tooltip. "" when the run recorded no commit.
+function runCommitHtml(run) {
+    const sha = run.commit || '';
+    const message = run.commit_message || '';
+    if (!sha && !message) return '';
+    const subject = message.split('\n')[0];
+    const tip = escapeHtml(message || sha).replace(/"/g, '&quot;');
+    return '<span class="run-commit" title="' + tip + '">' +
+        (sha ? '<span class="run-commit-sha">' + escapeHtml(sha.slice(0, 7)) + '</span>' : '') +
+        (subject ? '<span class="run-commit-msg">' + escapeHtml(subject) + '</span>' : '') +
+        '</span>';
+}
+
 function runDisplayLabel(name) {
     return String(name).replace(/^run_/, '#');
 }
@@ -316,6 +334,7 @@ async function showRuns() {
                               : '<span class="run-project unassigned" title="No project recorded">Unassigned</span>') +
                         (branch ? '<span class="run-branch">' + escapeHtml(branch) + '</span>' : '') +
                     '</span>' +
+                    runCommitHtml(run) +
                 '</span>' +
             '</span>' +
             '<span class="run-badge">' +

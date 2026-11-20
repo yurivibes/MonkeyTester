@@ -67,6 +67,7 @@ def run_flags():
     repo = run_repo()
     if repo:
         flags['repo'] = repo
+    flags.update(run_commit())
     if _multi_case_root is not None:
         flags['cases'] = [c.name for c in find_case_folders(_multi_case_root)]
     return flags
@@ -76,6 +77,24 @@ def run_repo():
     """The run's project (owner/repo) from VT_REPO, set by the viewer; "" if none."""
     repo = (os.environ.get("VT_REPO") or "").strip().strip("/")
     return repo if re.fullmatch(r"(?!\.+/)[A-Za-z0-9_.-]+/(?!\.+$)[A-Za-z0-9_.-]+", repo) else ""
+
+
+COMMIT_MESSAGE_MAX = 4000
+
+
+def run_commit():
+    """The commit under test from VT_COMMIT / VT_COMMIT_MESSAGE (set by the
+    viewer from submit.py's fields): {'commit', 'commit_message'}, each only
+    when present and well-formed."""
+    out = {}
+    sha = (os.environ.get("VT_COMMIT") or "").strip().lower()
+    if re.fullmatch(r"[0-9a-f]{7,64}", sha):
+        out['commit'] = sha
+    message = re.sub(r"[^\S\n]*\r?\n", "\n", os.environ.get("VT_COMMIT_MESSAGE") or "")
+    message = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", message).strip()[:COMMIT_MESSAGE_MAX]
+    if message:
+        out['commit_message'] = message
+    return out
 
 
 def set_app_under_test(app_id):

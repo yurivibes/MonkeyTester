@@ -1433,6 +1433,19 @@ def run_repo(fields):
     return repo if builds.REPO_RE.match(repo) else ""
 
 
+COMMIT_RE = re.compile(r"[0-9a-f]{7,64}")
+COMMIT_MESSAGE_MAX = 4000
+
+
+def clean_commit_message(text):
+    """A commit message fit for run_metadata.json and the runner's env:
+    control characters (bar newline and tab) dropped, trailing blanks
+    trimmed, capped at COMMIT_MESSAGE_MAX characters."""
+    text = re.sub(r"[^\S\n]*\r?\n", "\n", str(text or ""))
+    text = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", text)
+    return text.strip()[:COMMIT_MESSAGE_MAX]
+
+
 def legacy_gitea_plugin(cfg, repo=""):
     """The build plugin the deprecated /api/config/gitea* routes act on: the
     repo's project plugin, else build-local when registered, else the only
@@ -1485,6 +1498,15 @@ def run_project(meta):
     return repo if builds.REPO_RE.match(repo) else ""
 
 
+def run_commit(meta):
+    """{commit, commit_message} from a run's metadata; "" for runs that
+    recorded none (older runs, uploads without a checkout)."""
+    meta = meta or {}
+    commit = str(meta.get("commit") or "").strip().lower()
+    return {"commit": commit if COMMIT_RE.fullmatch(commit) else "",
+            "commit_message": clean_commit_message(meta.get("commit_message"))}
+
+
 def project_matches(meta, project):
     """True when a run belongs to the dashboard's project filter.
 
@@ -1523,7 +1545,8 @@ def list_projects():
 
 def get_runs(sort="newest", project=""):
     """Get list of run directories sorted by run index or name.
-    Returns objects: {name, date, branch, repo, is_running, status}
+    Returns objects: {name, date, branch, repo, commit, commit_message,
+    is_running, status}
     project filters like project_matches().
     """
     idx_pat = re.compile(r"^run_(\d+)$")
@@ -1546,7 +1569,7 @@ def get_runs(sort="newest", project=""):
             branch = ""
         if not project_matches(meta, project):
             continue
-        all_dirs.append((name, run_idx, date_str, branch, run_project(meta)))
+        all_dirs.append((name, run_idx, date_str, branch, run_project(meta), run_commit(meta)))
 
     # Sort
     if sort == "newest":
@@ -1597,9 +1620,9 @@ def get_runs(sort="newest", project=""):
         passed, failed = _int("passed"), _int("failed")
         return {"passed": passed, "failed": failed, "total": max(_int("total"), passed + failed)}
 
-    return [{"name": name, "date": date_str, "branch": branch, "repo": repo,
+    return [{"name": name, "date": date_str, "branch": branch, "repo": repo, **commit,
              "is_running": _is_running(name), "status": _get_status(name), **_get_counts(name)}
-            for name, ts, date_str, branch, repo in all_dirs]
+            for name, ts, date_str, branch, repo, commit in all_dirs]
 
 
 def delete_runs(names):
@@ -3838,6 +3861,11 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         if branch and not sec.valid_branch(branch):
             self.send_json_status(400, {"error": "branch is not a valid git branch name"})
             return
+        commit = (fields.get("commit") or "").strip().lower()
+        if commit and not COMMIT_RE.fullmatch(commit):
+            self.send_json_status(400, {"error": "commit must be a hex commit id"})
+            return
+        commit_message = clean_commit_message(fields.get("commit_message"))
 
         # Stage uploaded files under Run/.uploads/<upload_id>/
         upload_id = time.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
@@ -3923,6 +3951,13 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         env.pop("VT_REPO", None)
         if repo:
             env["VT_REPO"] = repo
+        #  - VT_COMMIT / VT_COMMIT_MESSAGE: the commit under test (submit.py
+        #    reads it from the checkout), recorded in run_metadata.json and
+        #    shown on the run list. Never inherited, like VT_REPO.
+        for key, value in (("VT_COMMIT", commit), ("VT_COMMIT_MESSAGE", commit_message)):
+            env.pop(key, None)
+            if value:
+                env[key] = value
 
         with _RUN_LAUNCH_LOCK:
             prev = _PREVIOUS_RUN["proc"]
