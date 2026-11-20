@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plugins — MonkeyTester</title>
+<style>
+{{CSS}}
+{{SETTINGS_CSS}}
+
+/* Device plugins */
+.plugins-list { display: flex; gap: 12px; flex-wrap: wrap; }
+.plugins-none { font-size: 0.8rem; color: var(--text-muted); }
+.plugins-none.bad { color: var(--fail); }
+.plugin-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    min-width: 240px;
+    max-width: 340px;
+}
+.plugin-card h4 { font-size: 0.95rem; font-weight: 600; }
+.plugin-card .status-ok { color: var(--pass); }
+.plugin-card .status-bad { color: var(--fail); }
+.plugin-card .meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+.plugin-card .meta code { font-family: monospace; font-size: 0.75rem; }
+.plugin-card .meta.bad { color: var(--fail); }
+details.plugins-howto { font-size: 0.8rem; color: var(--text-muted); margin-top: 12px; }
+details.plugins-howto summary { font-weight: 600; }
+details.plugins-howto ul { margin: 0; padding-left: 20px; }
+details.plugins-howto li { padding: 2px 0; }
+details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
+
+/* Click-through configure panel (monkeytester-ai plugin rows) */
+.plugin-configure { display: none; }
+.plugin-configure.open { display: block; max-width: 520px; margin-top: 14px; }
+.plugin-configure-head h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
+.plugin-configure-head .url { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; }
+.plugin-configure select {
+    width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 0.9rem;
+}
+.plugin-configure .inline-row { display: flex; gap: 8px; align-items: center; max-width: 480px; }
+.plugin-configure .inline-row button { padding: 7px 12px; white-space: nowrap; }
+.plugin-configure .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; max-width: 480px; }
+.plugin-configure .pairing-token { font-size: 0.85rem; margin-top: 6px; }
+.plugin-configure .pairing-token code { font-family: monospace; font-size: 0.8rem; }
+.plugin-configure .settings-status.saved { color: var(--pass); }
+.plugin-configure .settings-status.error { color: var(--fail); }
+.plugin-configure .save-btn { background: var(--acid); color: var(--on-acid); border: 2px solid var(--acid); }
+.plugin-configure button[disabled] { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+.plugin-configure .provider-row { display: flex; gap: 18px; align-items: center; font-size: 0.9rem; }
+.plugin-configure .provider-row label { display: inline-flex; gap: 6px; align-items: center; font-weight: normal; cursor: pointer; }
+.plugin-configure .provider-section { margin-top: 10px; }
+.plugin-configure .provider-section[hidden] { display: none; }
+.plugin-configure .panel-section { margin-top: 14px; }
+.plugin-configure .panel-section-head { font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em; margin-bottom: 8px; }
+.plugin-configure .copilot-account { font-size: 0.85rem; }
+.plugin-configure .copilot-code {
+    font-family: monospace; font-size: 1.6rem; font-weight: 700; letter-spacing: 0.12em;
+    padding: 6px 12px; border: 1px dashed var(--border); border-radius: 6px; display: inline-block; margin: 6px 0;
+}
+.plugin-configure .legacy-hint, .plugin-configure .copilot-error { font-size: 0.8rem; color: var(--fail); margin: 6px 0; max-width: 480px; }
+.plugin-configure .switch-row { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; margin-top: 8px; }
+.plugin-configure .switch-row input, .plugin-configure .provider-row input { width: auto; padding: 0; }
+.plugin-configure .remote-error { font-size: 0.8rem; color: var(--fail); margin: 6px 0; max-width: 480px; }
+.plugin-configure input[type="text"], .plugin-configure input[type="url"], .plugin-configure input[type="password"] {
+    width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 0.9rem;
+}
+.plugin-card .ai-plugin-address { font-family: monospace; font-size: 0.8rem; color: var(--text); }
+.plugin-warn { font-size: 0.8rem; color: var(--fail); margin-top: 8px; }
+.plugin-warn.hidden { display: none; }
+
+/* Manage device plugins (add / edit / remove) */
+.plugin-manage { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.plugin-manage-row { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; max-width: 480px; }
+.plugin-manage-row code { font-family: monospace; font-size: 0.8rem; color: var(--text); }
+.plugin-manage-add { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; flex-wrap: wrap; max-width: 480px; }
+.plugin-manage input { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 6px; max-width: 300px; }
+.plugin-manage button { padding: 4px 10px; white-space: nowrap; }
+.plugin-manage button[disabled] { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+#pluginManageStatus.saved { color: var(--pass); }
+#pluginManageStatus.error { color: var(--fail); }
+
+/* Two sections on the page: Test Plugins (device plugins + monkeytester-ai)
+   and the Build Plugin section (the local build tool). Cards, manage boxes
+   and Configure panels reuse the classes above. */
+.plugins-section-title { font-size: 1.05rem; font-weight: 700; margin: 20px 0 8px; }
+.plugins-intro { font-size: 0.85rem; color: var(--text-muted); margin-top: 6px; max-width: 640px; }
+#buildManageStatus.saved { color: var(--pass); }
+#buildManageStatus.error { color: var(--fail); }
+</style>
+</head>
+<body>
+<div class="container">
+    <header class="site-header">
+        <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
+    </header>
+
+    <h2 class="page-title">Plugins</h2>
+
+    <div class="settings-section" id="pluginsTestSection">
+        <div class="plugins-section-title">Test Plugins</div>
+        <div class="plugins-intro">Test Plugins run the tests: the <code>esp32-*</code> device plugins own the hardware, and <strong>monkeytester-ai</strong> is the vision-model plugin. Each is a standalone HTTP service implementing <code>PLUGIN_API.md</code> (contract <code>monkeytester-plugin</code>), kept in its own repo — the viewer holds no hardware code. The <strong>Build Plugin</strong> section below belongs to Build &amp; Test, not to tests.</div>
+        <div class="plugins-none bad" id="pluginsError" hidden></div>
+        <div class="plugins-list" id="pluginsList"></div>
+        <div class="plugin-configure" id="pluginConfigure"></div>
+        <div class="plugin-warn" id="pluginWarnNote" hidden></div>
+        <div class="plugin-manage" id="pluginManage"></div>
+        <div class="settings-status" id="pluginManageStatus" hidden></div>
+        <details class="plugins-howto">
+            <summary>How to configure a Test Plugin</summary>
+            <ul>
+                <li>A plugin is a standalone HTTP service implementing <code>PLUGIN_API.md</code> (contract <code>monkeytester-plugin</code>), kept in its own repo — the viewer holds no hardware code.</li>
+                <li>Device plugins are registered here, in the <strong>Manage device plugins</strong> box: the list lives in <code>Run/config.json</code> as a <code>plugins</code> map {name: url}. On the first viewer start, entries of the environment variable <code>VT_PLUGINS=name=url[,name=url]</code> are imported into that map once, after which the variable is ignored &mdash; Settings owns the list. The <strong>monkeytester-ai</strong> plugin is separate: its address is only set in that row's <strong>Configure</strong> panel (<strong>Plugin address</strong> field) and saved in <code>Run/config.json</code> as <code>visual_plugin_url</code>. When the MonkeyTester Mac app runs the viewer, it supplies that address and the pairing token itself (<code>VT_MANAGED_AI_PLUGIN_URL</code> + <code>VT_MANAGED_AI_PLUGIN_TOKEN</code>): the row then shows the address read-only with &ldquo;Managed by the MonkeyTester app&rdquo;.</li>
+                <li>On Linux, run the plugin as a systemd user service (its own repo ships the unit). Register it in <strong>Manage device plugins</strong> after a viewer start; entries an existing <code>visualtest-viewer.service.d/plugins.conf</code> drop-in still sets via <code>Environment=VT_PLUGINS=&hellip;</code> are imported into Settings once, so the drop-in no longer needs to list plugins.</li>
+                <li>If a plugin is started with a token (its own <code>PLUGIN_TOKEN</code>), give the viewer the same value in <strong>Settings &rarr; Configuration &rarr; Service tokens</strong> (admins): it is checked against the plugin's <code>GET /devices</code>, stored in <code>service_tokens.json</code> (mode 0600) and sent as <code>X-Plugin-Token</code>. The old <code>PLUGIN_TOKEN</code> / <code>VT_PLUGIN_TOKEN_&lt;NAME&gt;</code> environment variables are imported there once, then ignored. A missing or wrong token shows here as a 401 error.</li>
+                <li>The <strong>monkeytester-ai</strong> row always shows a <strong>Configure</strong> button, even with no plugin set yet. Its panel is laid out in two sections, <strong>Plugin</strong> on top (plugin address field, the Plugin keep/remove select, the Token select and the write-only token status), then <strong>Configuration</strong> below it (provider radios, model dropdowns, the Remote server subsection, the Copilot select) with the single <strong>Save changes</strong> button as the LAST element at the bottom of the Configuration section. It edits everything through fields — <strong>Plugin address</strong>, pairing-token paste, the <strong>Local model</strong>/<strong>Remote server</strong>/<strong>GitHub Copilot</strong> provider radios, the remote server's address, model, resize switch and API key — and ONE <strong>Save changes</strong> button applies all pending edits in the plugin's required order (pairing-token op first, then the plugin address — including a staged “Remove plugin” choice —, then the remote keys in one request, then the provider last). The button stays greyed while nothing differs from the saved state. Token Set/Replace/Remove, plugin removal and Copilot sign in/out are staged <strong>selects</strong>, not buttons: any armed choice marks the panel dirty and the single Save executes it; only <strong>Load models</strong> and <strong>Refresh list</strong> stay as buttons (fetches — Load models validates, and thereby saves, the typed remote address: the plugin contract only lists remote models of a saved address). Choose <strong>Local model</strong> (one of the plugin's installed models), <strong>Remote server</strong> (an OpenAI-compatible server such as llama-server, with an optional API key &mdash; that server's address is a different thing from the plugin address) or <strong>GitHub Copilot</strong> (sign in with GitHub, then pick a vision model). The plugin stores the remote API key and the GitHub sign-in and forwards vision calls; the viewer stores neither.</li>
+                <li><strong>Add</strong> and <strong>Save address</strong> only store an address whose service answers <code>GET /health</code> with the <code>monkeytester-plugin</code> contract at a supported version — a refused save shows the plugin's own error. <strong>Remove</strong> forgets a registration (and its token). Plugin tokens are set in Settings &rarr; Configuration &rarr; Service tokens.</li>
+                <li>Tests call a plugin with steps like <code>PLUGIN: esp32 factory-reset</code>; the name must match a registered plugin name (Settings → Plugins, Test Plugins).</li>
+            </ul>
+        </details>
+    </div>
+
+    <div class="settings-section" id="pluginsBuildSection">
+        <div class="plugins-section-title">Build Plugin</div>
+        <div class="plugins-intro">Build &amp; Test builds a branch of your app on a <strong>build plugin</strong>'s own host — a Mac builds Android and iOS, a Linux host Android only — and tests the result on the devices. A build plugin is a separate service that fetches the branch from <strong>Gitea or GitHub</strong>, runs the app repo's build scripts there and uploads the apps back to the viewer. The plugin holds the code host's address and read-only token; the viewer never sees that token.</div>
+        <div class="plugins-list" id="buildPluginsList"></div>
+        <div class="plugin-configure" id="buildConfigure"></div>
+        <div class="plugin-manage" id="buildManage"></div>
+        <div class="settings-status" id="buildManageStatus" hidden></div>
+        <details class="plugins-howto">
+            <summary>How to configure a build plugin</summary>
+            <ul>
+                <li>The <strong>local build tool</strong> is <code>build-local</code> at <code>http://127.0.0.1:8094</code>: it builds on its own host — a Mac builds Android and iOS, a Linux host Android only. <strong>Add</strong> registers it: the address is saved only when the plugin's <code>GET /health</code> answers with the build plugin contract (<code>BUILD_PLUGIN_API.md</code>, contract <code>monkeytester-build-plugin</code>) — a refused save shows the plugin's own error.</li>
+                <li>Build plugins live in the SAME <code>Run/config.json</code> <code>plugins</code> map as the Test Plugins above, as object entries <code>{name: {url}}</code> (a plain url string is a Test Plugin). <strong>Add</strong> takes a pairing token only if the plugin was started with its own <code>PLUGIN_TOKEN</code>; leave it blank when editing to keep the saved one. The token is stored in <code>service_tokens.json</code> (mode 0600), not in <code>config.json</code>, and can also be replaced in Settings &rarr; Configuration &rarr; Service tokens. On the first viewer start, entries of <code>VT_BUILD_PLUGINS=name=url[,name=url]</code> are imported into the map once, after which Settings owns the list.</li>
+                <li><strong>Save address</strong> edits a registered plugin's address; <strong>Remove</strong> forgets a registration — refused while a Build &amp; Test project still uses that plugin.</li>
+                <li>Click <strong>Configure</strong> on the card for the plugin's code host settings: <strong>Code host</strong> (Gitea or GitHub), its <strong>URL</strong>, a <strong>read-only token</strong> (paste; sent to the plugin, which checks it with the code host before saving — stored by the plugin only, mode 0600, never shown again; the scopes it needs — Gitea <code>read:repository</code> + <code>read:user</code>, GitHub fine-grained <code>Contents: read</code> + <code>Metadata: read</code>, or a classic <code>repo</code> token for private repos — are in the plugin's README) and the <strong>Viewer URL</strong> the plugin uploads built apps to, prefilled with the address you are using now. <strong>Save</strong> stays greyed while nothing differs from the saved state; <strong>Remove token</strong> appears once one is saved.</li>
+                <li>The repos themselves live on <a href="/config">Settings → Build &amp; Test</a>: each project picks a build plugin from this registry and a branch; the check column shows whether the plugin can read the repo and whether that branch has the platform's build script (<code>.monkeytester/build-android.sh</code>, <code>.monkeytester/build-ios.sh</code>).</li>
+            </ul>
+        </details>
+    </div>
+</div>
+<script>
+{{JS}}
+
+// Device plugins: VT_PLUGINS (minus monkeytester-ai) + the read-only monkeytester-ai
+// row at its Settings address. The row has no add/edit controls: the address and
+// the pairing token live in the Configure panel.
+let aiPluginState = { configured: false, url: "" };
+
+async function loadPlugins() {
+    const host = document.getElementById("pluginsList");
+    try {
+        const res = await fetch("/api/plugins");
+        if (!res.ok) return;
+        const data = await res.json();
+        const plugins = data.plugins || [];
+        aiPluginState = data.ai_plugin || { configured: false, url: "" };
+        const errEl = document.getElementById("pluginsError");
+        errEl.hidden = !data.error;
+        errEl.textContent = data.error || "";
+        const devicePlugins = plugins.filter(p => p.kind !== "build");
+        const buildPlugins = plugins.filter(p => p.kind === "build");
+        renderManage(devicePlugins);
+        renderBuildCards(buildPlugins);
+        renderBuildManage(buildPlugins);
+        if (!devicePlugins.length) {
+            host.innerHTML = '<div class="plugins-none">No Test Plugins registered yet — add one in the box below.</div>';
+            return;
+        }
+        host.innerHTML = devicePlugins.map(p => {
+            const isAi = p.source === "settings";
+            const notConfigured = isAi && !aiPluginState.configured;
+            let html = '<div class="plugin-card" data-plugin="' + attrEscape(p.name) + '"><h4>' + escapeHtml(p.name) + "</h4>";
+            html += '<div class="meta"><span class="' + (p.ok ? "status-ok" : "status-bad") + '">'
+                + (notConfigured ? "not configured" : (p.ok ? "\u25cf online" : "\u25cf offline")) + "</span>"
+                + (isAi ? " \u00b7 Address <code class=\"ai-plugin-address\">" + escapeHtml(p.url || "not configured") + "</code>"
+                    : " \u00b7 <code>" + escapeHtml(p.url) + "</code>") + "</div>";
+            // Managed mode (VT_MANAGED_AI_PLUGIN_URL + _TOKEN): the Mac app
+            // supplies the address and token, so the row shows them read-only.
+            if (isAi && p.managed) html += '<div class="meta ai-plugin-managed">Managed by the MonkeyTester app</div>';
+            if (p.plugin) {
+                const label = typeof p.plugin === "object"
+                    ? [p.plugin.name, p.plugin.version].filter(Boolean).join(" ")
+                    : String(p.plugin);
+                html += '<div class="meta">plugin <code>' + escapeHtml(label)
+                    + "</code> \u00b7 contract v" + escapeHtml(String(p.contract_version ?? "?")) + "</div>";
+            }
+            if (p.capabilities && p.capabilities.length) {
+                html += '<div class="meta">' + p.capabilities.map(c => "<code>"
+                    + escapeHtml(String(c)) + "</code>").join(" ") + "</div>";
+            }
+            if (p.devices && p.devices.length) {
+                html += '<div class="meta">' + p.devices.map(d => escapeHtml(String(d.id))
+                    + (d.model ? " \u00b7 " + escapeHtml(String(d.model)) : "")
+                    + (d.state ? " \u00b7 " + escapeHtml(String(d.state)) : "")).join("<br>") + "</div>";
+            }
+            if (p.error && !notConfigured) html += '<div class="meta bad">' + escapeHtml(p.error) + "</div>";
+            // A plugin whose GET /config reports model info owns its config UI:
+            // its row gets the click-through Configure panel. monkeytester-ai gets
+            // it always — even unconfigured, so the panel can set the first address.
+            if (p.config || isAi) {
+                html += '<div class="meta"><button class="btn-secondary plugin-configure-btn" '
+                    + 'data-plugin="' + attrEscape(p.name) + '">Configure</button></div>';
+            }
+            return html + "</div>";
+        }).join("");
+    } catch (e) {
+        // Transient fetch failure: keep whatever was last rendered.
+    }
+}
+
+// Manage state — declared BEFORE the first loadPlugins() below: the manage
+// renderer runs inside it, and `let` declarations are not hoisted.
+let manageRows = [];
+let lastPluginData = [];
+const manageState = { stagedUrls: {}, addName: "", addUrl: "" };
+// Build Plugin manage state, declared BEFORE the first loadPlugins() below
+// (the build manage renderer runs inside it, and `let`/`const` are not hoisted).
+let buildRows = [];
+const buildManageState = { stagedUrls: {}, addName: "", addUrl: "", addToken: "" };
+
+loadPlugins();
+setInterval(loadPlugins, 15000);
+
+// ── Manage device plugins: add / edit address / remove (Settings owns the list) ──
+// One row per registered plugin (the monkeytester-ai row is not managed here —
+// its Configure panel owns its address), plus one Add row. Every action is ONE
+// POST to /api/config/plugins ({"set": {name, url}} / {"remove": name}); the
+// viewer stores the address only when the service answers GET /health with the
+// plugin contract, and the plugin's own error message shows in the status line.
+function savedUrlFor(name) {
+    for (const p of manageRows) if (p.name === name) return p.url || "";
+    return "";
+}
+
+function renderManage(pluginData) {
+    const host = document.getElementById("pluginManage");
+    if (!host) return;
+    // Snapshot what the user already typed BEFORE innerHTML replaces the inputs
+    // (blur events dispatch late and unreliably; reading the old DOM is exact).
+    document.querySelectorAll('#pluginManage input[data-pm-input]').forEach(inp => {
+        const name = inp.dataset.pmInput;
+        const saved = savedUrlFor(name);
+        if (inp.value && inp.value.trim() !== saved) manageState.stagedUrls[name] = inp.value;
+        else delete manageState.stagedUrls[name];
+    });
+    const oldAddName = document.getElementById("pluginAddName"), oldAddUrl = document.getElementById("pluginAddUrl");
+    if (oldAddName) manageState.addName = oldAddName.value;
+    if (oldAddUrl) manageState.addUrl = oldAddUrl.value;
+    lastPluginData = pluginData;
+    manageRows = pluginData.filter(p => p.source !== "settings" && p.kind !== "build");
+    let html = "";
+    for (const p of manageRows) {
+        const saved = p.url || "";
+        const staged = manageState.stagedUrls[p.name];
+        const shown = staged !== undefined ? staged : saved;
+        const dirty = shown !== saved;
+        html += '<div class="plugin-manage-row"><code>' + escapeHtml(p.name) + "</code>"
+            + '<input type="url" data-pm-input="' + attrEscape(p.name) + '"'
+            + ' placeholder="http://host:port" value="' + attrEscape(shown) + '">'
+            + '<button class="btn-secondary" data-pm-save data-pm-name="' + attrEscape(p.name) + '"'
+            + (dirty ? "" : " disabled") + ">Save address</button>"
+            + '<button class="btn-secondary" data-pm-remove data-pm-name="' + attrEscape(p.name)
+            + '">Remove</button></div>';
+    }
+    html += '<div class="plugin-manage-add"><span class="pm-add-hint">Add a Test Plugin:</span>'
+        + '<input type="text" id="pluginAddName" placeholder="name, e.g. esp32-hub">'
+        + '<input type="url" id="pluginAddUrl" placeholder="http://host:port">'
+        + '<button class="btn-secondary" id="pluginAddBtn">Add</button></div>';
+    host.innerHTML = html;
+    // Re-fill the fresh inputs with what was staged (snapshot taken above).
+    document.querySelectorAll('#pluginManage input[data-pm-input]').forEach(inp => {
+        if (manageState.stagedUrls[inp.dataset.pmInput] !== undefined)
+            inp.value = manageState.stagedUrls[inp.dataset.pmInput];
+    });
+    const an = document.getElementById("pluginAddName"), au = document.getElementById("pluginAddUrl");
+    if (an) an.value = manageState.addName;
+    if (au) au.value = manageState.addUrl;
+}
+
+function manageSetStatus(msg, type) {
+    const el = document.getElementById("pluginManageStatus");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = "settings-status " + type;
+}
+
+async function managePost(payload, okMsg) {
+    try {
+        await postJSON("/api/config/plugins", payload);
+        manageSetStatus(okMsg, "saved");
+        await loadPlugins();  // re-render list + rows from the saved state
+    } catch (e) {
+        manageSetStatus("Not saved: " + e.message, "error");
+    }
+}
+
+document.getElementById("pluginManage").addEventListener("click", ev => {
+    const btn = ev.target.closest("button");
+    if (!btn) return;
+    if (btn.hasAttribute("data-pm-remove")) {
+        managePost({ remove: btn.dataset.pmName }, "Removed plugin " + btn.dataset.pmName + ".");
+    } else if (btn.hasAttribute("data-pm-save")) {
+        const name = btn.dataset.pmName;
+        const inp = btn.closest(".plugin-manage-row").querySelector("input[data-pm-input]");
+        const url = inp ? inp.value.trim() : "";
+        if (!url) { manageSetStatus("Type the new address first.", "error"); return; }
+        if (url === savedUrlFor(name)) { manageSetStatus("No change — that address is already saved.", ""); return; }
+        managePost({ set: { name, url } }, "Saved address for " + name + ".");
+        delete manageState.stagedUrls[name];
+    } else if (btn.id === "pluginAddBtn") {
+        // Read the LIVE field values: a just-typed value is in the DOM before
+        // the blur capture has staged it.
+        const an = document.getElementById("pluginAddName"), au = document.getElementById("pluginAddUrl");
+        const name = (an ? an.value : manageState.addName).trim();
+        const url = (au ? au.value : manageState.addUrl).trim();
+        if (!name || !url) {
+            manageSetStatus("Type both a name and an address first.", "error");
+            return;
+        }
+        managePost({ set: { name, url } }, "Added plugin " + name + ".");
+        manageState.addName = "";
+        manageState.addUrl = "";
+    }
+});
+
+// ── Build Plugin section: the local build tool (Build & Test) ──
+// Same registry as the Test Plugins above: config.json `plugins` map, object
+// entries {name: {url, token}} — the viewer validates the address against the
+// build plugin contract (BUILD_PLUGIN_API.md) and marks the row kind "build".
+// The card's Configure panel holds the plugin's code host settings (proxied to
+// the plugin's own /config); the read-only token never lives in the viewer.
+function buildCard(p) {
+    let html = '<div class="plugin-card" data-plugin="' + attrEscape(p.name) + '"><h4>' + escapeHtml(p.name) + "</h4>";
+    html += '<div class="meta"><span class="' + (p.ok ? "status-ok" : "status-bad") + '">'
+        + (p.ok ? "\u25cf online" : "\u25cf offline") + "</span> \u00b7 <code>" + escapeHtml(p.url) + "</code></div>";
+    if (p.plugin) {
+        const label = typeof p.plugin === "object"
+            ? [p.plugin.name, p.plugin.version].filter(Boolean).join(" ")
+            : String(p.plugin);
+        html += '<div class="meta">plugin <code>' + escapeHtml(label)
+            + "</code> \u00b7 contract v" + escapeHtml(String(p.contract_version ?? "?")) + "</div>";
+    }
+    if (p.platforms && p.platforms.length) {
+        html += '<div class="meta">builds ' + p.platforms.map(x => x === "ios" ? "iOS" : x).join(" + ") + "</div>";
+    }
+    const f = p.forge || {};
+    if (f.configured) {
+        html += '<div class="meta">code host ' + escapeHtml(f.label || f.kind || "")
+            + (f.url ? " \u00b7 " + escapeHtml(f.url) : "")
+            + (f.user ? " \u00b7 as <code>" + escapeHtml(f.user) + "</code>" : " \u00b7 token saved") + "</div>";
+    } else if (p.ok) {
+        html += '<div class="meta bad">no code host token saved \u2014 open Configure</div>';
+    }
+    if (p.token && p.token.configured) html += '<div class="meta">pairing token \u2026<code>' + escapeHtml(p.token.last4 || "") + "</code></div>";
+    if (p.queue && (p.queue.running || p.queue.waiting)) {
+        html += '<div class="meta">queue: ' + escapeHtml(String(p.queue.running)) + " running \u00b7 " + escapeHtml(String(p.queue.waiting)) + " waiting</div>";
+    }
+    if (p.error) html += '<div class="meta bad">' + escapeHtml(p.error) + "</div>";
+    html += '<div class="meta"><button class="btn-secondary plugin-configure-btn" '
+        + 'data-plugin="' + attrEscape(p.name) + '">Configure</button></div>';
+    return html + "</div>";
+}
+
+function renderBuildCards(rows) {
+    const host = document.getElementById("buildPluginsList");
+    if (!host) return;
+    if (!rows.length) {
+        host.innerHTML = '<div class="plugins-none">No build plugin registered yet \u2014 add one in the box below.</div>';
+        return;
+    }
+    host.innerHTML = rows.map(buildCard).join("");
+}
+
+// Manage box: one row per registered build plugin (address editable, Remove)
+// plus one Add row (name, address, optional pairing token). Every action is
+// ONE POST to the unified /api/config/plugins; the viewer stores the address
+// only when the plugin's /health answers the build plugin contract.
+function savedBuildUrlFor(name) {
+    for (const p of buildRows) if (p.name === name) return p.url || "";
+    return "";
+}
+
+function buildManageSetStatus(msg, type) {
+    const el = document.getElementById("buildManageStatus");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = "settings-status " + type;
+    setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 6000);
+}
+
+async function buildManagePost(payload, okMsg) {
+    try {
+        await fetch("/api/config/plugins", { method: "POST", headers: {"Content-Type": "application/json"},
+                                             body: JSON.stringify(payload) });
+    } catch (e) {
+        buildManageSetStatus("Not saved: " + e.message, "error");
+        return;
+    }
+    // loadPlugins re-reads /api/plugins; the saved state shows there.
+    await loadPlugins();
+    buildManageSetStatus(okMsg, "saved");
+}
+
+function renderBuildManage(rows) {
+    const host = document.getElementById("buildManage");
+    if (!host) return;
+    // Snapshot what the user already typed BEFORE innerHTML replaces the inputs.
+    document.querySelectorAll('#buildManage input[data-bm-input]').forEach(inp => {
+        const name = inp.dataset.bmInput;
+        const saved = savedBuildUrlFor(name);
+        if (inp.value && inp.value.trim() !== saved) buildManageState.stagedUrls[name] = inp.value;
+        else delete buildManageState.stagedUrls[name];
+    });
+    const oldAddName = document.getElementById("buildAddName"), oldAddUrl = document.getElementById("buildAddUrl");
+    const oldAddToken = document.getElementById("buildAddToken");
+    if (oldAddName) buildManageState.addName = oldAddName.value;
+    if (oldAddUrl) buildManageState.addUrl = oldAddUrl.value;
+    if (oldAddToken) buildManageState.addToken = oldAddToken.value;
+    buildRows = rows;
+    let html = "";
+    for (const p of rows) {
+        const saved = p.url || "";
+        const staged = buildManageState.stagedUrls[p.name];
+        const shown = staged !== undefined ? staged : saved;
+        const dirty = shown !== saved;
+        html += '<div class="plugin-manage-row"><code>' + escapeHtml(p.name) + "</code>"
+            + '<input type="url" data-bm-input="' + attrEscape(p.name) + '"'
+            + ' placeholder="http://host:port" value="' + attrEscape(shown) + '">'
+            + '<button class="btn-secondary" data-bm-save data-bm-name="' + attrEscape(p.name) + '"'
+            + (dirty ? "" : " disabled") + ">Save address</button>"
+            + '<button class="btn-secondary" data-bm-remove data-bm-name="' + attrEscape(p.name)
+            + '">Remove</button></div>';
+    }
+    html += '<div class="plugin-manage-add"><span class="pm-add-hint">Add a Build Plugin:</span>'
+        + '<input type="text" id="buildAddName" placeholder="name, e.g. build-local">'
+        + '<input type="url" id="buildAddUrl" placeholder="http://host:port">'
+        + '<input type="password" id="buildAddToken" autocomplete="new-password" '
+        + 'placeholder="pairing token (only if the plugin has PLUGIN_TOKEN)">'
+        + '<button class="btn-secondary" id="buildAddBtn">Add</button></div>';
+    host.innerHTML = html;
+    // Re-fill the fresh inputs with what was staged (snapshot taken above).
+    document.querySelectorAll('#buildManage input[data-bm-input]').forEach(inp => {
+        if (buildManageState.stagedUrls[inp.dataset.bmInput] !== undefined)
+            inp.value = buildManageState.stagedUrls[inp.dataset.bmInput];
+    });
+    const an = document.getElementById("buildAddName"), au = document.getElementById("buildAddUrl");
+    const at = document.getElementById("buildAddToken");
+    if (an) an.value = buildManageState.addName;
+    if (au) au.value = buildManageState.addUrl;
+    if (at) at.value = buildManageState.addToken;
+}
+
+document.getElementById("buildManage").addEventListener("click", ev => {
+    const btn = ev.target.closest("button");
+    if (!btn) return;
+    if (btn.hasAttribute("data-bm-remove")) {
+        buildManagePost({ remove: btn.dataset.bmName }, "Removed build plugin " + btn.dataset.bmName + ".");
+    } else if (btn.hasAttribute("data-bm-save")) {
+        const name = btn.dataset.bmName;
+        const inp = btn.closest(".plugin-manage-row").querySelector("input[data-bm-input]");
+        const url = inp ? inp.value.trim() : "";
+        if (!url) { buildManageSetStatus("Type the new address first.", "error"); return; }
+        if (url === savedBuildUrlFor(name)) { buildManageSetStatus("No change \u2014 that address is already saved.", ""); return; }
+        buildManagePost({ set: { name, url } }, "Saved address for " + name + ".");
+        delete buildManageState.stagedUrls[name];
+    } else if (btn.id === "buildAddBtn") {
+        // Read the LIVE field values: a just-typed value is in the DOM before
+        // the blur capture has staged it.
+        const an = document.getElementById("buildAddName"), au = document.getElementById("buildAddUrl");
+        const at = document.getElementById("buildAddToken");
+        const name = (an ? an.value : buildManageState.addName).trim();
+        const url = (au ? au.value : buildManageState.addUrl).trim();
+        const token = (at ? at.value : buildManageState.addToken).trim();
+        if (!name || !url) {
+            buildManageSetStatus("Type both a name and an address first.", "error");
+            return;
+        }
+        const op = { name, url };
+        if (token) op.token = token;
+        buildManagePost({ set: op }, "Added build plugin " + name + ".");
+        buildManageState.addName = "";
+        buildManageState.addUrl = "";
+        buildManageState.addToken = "";
+    }
+});
+
+// Card Configure button -> the plugin's code host panel, proxied to the
+// plugin's own GET/POST /config (the viewer is just the relay; the read-only
+// code host token is stored by the plugin only). One Save applies all fields.
+let buildPanelPlugin = null;
+let buildPanelSaved = null;
+
+function buildPanelStatus(msg, type) {
+    const el = document.getElementById("bpStatus");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = "settings-status " + type;
+    setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 6000);
+}
+
+async function toggleBuildConfigure(name) {
+    const panel = document.getElementById("buildConfigure");
+    if (!panel) return;
+    if (panel.classList.contains("open") && buildPanelPlugin === name) {
+        panel.classList.remove("open");
+        panel.innerHTML = "";
+        buildPanelPlugin = null;
+        buildPanelSaved = null;
+        return;
+    }
+    buildPanelPlugin = name;
+    buildPanelSaved = null;
+    panel.classList.add("open");
+    try {
+        const res = await fetch("/api/config/build/plugins/" + encodeURIComponent(name) + "/config");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+        renderBuildPanel(data);
+    } catch (e) {
+        panel.innerHTML = '<div class="hint">Could not read the plugin\u2019s settings: '
+            + escapeHtml(e.message) + "</div>";
+    }
+}
+
+function buildPanelUrl() {
+    return "/api/config/build/plugins/" + encodeURIComponent(buildPanelPlugin || "") + "/config";
+}
+
+function renderBuildPanel(cfg) {
+    buildPanelSaved = {
+        forge_kind: cfg.forge_kind || "gitea",
+        forge_url: cfg.forge_url || "",
+        viewer_url: cfg.viewer_url || "",
+    };
+    const t = cfg.token || {};
+    const panel = document.getElementById("buildConfigure");
+    const head = '<div class="plugin-configure-head"><h4>Configure ' + escapeHtml(buildPanelPlugin)
+        + "</h4><div class=\"url\"><code>" + escapeHtml((savedBuildUrlFor(buildPanelPlugin) || "")) + "</code></div></div>";
+    const savedLine = t.configured
+        ? "Connected" + (cfg.user ? " as <code>" + escapeHtml(cfg.user) + "</code>" : "")
+          + " \u00b7 token ending <code>\u2026" + escapeHtml(t.last4 || "") + "</code>"
+          + (t.saved_at ? " \u00b7 saved " + escapeHtml(String(t.saved_at).slice(0, 10)) : "")
+        : "No code host token saved.";
+    panel.innerHTML = head
+        + '<div class="hint">' + escapeHtml(savedLine) + "</div>"
+        + '<div class="inline-row"><select class="plugin-configure" id="bp_forge_kind" aria-label="Code host">'
+        + '<option value="gitea">Gitea</option><option value="github">GitHub</option></select>'
+        + '<input type="text" id="bp_forge_url" autocomplete="off" aria-label="Code host URL" '
+        + 'placeholder="http://host:8080" value="' + attrEscape(buildPanelSaved.forge_url) + '"></div>'
+        + '<div class="hint">Where the plugin reads and fetches your repos from.</div>'
+        + '<div class="inline-row"><input type="password" id="bp_token" autocomplete="new-password" aria-label="Read-only token" '
+        + 'placeholder="' + (t.configured ? "Paste a new token to replace it" : "Paste an access token") + '"></div>'
+        + '<div class="hint">Read-only is enough \u2014 the plugin only reads the repo and fetches it with git. Scopes it needs (Gitea <code>read:repository</code> + <code>read:user</code>, GitHub fine-grained <code>Contents: read</code> + <code>Metadata: read</code>, or a classic <code>repo</code> token for private repos) are in the plugin\u2019s README. Stored by the plugin only (mode 0600), never shown again.</div>'
+        + '<div class="inline-row"><input type="text" id="bp_viewer_url" autocomplete="off" aria-label="Viewer URL" '
+        + 'value="' + attrEscape(buildPanelSaved.viewer_url || viewerAddress()) + '"></div>'
+        + '<div class="hint">The address the plugin uploads the built apps to \u2014 prefilled with the address you are using now.</div>'
+        + '<div class="inline-row"><button class="save-btn" id="bpSaveBtn" type="button">Save changes</button>'
+        + '<button class="btn-secondary" id="bpRemoveBtn" type="button"' + (t.configured ? "" : " hidden") + '>Remove token</button>'
+        + '<button class="btn-secondary" id="bpCloseBtn" type="button">Close</button></div>'
+        + '<div class="settings-status" id="bpStatus"></div>';
+    document.getElementById("bp_forge_kind").value = buildPanelSaved.forge_kind;
+    updateBuildPanelSaveBtn();
+    // Buttons act through listeners, never inline onclick handlers.
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
+    on("bpSaveBtn", saveBuildPanel);
+    on("bpRemoveBtn", removeBuildPanelToken);
+    on("bpCloseBtn", closeBuildPanel);
+}
+
+function viewerAddress() { return window.location.origin.replace(/\/+$/, ""); }
+
+function buildPanelDirty() {
+    if (!buildPanelSaved) return false;
+    if (document.getElementById("bp_token") && document.getElementById("bp_token").value.trim()) return true;
+    return document.getElementById("bp_forge_kind").value !== buildPanelSaved.forge_kind ||
+        document.getElementById("bp_forge_url").value.trim() !== buildPanelSaved.forge_url ||
+        document.getElementById("bp_viewer_url").value.trim() !== buildPanelSaved.viewer_url;
+}
+
+function updateBuildPanelSaveBtn() {
+    const btn = document.getElementById("bpSaveBtn");
+    if (btn) btn.disabled = !buildPanelDirty();
+}
+
+async function saveBuildPanel() {
+    if (!buildPanelPlugin) return;
+    const body = {};
+    const kind = document.getElementById("bp_forge_kind").value.trim();
+    const forgeUrl = document.getElementById("bp_forge_url").value.trim();
+    const viewerUrl = document.getElementById("bp_viewer_url").value.trim();
+    if (kind) body.forge_kind = kind;
+    if (forgeUrl) body.forge_url = forgeUrl;
+    if (viewerUrl) body.viewer_url = viewerUrl;
+    const token = document.getElementById("bp_token") ? document.getElementById("bp_token").value.trim() : "";
+    if (token) body.token = token;
+    buildPanelStatus("Checking with the code host\u2026", "");
+    try {
+        const res = await fetch(buildPanelUrl(), { method: "POST", headers: {"Content-Type": "application/json"},
+                                                  body: JSON.stringify(body) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+        renderBuildPanel(data.config || {});
+        buildPanelStatus("Saved", "saved");
+        await loadPlugins();
+    } catch (e) {
+        buildPanelStatus("Not saved: " + e.message, "error");
+    }
+}
+
+async function removeBuildPanelToken() {
+    if (!buildPanelPlugin || !confirm("Remove the code host token from " + buildPanelPlugin
+        + "? Its projects can\u2019t build until a new one is saved.")) return;
+    try {
+        const res = await fetch(buildPanelUrl(), { method: "POST", headers: {"Content-Type": "application/json"},
+                                                  body: JSON.stringify({ token: null }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+        renderBuildPanel(data.config || {});
+        buildPanelStatus("Token removed", "saved");
+        await loadPlugins();
+    } catch (e) {
+        buildPanelStatus("Remove failed: " + e.message, "error");
+    }
+}
+
+function closeBuildPanel() {
+    buildPanelPlugin = null;
+    buildPanelSaved = null;
+    const panel = document.getElementById("buildConfigure");
+    if (panel) { panel.classList.remove("open"); panel.innerHTML = ""; }
+}
+
+document.getElementById("buildPluginsList").addEventListener("click", ev => {
+    const btn = ev.target.closest(".plugin-configure-btn");
+    if (btn) toggleBuildConfigure(btn.dataset.plugin);
+});
+
+// ── Configure panel: the monkeytester-ai plugin owns the vision provider ──
+// (Local model, Remote server or GitHub Copilot), its models, the remote
+// server's address/model/resize/API key, the Copilot sign-in and the pairing
+// token. Every call goes through the viewer, which relays to the plugin.
+//
+// One Save button for the whole panel: every editable field only STAGES a
+// change (typing an address, moving a radio, pasting a token, picking a model,
+// flipping the resize switch, pasting a key). The staged set is diffed against
+// the last saved state; "Save changes" is greyed while nothing differs, and one
+// click applies the whole staged set with ordered POSTs: the pairing-token
+// copy first (viewer store, no plugin call), then the plugin address (validated
+// against /health + authenticated /config), then the remote keys in one request
+// and the provider last (the plugin's contract order). Token Set/Replace/Remove,
+// "Remove plugin" and Copilot sign in/out are STAGED SELECTS folded into the
+// same Save (token op first, removal with the address step, sign-in before the
+// config POSTs, sign-out last); the only other buttons are the fetches
+// "Load models" and "Refresh list".
+
+function attrEscape(value) {
+    return escapeHtml(String(value)).replace(/"/g, "&quot;");
+}
+
+let configureFor = "";
+let savedPanel = null;  // saved-state snapshot of the last render
+let staged = {};        // field -> intended value, only while it differs from savedPanel
+let lastPluginInfo = null;  // last /api/visual-model/plugin reply
+const copilotPoll = { timer: null, gen: 0 };
+
+document.getElementById("pluginsList").addEventListener("click", ev => {
+    const btn = ev.target.closest(".plugin-configure-btn");
+    if (btn) togglePluginConfigure(btn.dataset.plugin);
+});
+
+function pluginSetStatus(msg, type) {
+    const el = document.getElementById("pluginConfigureStatus");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = "settings-status " + type;
+}
+
+function errorText(out, status) {
+    // The plugin's own code + message, as relayed by the viewer.
+    if (out && out.error) return (out.code ? out.code + ": " : "") + out.error;
+    return "HTTP " + status;
+}
+
+function stopCopilotPoll() {
+    copilotPoll.gen += 1;
+    if (copilotPoll.timer) clearTimeout(copilotPoll.timer);
+    copilotPoll.timer = null;
+}
+
+function togglePluginConfigure(name) {
+    const panel = document.getElementById("pluginConfigure");
+    if (!panel) return;
+    stopCopilotPoll();
+    if (panel.classList.contains("open") && configureFor === name) {
+        panel.classList.remove("open");
+        panel.innerHTML = "";
+        configureFor = "";
+        savedPanel = null;
+        staged = {};
+        return;
+    }
+    configureFor = name;
+    savedPanel = null;
+    staged = {};
+    panel.classList.add("open");
+    renderPluginConfigure(name);
+}
+
+function selectedProvider() {
+    const el = document.querySelector('input[name="pluginProvider"]:checked');
+    return el ? el.value : "local";
+}
+
+function showProviderSection(provider) {
+    const local = document.getElementById("pluginLocalSection");
+    const remote = document.getElementById("pluginRemoteSection");
+    const copilot = document.getElementById("pluginCopilotSection");
+    if (local) local.hidden = provider !== "local";
+    if (remote) remote.hidden = provider !== "remote";
+    if (copilot) copilot.hidden = provider !== "copilot";
+    updateSaveHint();
+}
+
+function effectiveProvider() {
+    return staged.provider || selectedProvider();
+}
+
+// ── STAGING MACHINE START (pure; extracted by test_panel_staging.py) ──
+function stagePanelFields(saved, current) {
+    const norm = (v) => String(v || "").trim().replace(/\/+$/, "");
+    const out = {};
+    const addr = norm(current.address);
+    if (addr && addr !== norm(saved.url)) out.plugin_url = addr;
+    if (current.provider && current.provider !== saved.provider) out.provider = current.provider;
+    if (current.provider === "local" && current.localModel && current.localModel !== saved.selected) out.model = current.localModel;
+    if (current.provider === "copilot" && current.copilotModel && current.copilotModel !== saved.copilotModel) out.copilot_model = current.copilotModel;
+    if (norm(current.remoteUrl) && norm(current.remoteUrl) !== norm(saved.remote.url)) out.remote_url = norm(current.remoteUrl);
+    if (current.remoteModel && current.remoteModel !== saved.remote.model) out.remote_model = current.remoteModel;
+    if (current.remoteResize !== saved.remote.resize) out.remote_resize = current.remoteResize;
+    if (String(current.remoteKey || "").trim()) out.remote_api_key = String(current.remoteKey).trim();
+    // Staged action selects: token op (Set/Replace/Remove), plugin removal,
+    // Copilot sign in/out. "keep" (the default option) stages nothing.
+    if (!saved.tokenConfigured && current.tokenChoice === "set") {
+        out.token_op = "set";
+        if (String(current.token || "").trim()) out.token_value = String(current.token).trim();
+    }
+    if (saved.tokenConfigured && (current.tokenChoice === "replace" || current.tokenChoice === "remove"))
+        out.token_op = current.tokenChoice;
+    if (saved.url && current.pluginChoice === "remove") out.plugin_remove = true;
+    if (current.copilotChoice === "sign_in" && !saved.copilotSignedIn) out.copilot_op = "sign_in";
+    if (current.copilotChoice === "sign_out" && saved.copilotSignedIn) out.copilot_op = "sign_out";
+    return out;
+}
+
+function planSavePayload(fields) {
+    const steps = [];
+    const CFG = "/api/config/visual-model";
+    if ("token_op" in fields) {
+        const op = fields.token_op;
+        const body = op === "set" ? { set_token: fields.token_value || "" }
+            : op === "replace" ? { generate_token: true }
+            : { clear_token: true };
+        steps.push({ kind: "token", body, url: CFG });
+    }
+    if ("plugin_remove" in fields) steps.push({ kind: "address", body: { plugin_url: "" }, url: CFG });
+    else if ("plugin_url" in fields) steps.push({ kind: "address", body: { plugin_url: fields.plugin_url }, url: CFG });
+    if (fields.copilot_op === "sign_in")
+        steps.push({ kind: "copilot_in", body: {}, url: "/api/visual-model/plugin/copilot/device/start" });
+    const body = {};
+    const CONFIG_KEYS = ["remote_url", "remote_model", "remote_resize", "remote_api_key", "model", "copilot_model", "provider"];
+    for (const key of CONFIG_KEYS) if (key in fields) body[key] = fields[key];
+    if (Object.keys(body).length) steps.push({ kind: "config", body, url: CFG });
+    if (fields.copilot_op === "sign_out")
+        steps.push({ kind: "copilot_out", body: {}, url: "/api/visual-model/plugin/copilot/remove" });
+    return steps;
+}
+// ── STAGING MACHINE END ──
+
+const STAGE_LABEL = {
+    plugin_url: "plugin address", provider: "provider",
+    model: "local model", copilot_model: "Copilot model",
+    remote_url: "remote server address", remote_model: "remote model",
+    remote_resize: "resize switch", remote_api_key: "remote API key",
+    plugin_remove: "plugin removal",
+};
+const STAGE_ORDER = ["token_op", "plugin_remove", "plugin_url", "provider", "model", "copilot_model",
+                     "remote_url", "remote_model", "remote_resize", "remote_api_key", "copilot_op"];
+function labelFor(k, v) {
+    if (k === "token_op") return "pairing token " + v;       // set / replace / remove
+    if (k === "copilot_op") return "Copilot " + (v === "sign_in" ? "sign-in" : "sign-out");
+    return STAGE_LABEL[k];
+}
+function pendingLabels(fields) {
+    return STAGE_ORDER.filter(k => k in fields && k !== "token_value").map(k => labelFor(k, fields[k]));
+}
+
+function panelFieldValues() {
+    const g = (id) => document.getElementById(id) || {};
+    const sel = (id) => { const s = g(id); return (s && !s.disabled) ? String(s.value || "") : ""; };
+    const checked = document.querySelector('input[name="pluginProvider"]:checked');
+    return {
+        address: String(g("pluginAddressInput").value || ""),
+        token: String(g("pluginTokenSetInput").value || ""),
+        provider: checked ? checked.value : "",
+        localModel: sel("pluginModelSelect"),
+        copilotModel: sel("pluginCopilotModel"),
+        remoteUrl: String(g("pluginRemoteUrl").value || ""),
+        remoteModel: sel("pluginRemoteModel"),
+        remoteResize: g("pluginRemoteResize").checked === true,
+        remoteKey: String(g("pluginRemoteKeyInput").value || ""),
+        tokenChoice: sel("pluginTokenChoice"),
+        pluginChoice: sel("pluginAddressChoice"),
+        copilotChoice: sel("pluginCopilotChoice"),
+    };
+}
+
+function stageMatchesSaved(k, v) {
+    const s = savedPanel;
+    if (!s) return false;
+    const norm = (x) => String(x || "").trim().replace(/\/+$/, "");
+    switch (k) {
+        case "token": return s.tokenConfigured;
+        case "plugin_url": return norm(s.url) === norm(v);
+        case "provider": return s.provider === v;
+        case "model": return s.selected === v;
+        case "copilot_model": return s.copilotModel === v;
+        case "remote_url": return norm(s.remote.url) === norm(v);
+        case "remote_model": return s.remote.model === v;
+        case "remote_resize": return s.remote.resize === v;
+        case "token_value": return s.tokenConfigured;
+        default: return false;  // remote_api_key: the plugin never echoes it back
+    }
+}
+
+function recomputeStaged() {
+    if (!savedPanel) return;
+    const fresh = stagePanelFields(savedPanel, panelFieldValues());
+    for (const k in staged) {
+        if (k in fresh) continue;
+        if (k === "token_value" || k === "remote_api_key") {
+            // Credentials don't survive innerHTML re-renders (password inputs
+            // come back empty): keep a staged value the plugin hasn't stored.
+            if (!stageMatchesSaved(k, staged[k])) fresh[k] = staged[k];
+        } else if (k === "remote_model") {
+            // A staged model the dropdown can't show yet (no models loaded).
+            const sel = document.getElementById("pluginRemoteModel");
+            if (sel && sel.disabled && !stageMatchesSaved(k, staged[k])) fresh[k] = staged[k];
+        }
+        // Everything else: the DOM carries edits across re-renders (render
+        // re-applies staged), so a reverted edit clears the staged intent.
+    }
+    staged = fresh;
+    updateSaveState();
+}
+
+function updateSaveState() {
+    const btn = document.getElementById("pluginSaveAll");
+    if (btn) btn.disabled = !Object.keys(staged).length;
+    updateSaveHint();
+}
+
+function updateSaveHint() {
+    const hint = document.getElementById("pluginSaveHint");
+    if (!hint) return;
+    if (!Object.keys(staged).length) {
+        hint.textContent = "Nothing pending \u2014 Save stays greyed until a field differs from the saved state.";
+        return;
+    }
+    const signedIn = !!(lastPluginInfo && lastPluginInfo.copilot && lastPluginInfo.copilot.configured);
+    const remote = (lastPluginInfo && lastPluginInfo.remote) || {};
+    const p = effectiveProvider();
+    let blocker = "";
+    if (staged.token_op === "set" && !staged.token_value) {
+        blocker = " Paste the pairing token first \u2014 the Set choice needs it.";
+    } else if (!aiPluginState.configured && !("plugin_url" in staged) && !("plugin_remove" in staged)) {
+        blocker = " Set the plugin address first \u2014 type it in the Plugin address field, then Save.";
+    } else if (p === "copilot" && !signedIn) {
+        blocker = " Sign in with GitHub first \u2014 the plugin refuses GitHub Copilot while signed out.";
+    } else if (p === "remote" && !(remote.url && (remote.models || []).length)) {
+        blocker = " Remote server not ready: enter the server address and Load models first.";
+    }
+    hint.textContent = "Pending: " + pendingLabels(staged).join(", ") + "." + blocker;
+}
+
+function managedPluginSection(url) {
+    return '<div class="panel-section" id="pluginPluginSection" data-managed="true">'
+        + '<div class="panel-section-head">Plugin</div>'
+        + '<div class="settings-field"><label>Plugin address</label>'
+        + '<div class="inline-row"><code id="pluginManagedAddress">' + escapeHtml(url || "not configured") + "</code></div>"
+        + '<div class="hint" id="pluginManagedNote">Managed by the MonkeyTester app \u2014 it starts this plugin and '
+        + "supplies its address and pairing token on every launch, so they can\u2019t be changed here.</div></div>"
+        + "</div>";
+}
+
+async function renderPluginConfigure(name) {
+    const panel = document.getElementById("pluginConfigure");
+    try {
+        const res = await fetch("/api/visual-model/plugin");
+        const data = await res.json();
+        if (configureFor !== name) return;  // closed or switched meanwhile
+        lastPluginInfo = data;
+        const info = (data.plugins || []).find(p => p.name === name) || {};
+        aiPluginState = { configured: !!data.configured,
+                          url: String(info.url || data.url || "") };
+        const models = (info.installed && info.installed.length) ? info.installed
+            : (info.models && info.models.length) ? info.models
+            : (data.installed && data.installed.length) ? data.installed
+            : (data.models || []);
+        const selected = info.selected || data.selected || "";
+        const ids = [];
+        for (const id of models) if (!ids.includes(id)) ids.push(id);
+        const options = ids.map(id =>
+            '<option value="' + attrEscape(id) + '">' +
+            escapeHtml(id === selected ? id + " (selected)" : id) + "</option>").join("");
+        const token = data.token || { configured: false, last4: "" };
+        const pluginOk = !!data.ok || !!info.ok;
+        const copilot = data.copilot || { configured: false, models: [] };
+        const PROVIDERS = ["local", "remote", "copilot"];
+        const provider = (staged.provider && PROVIDERS.includes(staged.provider))
+            ? staged.provider
+            : (PROVIDERS.includes(data.provider) ? data.provider : "local");
+        const PROVIDER_LABEL = { local: "Local model", remote: "Remote server", copilot: "GitHub Copilot" };
+        const remote = data.remote || { url: "", model: "", models: [], resize: true, key: { configured: false, last4: "" }, error: null };
+        const rModels = remote.models || [];
+        const rOptions = rModels.map(m =>
+            '<option value="' + attrEscape(m.id) + '">'
+            + escapeHtml(m.id + (m.id === remote.model ? " (selected)" : "")) + "</option>").join("");
+        const rKey = remote.key || { configured: false, last4: "" };
+        const cModels = copilot.models || [];
+        const cOptions = cModels.map(m =>
+            '<option value="' + attrEscape(m.id) + '">'
+            + escapeHtml((m.name || m.id) + (m.vendor ? " \u00b7 " + m.vendor : "")
+                + (m.id === copilot.model ? " (selected)" : "")) + "</option>").join("");
+        const account = copilot.configured
+            ? '<div class="copilot-account" id="pluginCopilotAccount">Signed in as <strong>'
+                + escapeHtml(copilot.user || "?") + "</strong>"
+                + (copilot.last4 ? " \u00b7 token <code>\u2026" + escapeHtml(copilot.last4) + "</code>" : "")
+                + (copilot.saved_at ? " \u00b7 saved " + escapeHtml(String(copilot.saved_at)) : "")
+                + ' <select id="pluginCopilotChoice"><option value="keep">Copilot: keep</option>'
+                + '<option value="sign_out">Sign out</option></select></div>'
+            : '<div class="copilot-account" id="pluginCopilotAccount">Not signed in. '
+                + '<select id="pluginCopilotChoice"><option value="keep">Copilot: keep</option>'
+                + '<option value="sign_in">Sign in with GitHub (Save arms the flow)</option></select></div>'
+                + '<div id="pluginCopilotDevice" hidden></div>';
+        panel.innerHTML =
+            '<div class="plugin-configure-head"><h4>' + escapeHtml(name) + "</h4>"
+            + '<div class="url"><code>' + (escapeHtml(String(info.url || data.url || "")) || "not configured") + "</code></div></div>"
+            + (data.legacy_copilot
+                ? '<div class="legacy-hint" id="pluginLegacyHint">This viewer\u2019s saved settings still select GitHub Copilot the old way, so test runs refuse to start. '
+                    + escapeHtml(data.legacy_hint || "") + ". Saving here replaces the old setting.</div>"
+                : "")
+            // ── "Plugin" section (top of the panel): plugin address + the
+            // Plugin keep/remove select, then the pairing-token select and
+            // its status block. In managed mode (the Mac app supplies the
+            // address and token) it is only the read-only address + a note. ──
+            + (data.managed ? managedPluginSection(String(info.url || data.url || "")) : (
+            '<div class="panel-section" id="pluginPluginSection">'
+            + '<div class="panel-section-head">Plugin</div>'
+            // The plugin's own address: the FIRST thing the panel sets, above
+            // the provider choice. Editing only STAGES it — the single Save
+            // button applies it (validated: /health + authenticated /config).
+            + '<div class="settings-field"><label for="pluginAddressInput">Plugin address</label>'
+            + '<div class="inline-row"><input type="url" id="pluginAddressInput" placeholder="http://192.168.125.71:8091" value="'
+            + attrEscape(staged.plugin_url || String(info.url || data.url || "")) + '" autocomplete="off">'
+            + (data.configured ? '<select id="pluginAddressChoice"><option value="keep">Configured (keep)</option>'
+                + '<option value="remove">Remove plugin</option></select>' : "")
+            + '</div><div class="hint">The monkeytester-ai plugin\u2019s own address: the viewer checks it first ('
+            + "<code>/health</code> must speak the plugin contract and name plugin <code>monkeytester-ai</code>, "
+            + "and <code>/config</code> must accept the pairing token) and saves nothing if that fails; a saved address "
+            + "reaches <code>Run/config.json</code>. This is NOT the Remote server address below: that is a model server "
+            + "the plugin talks to. Editing this field only stages the change \u2014 the single <strong>Save changes</strong> button "
+            + "at the bottom of the Configuration section below applies it (with everything else you changed). The <strong>Plugin</strong> select beside "
+            + "it offers a staged \u201cRemove plugin\u201d choice applied by Save. If the check fails with a 401, paste "
+            + "the pairing token in the Pairing token field and Save again.</div></div>"
+            // Token select (keep / set… / replace / remove) + write-only
+            // token status block, part of the Plugin section.
+            + '<div class="settings-field"><label>Pairing token</label>'
+            + '<div class="pairing-token" id="pluginTokenPanel">'
+            + (token.configured
+                ? "Configured \u00b7 ends with <code>\u2026" + escapeHtml(String(token.last4 || "")) + "</code>"
+                : "Not configured \u2014 paste the token the plugin printed when it was installed.")
+            + '</div>'
+            + (token.configured
+                ? '<div class="inline-row"><select id="pluginTokenChoice"><option value="keep">Token: keep</option>'
+                    + '<option value="replace">Replace (service generates a new one)</option>'
+                    + '<option value="remove">Remove (forget viewer\u2019s copy)</option></select></div>'
+                : '<div class="inline-row"><select id="pluginTokenChoice"><option value="keep">Token: keep</option>'
+                    + '<option value="set">Set pairing token</option></select>'
+                    + '<input type="password" id="pluginTokenSetInput" autocomplete="new-password" '
+                    + 'placeholder="Paste the plugin\u2019s pairing token"></div>')
+            + '<div class="hint">The pairing token is a credential the AI service owns: it is shown '
+            + "once when generated and never again \u2014 only its last 4 characters. The <strong>Token</strong> select stages the "
+            + "operation: Set (paste the plugin\u2019s token first; Save stores the viewer\u2019s copy first, no plugin call, then "
+            + "validates the address with it), Replace (Save asks the service for a new one, shown once by the service itself) or "
+            + "Remove (Save forgets the viewer\u2019s copy).</div></div>"
+            + '</div>'))  // end of the Plugin section
+            // ── "Configuration" section (below Plugin): provider radios,
+            // model dropdowns, Remote server subsection, Copilot select; the
+            // single Save is the LAST element, at its bottom. ──
+            + '<div class="panel-section" id="pluginConfigSection">'
+            + '<div class="panel-section-head">Configuration</div>'
+            + '<div class="settings-field"><label>Vision provider</label>'
+            + '<div class="provider-row">'
+            + '<label><input type="radio" name="pluginProvider" id="pluginProviderLocal" value="local"'
+            + (provider === "local" ? " checked" : "") + "> Local model</label>"
+            + '<label><input type="radio" name="pluginProvider" id="pluginProviderRemote" value="remote"'
+            + (provider === "remote" ? " checked" : "") + "> Remote server</label>"
+            + '<label><input type="radio" name="pluginProvider" id="pluginProviderCopilot" value="copilot"'
+            + (provider === "copilot" ? " checked" : "") + "> GitHub Copilot</label></div>"
+            + '<div class="hint">Active on the plugin now: <strong id="pluginActiveProvider">'
+            + (PROVIDER_LABEL[data.provider] || "Local model") + "</strong>. "
+            + "One provider answers every vision call; there is no fallback.</div>"
+            + '</div>'
+            // Local
+            + '<div class="provider-section" id="pluginLocalSection">'
+            + '<label for="pluginModelSelect">Local model</label>'
+            + '<div class="inline-row"><select id="pluginModelSelect">' + options + "</select>"
+            + '<button class="btn-secondary" id="pluginRefreshBtn">Refresh list</button></div>'
+            + '<div class="hint" id="pluginModelsHint">' + (data.configured
+                ? ids.length + " installed model(s) on plugin "
+                    + escapeHtml(info.name || data.plugin || name) + " \u2014 the one marked (selected) is active now."
+                : "No plugin address set yet \u2014 save one above and the plugin's installed models appear here.")
+            + "</div></div>"
+            // Remote server (OpenAI-compatible, e.g. llama-server)
+            + '<div class="provider-section" id="pluginRemoteSection">'
+            + '<label for="pluginRemoteUrl">Remote server address</label>'
+            + '<div class="inline-row"><input type="url" id="pluginRemoteUrl" placeholder="http://192.168.125.70:8080" value="'
+            + attrEscape(staged.remote_url || remote.url || "") + '" autocomplete="off">'
+            + '<button class="btn-secondary" id="pluginRemoteLoad">Load models</button></div>'
+            + '<div class="hint">An OpenAI-compatible server (<code>/v1/models</code>, <code>/v1/chat/completions</code>). '
+            + "Load models validates \u2014 and thereby saves \u2014 the address on the plugin, the contract\u2019s only way to "
+            + "list its models; any other edit to this address stays staged until Save.</div>"
+            + (remote.error ? '<div class="remote-error" id="pluginRemoteError">' + escapeHtml(String(remote.error)) + "</div>" : "")
+            + '<label for="pluginRemoteModel" style="margin-top:8px">Remote model</label>'
+            + '<div class="inline-row"><select id="pluginRemoteModel"' + (rModels.length ? "" : " disabled") + ">"
+            + (rOptions || '<option value="">' + (remote.url ? "No models reported" : "Load models first") + "</option>")
+            + "</select></div>"
+            + '<label class="switch-row"><input type="checkbox" id="pluginRemoteResize"'
+            + (staged.remote_resize !== undefined ? (staged.remote_resize ? " checked" : "") : (remote.resize === false ? "" : " checked"))
+            + "> Resize screenshots for Qwen2.5-VL</label>"
+            + '<div class="hint">On: the plugin shrinks each screenshot, adds the Qwen2.5-VL coordinate hint and scales answers back (as for Local). Off: requests go through unchanged except the model.</div>'
+            + '<label style="margin-top:8px">API key (optional)</label>'
+            + '<div class="pairing-token" id="pluginRemoteKeyPanel">'
+            + (rKey.configured
+                ? "Configured \u00b7 ends with <code>\u2026" + escapeHtml(String(rKey.last4 || "")) + "</code>"
+                : "No API key set.")
+            + "</div>"
+            + '<div class="inline-row"><input type="password" id="pluginRemoteKeyInput" autocomplete="new-password" placeholder="'
+            + (rKey.configured ? "Paste a new key to replace it" : "Paste the server\u2019s API key") + '"></div>'
+            + '<div class="hint">Sent as <code>Authorization: Bearer &hellip;</code> to the remote server. Pasting a key only '
+            + "stages it \u2014 the single Save button sends it in the same request as the other remote changes. Stored by the plugin, never shown again \u2014 only its last 4 characters.</div></div>"
+            // Copilot
+            + '<div class="provider-section" id="pluginCopilotSection">'
+            + account
+            + (copilot.error ? '<div class="copilot-error">' + escapeHtml(String(copilot.error)) + "</div>" : "")
+            + '<label for="pluginCopilotModel">Copilot vision model</label>'
+            + '<div class="inline-row"><select id="pluginCopilotModel"' + (cModels.length ? "" : " disabled") + ">"
+            + (cOptions || '<option value="">' + (copilot.configured ? "No vision models reported" : "Sign in to list models") + "</option>")
+            + "</select></div>"
+            + '<div class="hint">With GitHub Copilot selected, test screenshots are sent to GitHub\u2019s Copilot API. '
+            + "The plugin signs in with the OAuth client of GitHub\u2019s editor plugins \u2014 this is not an official GitHub API.</div></div>"
+            // The single Save LAST at the bottom of the Configuration section.
+            // Greyed (disabled) while the panel state equals the saved state;
+            // one click applies every pending field in the plugin's order.
+            + '<div class="inline-row" style="margin-top:10px"><button class="btn-secondary save-btn" id="pluginSaveAll" disabled>Save changes</button>'
+            + '<span class="hint" id="pluginSaveHint"></span></div>'
+            + '</div>'  // end of the Configuration section
+            + '<div class="settings-status" id="pluginConfigureStatus"></div>';
+        if (selected && ids.includes(selected)) {
+            document.getElementById("pluginModelSelect").value = selected;
+        }
+        if (staged.model && ids.includes(staged.model)) {
+            document.getElementById("pluginModelSelect").value = staged.model;
+        }
+        if (remote.model && rModels.some(m => m.id === remote.model)) {
+            document.getElementById("pluginRemoteModel").value = remote.model;
+        }
+        if (staged.remote_model && rModels.some(m => m.id === staged.remote_model)) {
+            document.getElementById("pluginRemoteModel").value = staged.remote_model;
+        }
+        if (copilot.model && cModels.some(m => m.id === copilot.model)) {
+            document.getElementById("pluginCopilotModel").value = copilot.model;
+        }
+        if (staged.copilot_model && cModels.some(m => m.id === staged.copilot_model)) {
+            document.getElementById("pluginCopilotModel").value = staged.copilot_model;
+        }
+        const tcSel = document.getElementById("pluginTokenChoice");
+        if (tcSel && staged.token_op) tcSel.value = staged.token_op;
+        const paSel = document.getElementById("pluginAddressChoice");
+        if (paSel && staged.plugin_remove) paSel.value = "remove";
+        const cpSel = document.getElementById("pluginCopilotChoice");
+        if (cpSel && staged.copilot_op) cpSel.value = staged.copilot_op;
+        savedPanel = {
+            configured: !!data.configured,
+            url: aiPluginState.url,
+            tokenConfigured: !!token.configured,
+            provider: PROVIDERS.includes(data.provider) ? data.provider : "local",
+            selected: selected || "",
+            copilotModel: copilot.model || "",
+            copilotSignedIn: !!copilot.configured,
+            remote: { url: remote.url || "", model: remote.model || "",
+                      resize: remote.resize !== false, keyConfigured: !!rKey.configured },
+        };
+        recomputeStaged();  // greys Save when the panel matches the saved state
+        wirePluginConfigure(name);
+        showProviderSection(provider);
+    } catch (e) {
+        panel.innerHTML = '<div class="hint">Couldn\u2019t read the plugin: ' + escapeHtml(e.message) + "</div>";
+    }
+}
+
+function wirePluginConfigure(name) {
+    document.querySelectorAll('input[name="pluginProvider"]').forEach(r =>
+        r.addEventListener("change", () => { recomputeStaged(); showProviderSection(effectiveProvider()); }));
+    // Edits only stage: mark dirty on typing (blur fires when a typed value
+    // settles) and on select/switch changes.
+    ["pluginAddressInput", "pluginRemoteUrl", "pluginTokenSetInput", "pluginRemoteKeyInput"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("blur", () => recomputeStaged());
+    });
+    ["pluginModelSelect", "pluginRemoteModel", "pluginRemoteResize",
+     "pluginTokenChoice", "pluginAddressChoice", "pluginCopilotChoice"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("change", () => recomputeStaged());
+    });
+    // No action buttons: the only buttons left are the single Save and the
+    // two fetch buttons (Refresh list, Load models).
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
+    on("pluginRefreshBtn", () => { stopCopilotPoll(); renderPluginConfigure(name); });
+    on("pluginSaveAll", savePanelChanges);
+    on("pluginRemoteLoad", loadRemoteModels);
+}
+
+async function loadRemoteModels() {
+    const url = (document.getElementById("pluginRemoteUrl") || {}).value || "";
+    if (!url.trim()) { pluginSetStatus("Enter the remote server's address first", "error"); return; }
+    pluginSetStatus("Checking " + url.trim() + "\u2026", "");
+    const out = await postPluginConfig({ remote_url: url.trim() }, "Remote server saved");
+    if (out) {
+        await renderPluginConfigure(configureFor);
+        const n = (lastPluginInfo && lastPluginInfo.remote && lastPluginInfo.remote.models || []).length;
+        pluginSetStatus("Remote server saved \u00b7 " + n + " model(s)", "saved");
+    }
+}
+
+async function postJSON(url, payload) {
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {}),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(errorText(out, res.status));
+    return out;
+}
+
+async function postPluginConfig(payload, okMsg) {
+    try {
+        const out = await postJSON("/api/config/visual-model", payload);
+        pluginSetStatus(okMsg, "saved");
+        return out;
+    } catch (e) {
+        pluginSetStatus("Failed: " + e.message, "error");
+        return null;
+    }
+}
+
+// ── The single staged Save: ordered POSTs, per-field results, retryable ──
+async function savePanelChanges() {
+    recomputeStaged();
+    const steps = planSavePayload(staged);
+    if (!steps.length) { pluginSetStatus("No changes to save", ""); return; }
+    if (!aiPluginState.configured && !steps.some(s => s.kind === "address")) {
+        pluginSetStatus("Set the plugin address first \u2014 type it in the Plugin address field and Save.", "error");
+        return;
+    }
+    const done = [], bad = [], skipped = [];
+    let blocked = false;  // an unreachable/wrong plugin address: later POSTs wait
+    const fieldsSnapshot = JSON.parse(JSON.stringify(staged));
+    for (const step of steps) {
+        const labels = step.kind === "token" ? ["pairing token " + fieldsSnapshot.token_op]
+            : step.kind === "address" ? [fieldsSnapshot["plugin_remove"] === true ? "plugin removal" : "plugin address"]
+            : step.kind === "copilot_in" ? ["Copilot sign-in"]
+            : step.kind === "copilot_out" ? ["Copilot sign-out"]
+            : pendingLabels(step.body);
+        if (blocked) { skipped.push(...labels); continue; }
+        try {
+            const out = await postJSON(step.url, step.body);
+            if (step.kind === "token") {
+                delete staged.token_op;
+                delete staged.token_value;
+                const inp = document.getElementById("pluginTokenSetInput");
+                if (inp) inp.value = "";  // the paste never stays in the page
+            } else if (step.kind === "address") {
+                delete staged.plugin_remove;
+                delete staged.plugin_url;
+                aiPluginState = { configured: !!out.plugin_url, url: String(out.plugin_url || "") };
+            } else if (step.kind === "copilot_in") {
+                delete staged.copilot_op;
+                done.push(...labels);
+                pollCopilotDevice(out);  // device flow keeps polling after Save
+                continue;
+            } else if (step.kind === "copilot_out") {
+                delete staged.copilot_op;
+                done.push(...labels);
+                continue;
+            } else {
+                for (const key of Object.keys(step.body)) delete staged[key];
+                if ("remote_api_key" in step.body) {
+                    const inp = document.getElementById("pluginRemoteKeyInput");
+                    if (inp) inp.value = "";
+                }
+            }
+            done.push(...labels);
+        } catch (e) {
+            bad.push(...labels.map(l => l + " (" + e.message + ")"));
+            if (step.kind === "address") blocked = true;
+        }
+    }
+    const parts = [];
+    if (done.length) parts.push("Saved: " + done.join(", "));
+    if (bad.length) parts.push("Not saved: " + bad.join(", "));
+    if (skipped.length) parts.push("Not attempted: " + skipped.join(", ") + " (the plugin address failed first)");
+    warnIfRunning();
+    // Re-render from the SERVER state: staged values that never applied come
+    // back into the fields, so the Save button stays dirty for a retry.
+    await renderPluginConfigure(configureFor);
+    pluginSetStatus(parts.join(" \u2014 ") || "Nothing to save", bad.length || skipped.length ? "error" : "saved");
+}
+
+// The Copilot device flow: Save's "Sign in with GitHub" choice POSTs the
+// start, then this keeps polling; signing out is a staged choice too.
+async function pollCopilotDevice(start) {
+    const box = document.getElementById("pluginCopilotDevice");
+    if (!box) return;
+    stopCopilotPoll();
+    try {
+        if (!box) return;
+        box.hidden = false;
+        box.innerHTML = '<div class="hint">Open <a id="pluginCopilotVerify" target="_blank" rel="noopener" href="'
+            + attrEscape(start.verification_uri) + '">' + escapeHtml(start.verification_uri)
+            + "</a> and enter this code:</div>"
+            + '<div class="copilot-code" id="pluginCopilotCode">' + escapeHtml(start.user_code) + "</div>"
+            + '<div class="hint" id="pluginCopilotPollState">Waiting for GitHub\u2026</div>';
+        const gen = copilotPoll.gen;
+        let interval = Math.max(1, Number(start.interval) || 5);
+        const tick = async () => {
+            if (gen !== copilotPoll.gen) return;
+            let out;
+            try {
+                out = await postJSON("/api/visual-model/plugin/copilot/device/poll", {});
+            } catch (e) {
+                if (gen !== copilotPoll.gen) return;
+                setPollState("Sign-in failed: " + e.message, true);
+                return;
+            }
+            if (gen !== copilotPoll.gen) return;
+            if (out.state === "pending" || out.state === "slow_down") {
+                if (out.state === "slow_down") interval += 5;
+                if (out.interval) interval = Math.max(interval, Number(out.interval) || interval);
+                copilotPoll.timer = setTimeout(tick, interval * 1000);
+                return;
+            }
+            stopCopilotPoll();
+            if (out.state === "done") {
+                await renderPluginConfigure(configureFor);
+                pluginSetStatus("Signed in to GitHub Copilot" + (out.copilot && out.copilot.user ? " as " + out.copilot.user : ""), "saved");
+                return;
+            }
+            setPollState(out.state === "expired" ? "The code expired \u2014 sign in again."
+                : out.state === "denied" ? "Sign-in was denied on GitHub."
+                : "Sign-in failed: " + (out.error || out.state), true);
+        };
+        copilotPoll.timer = setTimeout(tick, interval * 1000);
+    } catch (e) {
+        pluginSetStatus("Sign-in failed: " + e.message, "error");
+    }
+}
+
+function setPollState(msg, isError) {
+    const el = document.getElementById("pluginCopilotPollState");
+    if (el) { el.textContent = msg; el.style.color = isError ? "var(--fail)" : ""; }
+    if (isError) pluginSetStatus(msg, "error");
+}
+
+
+// ── Panel address + pairing token: the row stays read-only, all edits here ──
+
+// Remove plugin and Replace/Remove token are staged panel choices now:
+// the single Save applies them in the ordered sequence (see savePanelChanges).
+
+function warnIfRunning() {
+    // Active/queued runs are interrupted by a plugin config change: say so.
+    (async () => {
+        try {
+            const status = await fetchJSON("/api/run-status");
+            const note = document.getElementById("pluginWarnNote");
+            if (status.active_tests > 0 || status.queued_tests > 0) {
+                note.hidden = false;
+                note.innerHTML = "\u26a0 AI plugin provider, model or pairing token updated: active test runs "
+                    + "are interrupted and queued tests cancelled \u2014 resubmit new tests.";
+            }
+        } catch (e) {}
+    })();
+}
+</script>
+</body>
+</html>

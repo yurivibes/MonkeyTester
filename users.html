@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users — MonkeyTester</title>
+<style>
+{{CSS}}
+{{SETTINGS_CSS}}
+
+.users-table { width: 100%; max-width: 720px; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 12px; }
+.users-table th, .users-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.users-table th { color: var(--text-muted); font-weight: 600; }
+.users-table td.actions { white-space: nowrap; }
+.users-table td.actions button { margin-right: 6px; }
+.users-table .you { color: var(--text-muted); font-size: 0.75rem; margin-left: 6px; }
+.users-table .warn { color: var(--fail); font-size: 0.75rem; margin-left: 6px; }
+.users-table select { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <header class="site-header">
+        <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
+    </header>
+
+    <h2 class="page-title">Users</h2>
+
+    <div class="settings-section" id="usersSection">
+        <h3>Accounts</h3>
+        <div class="settings-field"><div class="hint">Everyone who uses the viewer signs in with their own account. Admins manage accounts here and set the CI and service tokens; users can do everything else. Resetting a password or deleting an account signs that user out everywhere. You can't delete yourself or the last admin.</div></div>
+        <table class="users-table">
+            <thead><tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr></thead>
+            <tbody id="userRows"><tr><td colspan="4">Loading…</td></tr></tbody>
+        </table>
+        <div class="settings-actions"><span class="settings-status" id="usersStatus"></span></div>
+    </div>
+
+    <div class="settings-section" id="createUserSection">
+        <h3>Create user</h3>
+        <div class="settings-field">
+            <label for="new_username">Username</label>
+            <input type="text" id="new_username" autocomplete="off" />
+        </div>
+        <div class="settings-field">
+            <label for="new_user_password">Initial password</label>
+            <input type="password" id="new_user_password" autocomplete="new-password" />
+            <div class="hint">At least 8 characters. Give it to the user; they can change it in Settings &rarr; Configuration.</div>
+        </div>
+        <div class="settings-field">
+            <label for="new_user_role">Role</label>
+            <select id="new_user_role"><option value="user">user</option><option value="admin">admin</option></select>
+        </div>
+        <div class="settings-actions">
+            <button class="btn-secondary settings-save-btn" id="createUserBtn" onclick="createUser()">Create User</button>
+            <span class="settings-status" id="createStatus"></span>
+        </div>
+    </div>
+</div>
+<script>
+{{JS}}
+
+function setStatus(id, msg, type) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = "settings-status " + (type || "");
+    setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 6000);
+}
+
+async function postUsers(body) {
+    const res = await fetch("/api/users", { method: "POST", headers: {"Content-Type": "application/json"},
+                                            body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { goToLogin(); throw new Error("Signed out"); }
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    return data;
+}
+
+function renderUsers(users) {
+    const me = authConfig.username;
+    document.getElementById("userRows").innerHTML = users.map(u => {
+        const name = escapeHtml(u.username);
+        const created = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : "";
+        return '<tr data-user="' + name + '">' +
+            '<td>' + name + (u.username === me ? '<span class="you">(you)</span>' : '') +
+                (u.default_password ? '<span class="warn">default password</span>' : '') + '</td>' +
+            '<td><select class="user-role" aria-label="Role of ' + name + '">' +
+                ['user', 'admin'].map(r => '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' + r + '</option>').join('') +
+            '</select></td>' +
+            '<td>' + escapeHtml(created) + '</td>' +
+            '<td class="actions"><button class="btn-secondary user-reset" type="button">Reset password</button>' +
+                '<button class="btn-secondary user-delete" type="button"' + (u.username === me ? ' disabled' : '') + '>Delete</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+async function loadUsers() {
+    try {
+        const data = await fetchJSON("/api/users");
+        if (data.error) throw new Error(data.error);
+        renderUsers(data.users);
+    } catch (e) {
+        document.getElementById("userRows").innerHTML = '<tr><td colspan="4">' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+document.getElementById("userRows").addEventListener("click", async (event) => {
+    const row = event.target.closest("[data-user]");
+    if (!row) return;
+    const username = row.dataset.user;
+    try {
+        if (event.target.classList.contains("user-reset")) {
+            const password = prompt("New password for " + username + " (at least 8 characters). They will be signed out everywhere.");
+            if (!password) return;
+            renderUsers((await postUsers({ reset_password: { username: username, password: password } })).users);
+            setStatus("usersStatus", "Password reset for " + username, "saved");
+        } else if (event.target.classList.contains("user-delete")) {
+            if (!confirm("Delete " + username + "? They are signed out everywhere.")) return;
+            renderUsers((await postUsers({ delete: username })).users);
+            setStatus("usersStatus", "Deleted " + username, "saved");
+        }
+    } catch (e) {
+        setStatus("usersStatus", e.message, "error");
+    }
+});
+
+document.getElementById("userRows").addEventListener("change", async (event) => {
+    if (!event.target.classList.contains("user-role")) return;
+    const username = event.target.closest("[data-user]").dataset.user;
+    try {
+        renderUsers((await postUsers({ set_role: { username: username, role: event.target.value } })).users);
+        setStatus("usersStatus", username + " is now " + event.target.value, "saved");
+    } catch (e) {
+        setStatus("usersStatus", e.message, "error");
+        loadUsers();
+    }
+});
+
+async function createUser() {
+    try {
+        const data = await postUsers({ create: {
+            username: document.getElementById("new_username").value.trim(),
+            password: document.getElementById("new_user_password").value,
+            role: document.getElementById("new_user_role").value,
+        } });
+        document.getElementById("new_username").value = "";
+        document.getElementById("new_user_password").value = "";
+        renderUsers(data.users);
+        setStatus("createStatus", "User created", "saved");
+    } catch (e) {
+        setStatus("createStatus", e.message, "error");
+    }
+}
+
+fetchAuthStatus().then(loadUsers);
+</script>
+</body>
+</html>

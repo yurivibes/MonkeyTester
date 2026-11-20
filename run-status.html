@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Run Status — MonkeyTester</title>
+<style>
+{{CSS}}
+{{SETTINGS_CSS}}
+
+/* Run status panel */
+.run-status-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+.run-status-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.run-counts { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.run-count-item { font-size: 0.8rem; color: var(--text-muted); }
+.run-count-item span { font-weight: 600; color: var(--text); }
+.run-count-item .warn { color: var(--fail); }
+.run-details { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.run-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.run-detail-item .run-name { color: var(--accent); font-weight: 600; cursor: pointer; text-decoration: none; }
+.run-detail-item .run-name:hover { text-decoration: underline; }
+.run-detail-item .phase { color: var(--text-muted); font-size: 0.75rem; }
+.run-test-list { margin-top: 6px; padding-left: 16px; }
+.run-test-item { font-size: 0.75rem; color: var(--text-muted); padding: 1px 0; }
+.run-test-item .status-running { color: var(--running); }
+.run-test-item .status-pending { color: var(--text-muted); }
+.run-test-item .status-pass { color: var(--pass); }
+.run-test-item .status-fail { color: var(--fail); }
+.run-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+.run-badge.active { background: color-mix(in srgb, var(--running) 15%, transparent); color: var(--running); border: 1px solid color-mix(in srgb, var(--running) 30%, transparent); }
+.run-badge.none { background: color-mix(in srgb, var(--skip) 10%, transparent); color: var(--text-muted); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+    <header class="site-header">
+        <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
+        <div class="header-actions">
+            <button class="btn-secondary" onclick="pollRunStatus()">Refresh Now</button>
+        </div>
+    </header>
+
+    <h2 class="page-title">Run Status</h2>
+
+    <div class="run-status-panel" id="runStatusPanel">
+        <div class="run-status-header">
+            <span class="run-badge active" id="runBadge">Loading…</span>
+        </div>
+        <div class="run-counts" id="runCounts">
+            <div class="run-count-item"><span id="activeRuns">0</span> active run(s)</div>
+            <div class="run-count-item"><span id="activeTests">0</span> active test(s)</div>
+            <div class="run-count-item"><span id="queuedTests">0</span> queued test(s)</div>
+        </div>
+        <div class="run-details" id="runDetails"></div>
+    </div>
+</div>
+<script>
+{{JS}}
+
+async function pollRunStatus() {
+    try {
+        const data = await fetchJSON("/api/run-status");
+        const badge = document.getElementById("runBadge");
+        const totalActive = data.active_runs || 0;
+        const totalActiveTests = data.active_tests || 0;
+        const totalQueued = data.queued_tests || 0;
+
+        document.getElementById("activeRuns").textContent = totalActive;
+        document.getElementById("activeTests").textContent = totalActiveTests;
+        document.getElementById("queuedTests").textContent = totalQueued;
+
+        if (totalActive > 0) {
+            badge.className = "run-badge active";
+            badge.textContent = totalActive + " running";
+        } else {
+            badge.className = "run-badge none";
+            badge.textContent = "No active runs";
+        }
+
+        const detailsEl = document.getElementById("runDetails");
+        if (data.details && data.details.length > 0) {
+            let html = "";
+            // Run and test names come from the run folder: escape everything,
+            // and link with a real href (no names inside onclick strings).
+            const esc = (v) => escapeHtml(String(v ?? "")).replace(/"/g, "&quot;");
+            for (const d of data.details) {
+                html += `<div class="run-detail-item">`;
+                html += `<a class="run-name" href="/test.html?run=${encodeURIComponent(d.run)}">${esc(d.run)}</a>`;
+                html += `<span class="phase">[${esc(d.phase || "unknown")}]</span>`;
+                if (d.active_steps > 0 || d.queued_tests > 0) {
+                    html += `<span style="margin-left:auto;font-size:0.75rem;">${Number(d.active_steps) || 0} active, ${Number(d.queued_tests) || 0} queued</span>`;
+                }
+                html += `</div>`;
+                if (d.tests && d.tests.length > 0) {
+                    html += `<div class="run-test-list">`;
+                    for (const t of d.tests) {
+                        const status = String(t.status || "");
+                        const sc = "status-" + status.replace(/[^a-z_-]/gi, "");
+                        const display = status.charAt(0).toUpperCase() + status.slice(1);
+                        html += `<div class="run-test-item ${sc}">● ${esc(t.name)}: ${esc(display)}</div>`;
+                    }
+                    html += `</div>`;
+                }
+            }
+            detailsEl.innerHTML = html;
+        } else {
+            detailsEl.innerHTML = "";
+        }
+    } catch (e) {
+        // Silently fail — poll errors shouldn't block UI
+    }
+}
+
+pollRunStatus();
+setInterval(pollRunStatus, 5000);
+</script>
+</body>
+</html>

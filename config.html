@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuration — MonkeyTester</title>
+<style>
+{{CSS}}
+{{SETTINGS_CSS}}
+
+/* Build & Test */
+.build-checks a, .project-check a { color: inherit; text-decoration: underline; }
+#buildSection input[type=text], #buildSection input[type=password] { max-width: 480px; }
+#testVarsSection textarea, #testVarsSection select {
+    width: 100%; max-width: 480px; min-height: 64px;
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-family: monospace;
+}
+#testVarsSection select { min-height: 0; font-family: inherit; }
+
+/* Build plugins and Projects tables */
+.project-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 8px; }
+.project-table th { text-align: left; font-weight: 600; color: var(--text-muted); font-size: 0.75rem;
+    text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.project-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.project-table .col-repo { width: 30%; }
+.project-table .col-plugin { width: 18%; }
+.project-table .col-branch { width: 22%; }
+.project-table .col-remove { width: 84px; }
+.project-table .col-name { width: 18%; }
+.project-table .col-url { width: 26%; }
+.project-table .col-actions { width: 280px; }
+.project-table td.plugin-actions { white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+#buildPlugins { min-width: 720px; }
+.project-table .project-repo, .project-table .plugin-url { font-family: monospace; overflow-wrap: anywhere; }
+.project-table select { width: 100%; text-overflow: ellipsis; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; }
+.project-table .project-check { font-size: 0.8rem; }
+.project-table .project-check.ok { color: var(--pass); }
+.project-table .project-check.bad { color: var(--fail); }
+.project-table .project-empty td { color: var(--text-muted); font-style: italic; }
+.project-remove, .plugin-action { background: none; border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 6px; padding: 2px 10px; cursor: pointer; font-size: 0.8rem; }
+.project-remove:hover:not([disabled]), .plugin-action.danger:hover { color: var(--fail); border-color: var(--fail); }
+.plugin-action:hover { color: var(--text); border-color: var(--text-muted); }
+.project-add, .plugin-add { display: flex; gap: 8px; flex-wrap: wrap; max-width: 720px; }
+.project-add input, .plugin-add input { flex: 1; min-width: 140px; }
+.project-add select { background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; }
+.build-box { border: 1px solid var(--border); padding: 12px 14px; margin-bottom: 16px; }
+.build-box h4 { margin: 0 0 10px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.plugin-panel { border: 1px solid var(--border); padding: 12px 14px; margin-top: 10px; background: var(--card); }
+.plugin-panel h4 { margin: 0 0 10px; }
+.plugin-saved { font-size: 0.85rem; margin-bottom: 8px; }
+.plugin-saved code { font-size: 0.8rem; }
+
+/* Save buttons: disabled (greyed) while nothing differs from the saved state */
+.settings-save-btn { background: var(--acid); color: var(--on-acid); border: 2px solid var(--acid); }
+.settings-save-btn[disabled] { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+</style>
+</head>
+<body>
+<div class="container">
+    <header class="site-header">
+        <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
+    </header>
+
+    <h2 class="page-title">Configuration</h2>
+
+    <div class="settings-section" id="buildSection">
+        <h3>Build &amp; Test</h3>
+        <div class="settings-field"><div class="hint">Build &amp; Test builds a branch of your app on a <strong>build plugin</strong>'s own host — a Mac builds Android and iOS, a Linux host Android only — and tests the result on the devices. A build plugin is a separate service that fetches the branch from <strong>Gitea or GitHub</strong>, runs the app repo's build scripts there and uploads the apps back to the viewer. Build plugins are registered on the <a href="/plugins">Plugins</a> page (Settings → Plugins, Build Plugin section); the plugin holds the code host's address and read-only token, and the viewer never sees that token.</div></div>
+
+        <div class="settings-field">
+            <label for="build_new_repo">Projects (repos)</label>
+            <table class="project-table" id="buildProjects">
+                <colgroup><col class="col-repo"><col class="col-plugin"><col class="col-branch"><col><col class="col-remove"></colgroup>
+                <thead><tr><th>Repo</th><th>Plugin</th><th>Branch</th><th>Status</th><th></th></tr></thead>
+                <tbody id="buildProjectRows"></tbody>
+            </table>
+            <div class="project-add">
+                <input type="text" id="build_new_repo" placeholder="owner/repo" autocomplete="off" />
+                <select id="build_new_plugin" aria-label="Build plugin for the new repo"></select>
+                <button class="btn-secondary" id="buildAddRepoBtn" type="button" onclick="addProjectRow()">Add repo</button>
+            </div>
+            <div class="hint">Each repo is a project: its runs are filed under it on the dashboard, it has its own Test Variables, and Build &amp; Test can start a run from any of its branches. A repo belongs to one project, on one build plugin. The branch is the project's main line (e.g. <code>master</code>, <code>main</code> or <code>develop</code>), read through the plugin: Build &amp; Test preselects it and the status check reads its test cases and build scripts. Building needs the app repo's per-platform build scripts (from the plugin's example scripts) committed on that branch; the status column names a missing one and links its example. Platforms the plugin's host can't build are greyed out in Build &amp; Test.</div>
+        </div>
+
+        <div class="settings-actions">
+            <button class="btn-secondary settings-save-btn" id="buildSaveBtn" onclick="saveProjects()">Save Projects</button>
+            <span class="settings-status" id="buildStatus"></span>
+        </div>
+    </div>
+
+    <div class="settings-section" id="testVarsSection">
+        <h3>Test Variables</h3>
+
+        <div class="settings-field">
+            <label for="test_vars_scope">Project</label>
+            <select id="test_vars_scope" onchange="renderTestVars()">
+                <option value="">All projects (shared)</option>
+            </select>
+            <div class="hint">Shared variables apply to every run. A project's variables apply only to its runs and override shared ones with the same name.</div>
+        </div>
+
+        <div class="settings-field">
+            <label for="test_vars">Variables</label>
+            <textarea id="test_vars" placeholder="HUB_PATH=/api&#10;one KEY=value per line" autocomplete="off" style="min-height:64px;"></textarea>
+            <div class="hint">Every test can use these as <code>${KEY}</code> / <code>$KEY</code> in step text and inside <code>PLUGIN</code> blocks — e.g. <code>GET ${HUB_PATH}/devices -&gt; …</code> puts the saved path before the endpoint. Lines are <code>KEY=value</code> (<code>#</code> comments allowed, empty value legal). Read when a run starts: a change applies to the next run. A <code>KEY=value</code> line inside a test overrides the saved value.</div>
+            <div class="settings-actions">
+                <button class="btn-secondary settings-save-btn" id="testVarsSaveBtn" onclick="saveTestVars()">Save Test Variables</button>
+                <span class="settings-status" id="testVarsStatus"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section" id="accountSection">
+        <h3>Account</h3>
+        <div class="settings-field"><div class="hint">Signed in as <strong id="accountName">…</strong> (<span id="accountRole"></span>). Changing your password signs your other browsers out.</div></div>
+        <div class="settings-field">
+            <label for="current_password">Current password</label>
+            <input type="password" id="current_password" autocomplete="current-password" />
+        </div>
+        <div class="settings-field">
+            <label for="new_password">New password</label>
+            <input type="password" id="new_password" autocomplete="new-password" />
+            <div class="hint">At least 8 characters.</div>
+        </div>
+        <div class="settings-actions">
+            <button class="btn-secondary settings-save-btn" id="passwordSaveBtn" onclick="changePassword()" disabled>Change Password</button>
+            <button class="btn-secondary" id="logoutBtn" onclick="doLogout()">Log Out</button>
+            <span class="settings-status" id="accountStatus"></span>
+        </div>
+    </div>
+
+    <div class="settings-section" id="ciTokenSection" hidden>
+        <h3>CI token</h3>
+        <div class="settings-field"><div class="hint">CI jobs that upload apps with <code>ci/visual-test/submit.py</code> send this token (<code>VT_CI_TOKEN</code>, sent as <code>Authorization: Bearer</code>). It only starts runs and reads their results; it opens nothing else. A new token is shown <strong>once</strong>: put it in the app repo's <code>VT_CI_TOKEN</code> secret. Admins only.</div></div>
+        <div class="settings-field"><div id="ciTokenState" class="hint">…</div></div>
+        <div class="settings-field" id="ciTokenNew" hidden>
+            <label for="ci_token_value">New CI token (copy it now; it is not shown again)</label>
+            <input type="text" id="ci_token_value" readonly />
+        </div>
+        <div class="settings-actions">
+            <button class="btn-secondary" id="ciTokenGenerateBtn" onclick="generateCiToken()">Generate new CI token</button>
+            <button class="btn-secondary" id="ciTokenRemoveBtn" onclick="removeCiToken()">Remove</button>
+            <span class="settings-status" id="ciTokenStatus"></span>
+        </div>
+    </div>
+
+    <div class="settings-section" id="serviceTokensSection" hidden>
+        <h3>Service tokens</h3>
+        <div class="settings-field"><div class="hint">Tokens the viewer sends to the services it uses: the Mobile-Controller (<code>X-Controller-Token</code>) and each plugin (<code>X-Plugin-Token</code>). A token is checked against the service before it is saved. Stored in <code>service_tokens.json</code> (mode 0600, plaintext at rest) and never shown again &mdash; only its last 4 characters. Runs started afterwards use the new value. Admins only.</div></div>
+        <div id="serviceTokenRows"></div>
+        <div class="settings-actions"><span class="settings-status" id="serviceTokensStatus"></span></div>
+    </div>
+
+    <div class="settings-section" id="appearanceSection">
+        <h3>Appearance</h3>
+        <div class="settings-field">
+            <label for="light_mode" class="settings-toggle-label">
+                <input type="checkbox" id="light_mode" style="width:auto;margin-right:8px;vertical-align:middle;" />
+                Light Mode
+            </label>
+            <div class="hint">Switches the viewer from the dark theme to a light theme. Applies immediately and is remembered.</div>
+        </div>
+        <div class="settings-actions">
+            <span class="settings-status" id="appearanceStatus"></span>
+        </div>
+    </div>
+
+</div>
+<script>
+{{JS}}
+
+// Save buttons stay greyed (disabled) while nothing in the form differs from
+// the saved state. A typed write-only token can't be compared, so typing one
+// always counts as a change until it is saved and cleared.
+let savedProjects = null;   // [{repo, plugin, branch}] as saved
+let projectRows = [];       // [{repo, plugin, branch}] in table order; branch "" = the code host's default
+let projectChecks = {};     // repo -> check from the last load/save
+let buildPlugins = [];      // build plugins from the shared registry (live /health)
+const branchCache = {};     // "plugin|repo" -> {default, branches} | {error} | {loading}
+let savedTestVarsMap = null;
+
+function updateSaveButtons() {
+    updateBuildSaveBtn();
+    updateTestVarsSaveBtn();
+}
+
+function setStatus(id, msg, type, keep) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = "settings-status " + (type || "");
+    if (!keep) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 6000);
+}
+
+// The Build & Test section shows Projects only; build plugins themselves
+// are registered on the Plugins page (Settings → Plugins, Build Plugin).
+// Build & Test platform labels (iOS is spelled out everywhere).
+function platformName(p) { return p === "ios" ? "iOS" : p; }
+function pluginLabel(p) {
+    return (p && p.forge && (p.forge.label || p.forge.kind)) || "";
+}
+
+async function postJSON(url, body) {
+    const res = await fetch(url, { method: "POST", headers: {"Content-Type": "application/json"},
+                                   body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { const err = new Error(data.error || ("HTTP " + res.status)); err.data = data; throw err; }
+    return data;
+}
+
+// Projects
+function buildDirty() {
+    if (!savedProjects) return false;
+    if (projectRows.length !== savedProjects.length) return true;
+    return projectRows.some((row, i) => row.repo !== savedProjects[i].repo ||
+        row.plugin !== savedProjects[i].plugin || row.branch !== (savedProjects[i].branch || ""));
+}
+
+function updateBuildSaveBtn() {
+    const btn = document.getElementById("buildSaveBtn");
+    if (btn) btn.disabled = !buildDirty();
+}
+
+function templateLink(plugin, platform) {
+    return '<a href="/api/config/build/template?plugin=' + encodeURIComponent(plugin) +
+        '&platform=' + encodeURIComponent(platform) + '">example script</a>';
+}
+
+function checkCell(row) {
+    // A repo the plugin can't read (or whose branch is gone) is ✗ with the
+    // reason. A branch missing a platform's build script is ✗ too, naming that
+    // script's path and linking the plugin's example for it; a platform the
+    // plugin's own host can't build is greyed out in Build & Test, not here.
+    const c = projectChecks[row.repo];
+    if (!c || c.plugin !== row.plugin) return '<span class="project-check">Checked on save</span>';
+    const missing = Object.keys(c.recipes || {}).filter(p => c.recipes[p] === false);
+    const ok = c.ok && !missing.length;
+    let text = ok ? "✓ Ready" : "✗ ";
+    if (!c.ok) text += escapeHtml(c.reason || "");
+    else if (missing.length) text += "no build script for " + missing.map(platformName).join(" / ") +
+        " on " + escapeHtml(c.branch || c.default_branch || "the branch") + " (" +
+        missing.map(p => templateLink(row.plugin, p) + " at <code>" +
+            escapeHtml((c.recipe_paths || {})[p] || ".monkeytester/build-" + p + ".sh") + "</code>").join(", ") + ")";
+    return '<span class="project-check ' + (ok ? "ok" : "bad") + '">' + text + "</span>";
+}
+
+function branchOptions(row) {
+    const info = branchCache[row.plugin + "|" + row.repo];
+    const dflt = info && info.default ? info.default : "";
+    let html = '<option value="">Default branch' + (dflt ? " (" + escapeHtml(dflt) + ")" : "") + "</option>";
+    const names = (info && info.branches) ? info.branches.slice() : [];
+    if (row.branch && !names.includes(row.branch)) names.unshift(row.branch);
+    for (const b of names) {
+        html += '<option value="' + escapeHtml(b) + '"' + (b === row.branch ? " selected" : "") + ">" + escapeHtml(b) + "</option>";
+    }
+    return html;
+}
+
+function pluginOptions(row) {
+    const names = buildPlugins.map(p => p.name);
+    if (row.plugin && !names.includes(row.plugin)) names.unshift(row.plugin);
+    return names.map(n => '<option value="' + escapeHtml(n) + '"' + (n === row.plugin ? " selected" : "") + ">" + escapeHtml(n) + "</option>").join("");
+}
+
+function updatePluginOptions() {
+    const sel = document.getElementById("build_new_plugin");
+    if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = buildPlugins.map(p => '<option value="' + escapeHtml(p.name) + '">' + escapeHtml(p.name) +
+        (pluginLabel(p) ? " (" + escapeHtml(pluginLabel(p)) + ")" : "") + "</option>").join("") ||
+        '<option value="">Register a build plugin on the Plugins page first</option>';
+    if (buildPlugins.some(p => p.name === keep)) sel.value = keep;
+}
+
+function renderProjectRows() {
+    const body = document.getElementById("buildProjectRows");
+    if (!projectRows.length) {
+        body.innerHTML = '<tr class="project-empty"><td colspan="5">No repos yet. Add one below.</td></tr>';
+    } else {
+        body.innerHTML = projectRows.map((row, i) => {
+            const info = branchCache[row.plugin + "|" + row.repo];
+            const title = info && info.error ? ' title="' + escapeHtml(info.error) + '"' : "";
+            const disabled = !info || info.loading || info.error ? " disabled" : "";
+            return '<tr data-repo="' + escapeHtml(row.repo) + '">' +
+                '<td class="project-repo" title="' + escapeHtml(row.repo) + '">' + escapeHtml(row.repo).replace("/", "/<wbr>") + "</td>" +
+                '<td><select class="project-plugin" data-index="' + i + '" aria-label="Build plugin for ' + escapeHtml(row.repo) + '">' +
+                    pluginOptions(row) + "</select></td>" +
+                '<td><select class="project-branch" data-index="' + i + '" aria-label="Branch for ' + escapeHtml(row.repo) + '"' +
+                    title + disabled + ">" + branchOptions(row) + "</select></td>" +
+                "<td>" + checkCell(row) + "</td>" +
+                '<td><button class="project-remove" type="button" data-index="' + i + '">Remove</button></td></tr>';
+        }).join("");
+    }
+    updateBuildSaveBtn();
+}
+
+async function loadBranchesFor(row) {
+    const key = row.plugin + "|" + row.repo;
+    if (!row.plugin || (branchCache[key] && !branchCache[key].error)) return;
+    branchCache[key] = { loading: true };
+    renderProjectRows();
+    try {
+        const res = await fetch("/api/config/build/branches?repo=" + encodeURIComponent(row.repo) +
+                                "&plugin=" + encodeURIComponent(row.plugin));
+        const data = await res.json().catch(() => ({}));
+        branchCache[key] = res.ok ? { default: data.default || "", branches: data.branches || [] }
+                                  : { error: data.error || ("HTTP " + res.status) };
+    } catch (e) {
+        branchCache[key] = { error: e.message };
+    }
+    renderProjectRows();
+}
+
+function addProjectRow() {
+    const input = document.getElementById("build_new_repo");
+    const plugin = document.getElementById("build_new_plugin").value;
+    const repo = input.value.trim().replace(/^\/+|\/+$/g, "");
+    if (!repo) return;
+    if (!/^(?!\.+\/)[A-Za-z0-9_.-]+\/(?!\.+$)[A-Za-z0-9_.-]+$/.test(repo)) {
+        setStatus("buildStatus", repo + " is not owner/repo", "error");
+        return;
+    }
+    if (!plugin) { setStatus("buildStatus", "Add a build plugin first", "error"); return; }
+    if (projectRows.some(r => r.repo === repo)) {
+        setStatus("buildStatus", repo + " is already a project", "error");
+        return;
+    }
+    const row = { repo, plugin, branch: "" };
+    projectRows.push(row);
+    input.value = "";
+    renderProjectRows();
+    loadBranchesFor(row);
+}
+
+document.addEventListener("change", (e) => {
+    const cl = e.target.classList;
+    if (!cl) return;
+    const row = projectRows[Number(e.target.dataset.index)];
+    if (!row) return;
+    if (cl.contains("project-branch")) { row.branch = e.target.value; updateBuildSaveBtn(); }
+    if (cl.contains("project-plugin")) {
+        row.plugin = e.target.value;
+        row.branch = "";
+        renderProjectRows();
+        loadBranchesFor(row);
+    }
+});
+document.addEventListener("click", (e) => {
+    const cl = e.target.classList;
+    if (!cl) return;
+    if (cl.contains("project-remove")) {
+        projectRows.splice(Number(e.target.dataset.index), 1);
+        renderProjectRows();
+    }
+});
+document.addEventListener("keydown", (e) => {
+    if (e.target && e.target.id === "build_new_repo" && e.key === "Enter") { e.preventDefault(); addProjectRow(); }
+});
+
+function setProjectChecks(checks) {
+    projectChecks = {};
+    for (const c of checks || []) projectChecks[c.repo] = c;
+    renderProjectRows();
+}
+
+// keepRows: refresh plugins and checks without discarding unsaved project edits.
+function renderSettings(data, keepRows) {
+    buildPlugins = data.plugins || [];
+    updatePluginOptions();
+    const projects = (data.projects || []).map(p => ({ repo: p.repo, plugin: p.plugin, branch: p.branch || "" }));
+    const dirty = keepRows && buildDirty();
+    savedProjects = projects.map(p => Object.assign({}, p));
+    if (!dirty) projectRows = projects.map(p => Object.assign({}, p));
+    setProjectChecks(data.checks);
+    for (const row of projectRows) loadBranchesFor(row);
+}
+
+async function loadBuildSettings(keepRows) {
+    try {
+        const res = await fetch("/api/config/build");
+        if (res.ok) renderSettings(await res.json(), keepRows);
+        else setStatus("buildStatus", "Could not load the Build & Test settings", "error");
+    } catch (e) {
+        setStatus("buildStatus", "Could not load the Build & Test settings", "error");
+    }
+}
+
+async function saveProjects() {
+    setStatus("buildStatus", "Checking with the build plugins…", "", true);
+    try {
+        const data = await postJSON("/api/config/build", { projects: projectRows });
+        renderSettings(data, false);
+        setStatus("buildStatus", "Saved", "saved");
+    } catch (e) {
+        if (e.data && e.data.checks) setProjectChecks(e.data.checks);
+        setStatus("buildStatus", "Not saved: " + e.message, "error", true);
+    }
+}
+
+// Test Variables
+function setTestVarsStatus(msg, type) {
+    const el = document.getElementById("testVarsStatus");
+    el.textContent = msg;
+    el.className = "settings-status " + type;
+    setTimeout(() => { el.textContent = ""; }, 4000);
+}
+
+let testVarsConfig = {};
+
+// Scope "" edits the shared `test_variables`; a repo edits its entry in
+// `project_variables`.
+function testVarsDirty() {
+    if (!savedTestVarsMap) return true;
+    const raw = document.getElementById("test_vars").value;
+    const vars = {};
+    for (const line of raw.split("\n")) {
+        const s = line.trim();
+        if (!s || s.startsWith("#")) continue;
+        const eq = s.indexOf("=");
+        if (eq < 1) return true; // malformed edit: keep Save enabled so it shows the error
+        vars[s.slice(0, eq).trim().toUpperCase()] = s.slice(eq + 1).trim();
+    }
+    return JSON.stringify(Object.keys(vars).sort().map(k => [k, vars[k]])) !==
+        JSON.stringify(Object.keys(savedTestVarsMap).sort().map(k => [k, savedTestVarsMap[k]]));
+}
+
+function updateTestVarsSaveBtn() {
+    const btn = document.getElementById("testVarsSaveBtn");
+    if (btn) btn.disabled = !testVarsDirty();
+}
+
+function renderTestVars(cfg) {
+    if (cfg) testVarsConfig = cfg;
+    const scope = document.getElementById("test_vars_scope").value;
+    const tv = scope ? ((testVarsConfig.project_variables || {})[scope] || {}) : (testVarsConfig.test_variables || {});
+    savedTestVarsMap = tv;
+    document.getElementById("test_vars").value =
+        Object.keys(tv).sort().map(k => k + "=" + tv[k]).join("\n");
+    updateTestVarsSaveBtn();
+}
+
+async function loadTestVars() {
+    try {
+        const [cfgRes, projRes] = await Promise.all([fetch("/api/config"), fetch("/api/projects")]);
+        const cfg = cfgRes.ok ? await cfgRes.json() : {};
+        const projects = projRes.ok ? ((await projRes.json()).projects || []) : [];
+        // Also list repos that only have saved variables (e.g. a removed project).
+        for (const repo of Object.keys(cfg.project_variables || {})) {
+            if (!projects.includes(repo)) projects.push(repo);
+        }
+        const sel = document.getElementById("test_vars_scope");
+        sel.innerHTML = '<option value="">All projects (shared)</option>' +
+            projects.map(p => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>').join("");
+        renderTestVars(cfg);
+    } catch (e) { /* page still usable; the textarea keeps its placeholder */ }
+}
+
+async function saveTestVars() {
+    const scope = document.getElementById("test_vars_scope").value;
+    const raw = document.getElementById("test_vars").value;
+    const vars = {};
+    for (const line of raw.split("\n")) {
+        const s = line.trim();
+        if (!s || s.startsWith("#")) continue;
+        const eq = s.indexOf("=");
+        if (eq < 1) {
+            setTestVarsStatus("Line “" + s + "” is not KEY=value", "error");
+            return;
+        }
+        vars[s.slice(0, eq).trim().toUpperCase()] = s.slice(eq + 1).trim();
+    }
+    try {
+        const res = await fetch("/api/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(scope ? { project_variables: { [scope]: vars } } : { test_variables: vars }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            setTestVarsStatus(data.error || "Save failed", "error");
+            return;
+        }
+        renderTestVars(data);
+        setTestVarsStatus("Saved", "saved");
+    } catch (e) {
+        setTestVarsStatus("Save failed: " + e.message, "error");
+    }
+}
+
+loadBuildSettings(false);
+loadTestVars();
+
+// Appearance: the Light Mode toggle (moved here from the retired Appearance page).
+function syncLightModeCheckbox() {
+    const cb = document.getElementById("light_mode");
+    if (cb) cb.checked = document.documentElement.getAttribute("data-theme") === "light";
+}
+document.getElementById("light_mode").addEventListener("change", (e) => {
+    setTheme(e.target.checked ? "light" : "dark");
+    setStatus("appearanceStatus", e.target.checked ? "Light mode on" : "Dark mode on", "saved");
+});
+Promise.resolve().then(() => fetchJSON("/api/config")).then(() => {
+    syncLightModeCheckbox();
+}).catch(() => {});
+
+// ── Account: own password + logout ──
+function updatePasswordSaveBtn() {
+    const btn = document.getElementById("passwordSaveBtn");
+    btn.disabled = !(document.getElementById("current_password").value &&
+                     document.getElementById("new_password").value);
+}
+async function changePassword() {
+    try {
+        await postJSON("/api/account/password", {
+            current_password: document.getElementById("current_password").value,
+            new_password: document.getElementById("new_password").value,
+        });
+        document.getElementById("current_password").value = "";
+        document.getElementById("new_password").value = "";
+        updatePasswordSaveBtn();
+        setStatus("accountStatus", "Password changed; your other browsers were signed out", "saved");
+        fetchAuthStatus();
+    } catch (e) {
+        setStatus("accountStatus", e.message, "error");
+    }
+}
+
+// ── CI token (admin) ──
+function tokenState(info) {
+    if (!info.configured) return "Not set.";
+    const when = info.saved_at ? " (saved " + new Date(info.saved_at * 1000).toLocaleString() + ")" : "";
+    return "Set: \u2026" + escapeHtml(info.last4 || "") + when;
+}
+async function loadCiToken() {
+    const info = await fetchJSON("/api/config/ci-token");
+    document.getElementById("ciTokenState").innerHTML = tokenState(info);
+    document.getElementById("ciTokenRemoveBtn").disabled = !info.configured;
+}
+async function generateCiToken() {
+    if (!confirm("Generate a new CI token? The current one stops working at once.")) return;
+    try {
+        const data = await postJSON("/api/config/ci-token", { generate: true });
+        document.getElementById("ciTokenNew").hidden = false;
+        const field = document.getElementById("ci_token_value");
+        field.value = data.token;
+        field.select();
+        setStatus("ciTokenStatus", "New token made — copy it now", "saved", true);
+        loadCiToken();
+    } catch (e) {
+        setStatus("ciTokenStatus", e.message, "error");
+    }
+}
+async function removeCiToken() {
+    if (!confirm("Remove the CI token? CI uploads are refused until a new one is generated.")) return;
+    try {
+        await postJSON("/api/config/ci-token", { remove: true });
+        document.getElementById("ciTokenNew").hidden = true;
+        document.getElementById("ci_token_value").value = "";
+        loadCiToken();
+    } catch (e) {
+        setStatus("ciTokenStatus", e.message, "error");
+    }
+}
+
+// ── Service tokens (admin) ──
+function serviceRow(service, label, info) {
+    const id = "svc_" + service.replace(/[^A-Za-z0-9]/g, "_");
+    return '<div class="settings-field" data-service="' + escapeHtml(service) + '">' +
+        '<label for="' + id + '">' + escapeHtml(label) + '</label>' +
+        '<div class="hint">' + tokenState(info) + '</div>' +
+        '<input type="password" id="' + id + '" autocomplete="off" placeholder="' +
+            (info.configured ? "Replace token" : "Token") + '" />' +
+        '<div class="settings-actions" style="margin:6px 0 0">' +
+            '<button class="btn-secondary svc-save" type="button">Save</button>' +
+            (info.configured ? '<button class="btn-secondary svc-remove" type="button">Remove</button>' : '') +
+        '</div></div>';
+}
+async function loadServiceTokens() {
+    const data = await fetchJSON("/api/config/service-tokens");
+    let html = serviceRow("controller", "Mobile-Controller" + (data.controller.url ? " (" + data.controller.url + ")" : " (CONTROLLER_URL not set)"), data.controller);
+    for (const p of data.plugins) {
+        html += serviceRow("plugin:" + p.name, (p.kind === "build" ? "Build plugin " : "Plugin ") + p.name + " (" + (p.url || "") + ")", p);
+    }
+    document.getElementById("serviceTokenRows").innerHTML = html;
+}
+document.getElementById("serviceTokenRows").addEventListener("click", async (event) => {
+    const row = event.target.closest("[data-service]");
+    if (!row) return;
+    const service = row.dataset.service;
+    try {
+        if (event.target.classList.contains("svc-save")) {
+            const token = row.querySelector("input").value.trim();
+            if (!token) return;
+            await postJSON("/api/config/service-tokens", { set: { service: service, token: token } });
+            setStatus("serviceTokensStatus", "Saved " + service, "saved");
+        } else if (event.target.classList.contains("svc-remove")) {
+            await postJSON("/api/config/service-tokens", { remove: service });
+            setStatus("serviceTokensStatus", "Removed " + service, "saved");
+        } else {
+            return;
+        }
+        loadServiceTokens();
+    } catch (e) {
+        setStatus("serviceTokensStatus", e.message, "error");
+    }
+});
+
+fetchAuthStatus().then(cfg => {
+    document.getElementById("accountName").textContent = cfg.username || "";
+    document.getElementById("accountRole").textContent = cfg.role || "";
+    const admin = cfg.role === "admin";
+    document.getElementById("ciTokenSection").hidden = !admin;
+    document.getElementById("serviceTokensSection").hidden = !admin;
+    if (admin) {
+        loadCiToken().catch(() => {});
+        loadServiceTokens().catch(() => {});
+    }
+});
+document.getElementById("current_password").addEventListener("input", updatePasswordSaveBtn);
+document.getElementById("new_password").addEventListener("input", updatePasswordSaveBtn);
+
+document.addEventListener("input", updateSaveButtons);
+document.addEventListener("change", updateSaveButtons);
+</script>
+</body>
+</html>

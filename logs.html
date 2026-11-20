@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VisualTest Viewer - Test Logs</title>
+<title>MonkeyTester - Console Logs</title>
 <style>
 {{CSS}}
 </style>
 </head>
 <body>
 <div class="container">
-    <header>
-        <h1>VisualTest Viewer</h1>
-        <div id="breadcrumb" class="breadcrumb"></div>
+    <header class="site-header">
+        <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
     </header>
     <div id="content"></div>
 </div>
@@ -23,81 +23,84 @@ function getQueryParam(name) {
     return params.get(name);
 }
 
-function updateBreadcrumb(runName, testName) {
-    const bc = document.getElementById('breadcrumb');
-    bc.innerHTML = '<span onclick="location.href=\'index.html\'">Home</span>' +
-        ' <span class="sep">/</span> ' +
-        '<span onclick="location.href=\'test.html?run=' + encodeURIComponent(runName) + '\'">' + escapeHtml(runName) + '</span>' +
-        ' <span class="sep">/</span> ' +
-        '<span>' + escapeHtml(testName) + '</span>';
-}
-
-async function loadTest() {
+async function loadLogs() {
     const run = getQueryParam('run');
-    const testName = getQueryParam('test');
-
-    if (!run || !testName) {
-        document.getElementById('content').innerHTML = '<div class="loading">Missing run or test parameter</div>';
+    if (!run) {
+        document.getElementById('content').innerHTML = '<div class="loading">No run specified</div>';
         return;
     }
 
-    updateBreadcrumb(run, testName);
-    document.getElementById('content').innerHTML = '<div class="loading">Loading test...</div>';
+    document.getElementById('content').innerHTML = '<div class="loading">Loading console logs...</div>';
 
-    // Get test data
-    const testData = await fetchJSON('/api/test/' + encodeURIComponent(run) + '/' + encodeURIComponent(testName));
-
-    let html = '<a class="dl-btn" href="test.html?run=' + encodeURIComponent(run) + '" style="margin-bottom:16px;display:inline-flex;">← Back to Run</a><br>';
-
-    // Test name + status badge
-    const statusClass = (testData.status || '').toLowerCase();
-    html += '<div class="test-name">' + escapeHtml(testName) +
-        ' <span class="badge ' + statusClass + '">' + escapeHtml(testData.status || 'UNKNOWN').toUpperCase() + '</span></div>';
-
-    // Steps view
-    if (testData.steps && testData.steps.length) {
-        html += '<div class="steps-view">';
-        for (const s of testData.steps) {
-            const stepStatusClass = (s.status || '').toLowerCase();
-            const command = s.step ? s.step.command : '';
-            const args = s.step ? s.step.args : '';
-            const reason = s.reason || '';
-            html += '<div class="step-row">';
-            html += '<div class="step-status ' + stepStatusClass + '"></div>';
-            html += '<div class="step-content">';
-            html += '<div class="step-command">' + escapeHtml(command) + '</div>';
-            if (args) html += '<div class="step-args">' + escapeHtml(args) + '</div>';
-            if (reason) html += '<div class="step-reason">' + escapeHtml(reason) + '</div>';
-            html += '</div></div>';
+    // Get run metadata for the header info
+    let items = [];
+    try {
+        const metadata = await fetchJSON('/api/metadata/' + encodeURIComponent(run));
+        if (metadata) {
+            const meta = metadata;
+            if (meta.timestamp) items.push('Start: ' + escapeHtml(meta.timestamp));
+            if (meta.end_time) items.push('End: ' + escapeHtml(meta.end_time));
+            if (meta.script) items.push('Script: ' + escapeHtml(meta.script));
+            if (meta.apk) {
+                const apk = meta.apk;
+                let apkInfo = 'APK: ' + (apk.build_type || '');
+                if (apk.version && apk.version !== 'unspecified') apkInfo += ' v' + escapeHtml(apk.version);
+                if (apk.build_time) apkInfo += ' (' + escapeHtml(apk.build_time) + ')';
+                items.push(apkInfo);
+            }
+            if (meta.device) {
+                items.push('Device: ' + escapeHtml(meta.device.model || meta.device.serial || ''));
+            } else if (meta.emulator) {
+                items.push('Emulator: ' + escapeHtml(meta.emulator.image || ''));
+            }
+            const options = meta.options || {};
+            if (options.debug) items.push('Debug');
+            if (options.skip_backend) items.push('No backend');
         }
-        html += '</div>';
+    } catch(e) {
+        console.warn('Failed to load metadata:', e);
     }
 
-    // Download JSON button
-    if (testData.result_file) {
-        html += '<a class="dl-btn" href="/static/' + run + '/' + encodeURIComponent(testData.result_file.name) + '" download>Download JSON</a>';
-    }
+    const dlBtn = '<a class="btn-secondary" style="margin-left:auto;text-decoration:none;" href="/api/logs/' + encodeURIComponent(run) + '" download>Download .log</a>';
+    const metaHtml = '<div class="run-meta-bar">' + items.map(i => '<span class="run-meta-item">' + i + '</span>').join('') + dlBtn + '</div>';
 
-    // Screenshots
-    if (testData.screenshots && testData.screenshots.length) {
-        html += '<h2>Screenshots</h2>';
-        html += '<div class="screenshot-grid">';
-        for (const s of testData.screenshots) {
-            html += '<img src="/static/' + run + '/' + encodeURIComponent(s.name) + '" alt="' + escapeHtml(s.name) + '">';
-        }
-        html += '</div>';
+    // Load console log
+    try {
+        const text = await fetchText('/api/logs/' + encodeURIComponent(run));
+        const html = metaHtml +
+            '<div class="logs-full">' +
+            '<pre class="logs-content" id="log-output">' + escapeHtml(text) + '</pre>' +
+            '</div>';
+        document.getElementById('content').innerHTML = html;
+        setInterval(() => refreshLogs(run), 3000);
+    } catch(e) {
+        document.getElementById('content').innerHTML = '<div class="loading">Failed to load console logs</div>';
     }
-
-    // Full JSON view
-    if (testData.full_json) {
-        html += '<h2>Full JSON</h2>';
-        html += '<div class="json-view">' + escapeHtml(JSON.stringify(testData.full_json, null, 2)) + '</div>';
-    }
-
-    document.getElementById('content').innerHTML = html;
 }
 
-loadTest();
+async function refreshLogs(run) {
+    const pre = document.getElementById('log-output');
+    if (!pre) return;
+    try {
+        const text = await fetchText('/api/logs/' + encodeURIComponent(run));
+        // Only touch the DOM when the log actually changed. This preserves any
+        // in-progress selection / copy-paste and avoids needless reflow.
+        const prev = pre.textContent;
+        if (prev === text) return;
+        const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 20;
+        if (text.startsWith(prev)) {
+            // Append-only log: add just the new suffix (cheaper than a full
+            // rewrite and keeps existing layout/selection intact).
+            pre.textContent += text.slice(prev.length);
+        } else {
+            // Log was rewritten/rotated/truncated — fall back to full replace.
+            pre.textContent = text;
+        }
+        if (atBottom) pre.scrollTop = pre.scrollHeight;
+    } catch(e) {}
+}
+
+loadLogs();
 </script>
 </body>
 </html>

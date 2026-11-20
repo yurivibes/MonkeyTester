@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — MonkeyTester</title>
+<style>
+{{CSS}}
+.login-page { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; width: 100%; max-width: 360px; }
+.login-brand { text-align: center; margin-bottom: 24px; }
+.login-brand h1 { font-size: 1.4rem; font-weight: 600; }
+.login-brand p { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+.login-form { display: flex; flex-direction: column; gap: 12px; }
+.login-input { width: 100%; padding: 10px 12px; background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 0.9rem; }
+.login-input:focus { outline: none; border-color: var(--accent); }
+.login-btn { padding: 10px 16px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; margin-top: 4px; }
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.login-error { color: var(--fail); font-size: 0.8rem; text-align: center; min-height: 16px; margin-top: 8px; }
+.login-hint { color: var(--text-muted); font-size: 0.75rem; text-align: center; margin-top: 12px; }
+.theme-toggle { position: fixed; top: 16px; right: 16px; z-index: 10; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; }
+</style>
+</head>
+<body>
+<button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">Dark</button>
+<div class="login-page">
+    <div class="login-box">
+        <div class="login-brand">
+            <h1>MonkeyTester</h1>
+            <p>Sign in to continue</p>
+        </div>
+        <form class="login-form" id="loginForm">
+            <input type="text" class="login-input" id="username" placeholder="Username" autocomplete="username" required autofocus>
+            <input type="password" class="login-input" id="password" placeholder="Password" autocomplete="current-password" required>
+            <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
+        </form>
+        <div class="login-error" id="error" role="alert"></div>
+        <div class="login-hint">Accounts are created by an admin in Settings &rarr; Users.</div>
+    </div>
+</div>
+<script>
+// Where to go after signing in: a same-site path from ?next=, else the dashboard.
+function nextTarget() {
+    const next = new URLSearchParams(window.location.search).get("next") || "/";
+    return (next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")) ? next : "/";
+}
+
+// A cross-site link lands here without the SameSite=Strict cookie even when
+// this browser is signed in; the same-origin status call does carry it.
+fetch("/api/auth/status").then(r => r.json()).then(s => {
+    if (s.signed_in) window.location.replace(nextTarget());
+}).catch(() => {});
+
+const themeToggle = document.getElementById("themeToggle");
+function applyTheme(theme) {
+    if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+    themeToggle.textContent = theme === "light" ? "Light" : "Dark";
+}
+themeToggle.addEventListener("click", function() {
+    const theme = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    applyTheme(theme);
+    try { localStorage.setItem("vt-theme", theme); } catch (e) {}
+    fetch("/api/theme", { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ theme: theme }) }).catch(() => {});
+});
+fetch("/api/theme").then(r => r.json()).then(cfg => applyTheme(cfg.theme || "dark"))
+    .catch(() => applyTheme("dark"));
+
+document.getElementById("loginForm").addEventListener("submit", function(e) {
+    e.preventDefault();
+    const errorEl = document.getElementById("error");
+    const btn = document.getElementById("loginBtn");
+    errorEl.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Signing in…";
+    fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            username: document.getElementById("username").value.trim(),
+            password: document.getElementById("password").value,
+        }),
+    }).then(function(res) {
+        if (res.ok) {
+            window.location.href = nextTarget();
+            return;
+        }
+        return res.json().catch(() => ({})).then(function(data) {
+            throw new Error(data.error || "Sign-in failed");
+        });
+    }).catch(function(err) {
+        errorEl.textContent = err.message;
+        btn.disabled = false;
+        btn.textContent = "Sign In";
+    });
+});
+</script>
+</body>
+</html>

@@ -3,138 +3,127 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Live Stream - VisualTest Viewer</title>
+<title>Live Streams - MonkeyTester</title>
+<style>
 {{CSS}}
+</style>
 </head>
 <body>
 <div class="container">
-  <header>
-    <div>
-      <h1>VisualTest Viewer</h1>
-      <div class="breadcrumb">
-        <a href="/">Home</a>
-        <span class="sep">›</span>
-        <span>Live Stream</span>
-      </div>
-    </div>
-    <nav class="nav">
-      <a href="/">Runs</a>
-      <a href="/player.html">Player</a>
-      <a href="/logs.html">Logs</a>
-      <a href="/stream.html" class="active">Stream</a>
-    </nav>
+  <header class="site-header">
+    <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+    <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
   </header>
 
-  <div class="stream-layout">
-    <div class="stream-controls">
-      <label for="device-select">Capture Device</label>
-      <select id="device-select">
-        <option value="">Loading devices...</option>
-      </select>
-      <div class="device-info" id="device-info"></div>
-      <div class="stream-status" id="stream-status">
-        <span class="status-dot"></span>
-        <span>Ready</span>
+  <h2 class="page-title">Live Streams</h2>
+  <div class="stream-top-section" style="display:flex;gap:16px;margin-top:16px;align-items:flex-start;">
+    <div class="control-panel" style="width:320px;flex:0 0 320px;">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label for="device-select" style="font-weight:600;color:var(--text-muted);">Select device</label>
+        <select id="device-select" disabled style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:0.95rem;cursor:pointer;">
+          <option value="">-- choose a device --</option>
+        </select>
       </div>
     </div>
-    <div class="stream-viewport">
-      <div class="stream-player">
-        <img id="stream-video" autoplay style="width:100%;height:100%;object-fit:contain;background:#000;" crossorigin="anonymous" />
-        <div class="stream-overlay" id="stream-overlay">
-          <div class="overlay-spinner"></div>
-          <p>Select a device to start streaming</p>
-        </div>
-      </div>
-      <div class="stream-meta">
-        <span id="stream-url"></span>
-      </div>
+
+    <div class="preview-panel" style="flex:1;min-height:360px;background:#000;border-radius:8px;border:1px solid var(--border);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+      <img id="preview-img" src="" alt="live device" style="max-width:100%;max-height:80vh;display:none;" />
+      <div id="preview-placeholder" style="color:var(--text-muted);font-size:1.1rem;padding:16px;text-align:center;">Checking for devices...</div>
     </div>
   </div>
+
 </div>
-{{JS}}
 <script>
-document.addEventListener('DOMContentLoaded', async () => {
+{{JS}}
+document.addEventListener('DOMContentLoaded', () => {
   const select = document.getElementById('device-select');
-  const info = document.getElementById('device-info');
-  const status = document.getElementById('stream-status');
-  const video = document.getElementById('stream-video');
-  const overlay = document.getElementById('stream-overlay');
-  const urlDisplay = document.getElementById('stream-url');
-  let currentUrl = null;
+  const img = document.getElementById('preview-img');
+  const placeholder = document.getElementById('preview-placeholder');
+  const IOS_POLL_MS = 500;
+  let devices = [];
+  let pollToken = 0;  // bumped on every selection, which ends the previous iOS poll
 
-  // Load devices
-  async function loadDevices() {
-    try {
-      const res = await fetch('/api/capture-devices');
-      const devices = await res.json();
-      select.innerHTML = '';
-      if (!devices || devices.length === 0) {
-        select.innerHTML = '<option value="">No capture devices found</option>';
-        return;
+  function showMessage(text) {
+    img.style.display = 'none';
+    img.removeAttribute('src');
+    placeholder.textContent = text;
+    placeholder.style.display = 'block';
+  }
+
+  // With no device source configured, the raw CONTROLLER_URL error is not
+  // actionable for a user; show a setup guide instead (lines split on \n).
+  function showSetupGuide() {
+    img.style.display = 'none';
+    img.removeAttribute('src');
+    const guide = 'No devices yet — connect a device source first:\n' +
+      '\u2022 Phones and tablets: run MonkeyTester-Mobile-Controller on the machine the devices plug into, then start the viewer with CONTROLLER_URL=http://<controller-host>:<port>.\n' +
+      '\u2022 Extra devices (ESP32 boards, the vision model): configure them in Settings \u2192 Device Plugins.';
+    placeholder.innerHTML = escapeHtml(guide).replace(/\n/g, '<br>');
+    placeholder.style.display = 'block';
+  }
+
+  // iOS has no stream, so fetch one screenshot at a time.
+  async function pollFrames(id, token) {
+    while (token === pollToken) {
+      try {
+        const res = await fetch('/api/frame/' + encodeURIComponent(id) + '?t=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const url = URL.createObjectURL(await res.blob());
+        if (token !== pollToken) { URL.revokeObjectURL(url); return; }
+        const previous = img.src;
+        img.src = url;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+        if (previous.startsWith('blob:')) URL.revokeObjectURL(previous);
+      } catch (e) {
+        if (token === pollToken) showMessage('Could not read the device screen.');
       }
-      devices.forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.path;
-        opt.textContent = d.name || d.path;
-        opt.dataset.formats = d.formats || '';
-        select.appendChild(opt);
-      });
-      // Auto-select first device
-      select.value = devices[0].path;
-      showDeviceInfo(devices[0]);
-      startStream(devices[0].path);
-    } catch (e) {
-      select.innerHTML = '<option value="">Failed to load devices</option>';
-      console.error(e);
+      await new Promise(resolve => setTimeout(resolve, IOS_POLL_MS));
     }
   }
 
-  function showDeviceInfo(device) {
-    if (device.formats) {
-      info.textContent = device.formats;
-    } else {
-      info.textContent = '';
+  select.addEventListener('change', () => {
+    const token = ++pollToken;
+    const device = devices.find(d => d.id === select.value);
+    if (!device) { showMessage('No device selected'); return; }
+    if (device.platform === 'ios') {
+      showMessage('Connecting...');
+      pollFrames(device.id, token);
+      return;
     }
-  }
-
-  function setStatus(text, connected) {
-    const dot = status.querySelector('.status-dot');
-    const span = status.querySelector('span:last-child');
-    dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
-    span.textContent = text;
-  }
-
-  function startStream(devicePath) {
-    // Stop any existing stream
-    if (currentUrl) {
-      video.src = '';
-      currentUrl = null;
-    }
-
-     // Start new stream
-    const streamUrl = 'http://localhost:8088/stream';
-    video.src = streamUrl;
-    currentUrl = streamUrl;
-    urlDisplay.textContent = streamUrl;
-    overlay.style.display = 'none';
-    setStatus('Streaming', true);
-
-    video.onerror = () => {
-      setStatus('Stream error', false);
-      overlay.style.display = 'flex';
-      overlay.querySelector('p').textContent = 'Stream connection failed';
-    };
-  }
-
-  select.addEventListener('change', async () => {
-    const opt = select.selectedOptions[0];
-    const device = { path: opt.value, formats: opt.dataset.formats };
-    showDeviceInfo(device);
-    startStream(device.path);
+    placeholder.style.display = 'none';
+    img.style.display = 'block';
+    img.onerror = () => showMessage('Stream error: the device may be disconnected.');
+    img.src = '/stream/' + encodeURIComponent(device.id) + '?t=' + Date.now();
   });
 
-  // Initial load
-  await loadDevices();
+  function renderDevices(update) {
+    const selected = select.value;
+    devices = update.devices;
+    select.replaceChildren(new Option('-- choose a device --', ''));
+    for (const d of devices) {
+      select.appendChild(new Option(d.friendly_name + ' (' + d.platform + ')', d.id));
+    }
+    select.disabled = !devices.length;
+    if (devices.some(d => d.id === selected)) {
+      select.value = selected;  // left alone, so the running stream isn't restarted
+      return;
+    }
+    pollToken++;
+    if (!devices.length) {
+      if (update.error && update.error.indexOf('CONTROLLER_URL is not set') !== -1) {
+        showSetupGuide();  // app.py's _CONTROLLER_UNSET message
+      } else {
+        showMessage(update.error
+          ? 'Device list unavailable: ' + update.error
+          : 'No devices are available to capture the live video stream.');
+      }
+    } else {
+      showMessage(selected ? 'The selected device disconnected. Choose another.' : 'No device selected');
+    }
+  }
+
+  watchDevices(renderDevices);
 });
 </script>
 </body>

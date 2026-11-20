@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MonkeyTester - Build &amp; Test</title>
+<style>
+{{CSS}}
+.build-form { display: flex; flex-direction: column; gap: 18px; max-width: 640px; }
+.field-group { display: flex; flex-direction: column; gap: 6px; }
+.field-group > label, .field-label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.field-group select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; font-size: 0.9rem;
+}
+.field-hint { font-size: 0.75rem; color: var(--text-muted); }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.check-option { display: flex; align-items: center; gap: 7px; min-height: 38px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; font-size: 0.85rem; }
+.check-option:has(input:checked) { border-color: var(--accent); background: var(--accent-dim); }
+.check-option input { accent-color: var(--accent); }
+.cases-tools { display: flex; gap: 12px; font-size: 0.75rem; }
+.cases-tools button { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 0.75rem; }
+.btn-run { align-self: flex-start; background: var(--acid); border: 2px solid var(--acid); color: var(--on-acid); padding: 8px 18px; border-radius: 6px; font-size: 0.9rem; cursor: pointer; }
+.btn-run:hover:not(:disabled) { background: var(--acid); }
+.btn-run:disabled { opacity: 0.5; cursor: default; }
+.form-status { font-size: 0.85rem; min-height: 1.2em; }
+.form-status.error { color: var(--fail); }
+.form-status.ok { color: var(--pass); }
+.notice { padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); max-width: 640px; font-size: 0.9rem; }
+.builds { margin-top: 32px; }
+.builds h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; }
+.build-item { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 12px 14px; margin-bottom: 10px; }
+.build-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.build-title { font-weight: 600; font-size: 0.9rem; }
+.build-branch { font-family: monospace; color: var(--accent); font-size: 0.85rem; }
+.build-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+.build-lines { margin-top: 8px; font-size: 0.8rem; display: flex; flex-direction: column; gap: 3px; }
+.build-lines a { color: var(--accent); }
+.build-error { color: var(--fail); font-size: 0.8rem; margin-top: 6px; }
+.check-option:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+.notice + .notice { margin-top: 8px; }
+.build-actions { display: flex; gap: 8px; margin-top: 8px; }
+.build-action { background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 2px 10px; cursor: pointer; font-size: 0.8rem; }
+.build-action:hover:not(:disabled) { color: var(--text); border-color: var(--text-muted); }
+.build-action.danger:hover:not(:disabled) { color: var(--fail); border-color: var(--fail); }
+.build-action:disabled { opacity: 0.5; cursor: default; }
+.build-log { margin-top: 8px; max-height: 360px; overflow: auto; background: var(--card); border: 1px solid var(--border); padding: 8px 10px; font-family: var(--mono, monospace); font-size: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.build-log-state { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+.badge.state-queued, .badge.state-dispatching { background: color-mix(in srgb, var(--skip) 15%, transparent); color: var(--text-muted); border: 1px solid var(--border); }
+.badge.state-building, .badge.state-testing { background: color-mix(in srgb, var(--running) 15%, transparent); color: var(--running); border: 1px solid color-mix(in srgb, var(--running) 30%, transparent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--running) 50%, transparent); animation: build-pulse 1.6s infinite; }
+.badge.state-passed { background: var(--pass-bg); color: var(--pass); border: 1px solid color-mix(in srgb, var(--pass) 30%, transparent); }
+.badge.state-failed, .badge.state-build_failed, .badge.state-dispatch_failed, .badge.state-cancelled { background: var(--fail-bg); color: var(--fail); border: 1px solid color-mix(in srgb, var(--fail) 30%, transparent); }
+@keyframes build-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--running) 50%, transparent); } 70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--running) 0%, transparent); } 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--running) 0%, transparent); } }
+</style>
+</head>
+<body>
+<div class="container">
+    <header class="site-header">
+        <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
+    </header>
+    <h2 class="page-title">Build &amp; Test</h2>
+
+    <div id="not-configured" class="notice" hidden>
+        No project yet. Add a build plugin and a project in <a href="/config#buildSection">Settings → Configuration → Build &amp; Test</a>.
+    </div>
+
+    <form id="build-form" class="build-form" hidden>
+        <div class="field-hint">The project's build plugin fetches the chosen branch from the code host and runs the repo's build script for each platform on its own host (e.g. the Mac); the apps are then installed on the test devices and the chosen cases run here.</div>
+        <div class="field-group">
+            <label for="repo-input">Project</label>
+            <select id="repo-input" required></select>
+            <div class="field-hint">Projects are the repos in <a href="/config#buildSection">Settings → Configuration → Build &amp; Test</a>. The run is filed under the project on the dashboard.</div>
+        </div>
+        <div class="field-group">
+            <label for="branch-input">Branch</label>
+            <select id="branch-input" required disabled><option value="">Loading branches…</option></select>
+        </div>
+        <div class="field-group">
+            <span class="field-label">Platforms</span>
+            <div class="check-grid" id="platforms">
+                <label class="check-option"><input type="checkbox" name="platform" value="android" checked> Android</label>
+                <label class="check-option"><input type="checkbox" name="platform" value="ios" checked> iOS</label>
+            </div>
+            <div class="field-hint" id="platform-hint" hidden></div>
+        </div>
+        <div class="field-group">
+            <span class="field-label">Test cases</span>
+            <div class="cases-tools"><button type="button" onclick="setAllCases(true)">Select all</button><button type="button" onclick="setAllCases(false)">Select none</button></div>
+            <div class="check-grid" id="cases"><span class="field-hint">Pick a branch first.</span></div>
+            <div class="field-hint">Read from <code>visual-tests/</code> on the chosen branch.</div>
+        </div>
+        <div id="recipes-missing" hidden></div>
+        <button type="submit" class="btn-run" id="start-btn">Build &amp; Test</button>
+        <div id="form-status" class="form-status" role="status"></div>
+    </form>
+
+    <div class="builds" id="builds-section" hidden>
+        <h3>Recent builds</h3>
+        <div id="builds"></div>
+    </div>
+</div>
+<script>
+{{JS}}
+const STATE_LABELS = {
+    dispatching: 'Starting', queued: 'Queued', building: 'Building', testing: 'Testing',
+    passed: 'Passed', failed: 'Failed', build_failed: 'Build failed',
+    dispatch_failed: 'Not started', cancelled: 'Cancelled',
+};
+const FINAL = new Set(['passed', 'failed', 'build_failed', 'dispatch_failed', 'cancelled']);
+let pollTimer = null;
+
+function setFormStatus(msg, type) {
+    const el = document.getElementById('form-status');
+    el.textContent = msg || '';
+    el.className = 'form-status ' + (type || '');
+}
+
+async function getJSON(url) {
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+}
+
+async function loadRepos() {
+    const data = await getJSON('/api/builds/repos');
+    if (!data.configured) {
+        document.getElementById('not-configured').hidden = false;
+        return false;
+    }
+    const sel = document.getElementById('repo-input');
+    sel.innerHTML = data.repos.map(r => '<option value="' + escapeHtml(r) + '">' + escapeHtml(r) + '</option>').join('');
+    // The dashboard links here with ?repo=<owner/repo> for its selected project.
+    const wanted = new URLSearchParams(location.search).get('repo');
+    if (wanted && data.repos.includes(wanted)) sel.value = wanted;
+    document.getElementById('build-form').hidden = false;
+    await loadBranches();
+    return true;
+}
+
+async function loadBranches() {
+    const repo = document.getElementById('repo-input').value;
+    const sel = document.getElementById('branch-input');
+    sel.disabled = true;
+    sel.innerHTML = '<option value="">Loading branches…</option>';
+    try {
+        const data = await getJSON('/api/builds/branches?repo=' + encodeURIComponent(repo));
+        // The project's branch (Settings, else the forge's default) is
+        // listed first and preselected.
+        const preferred = data.preferred || data.default;
+        sel.innerHTML = data.branches.map(b => '<option value="' + escapeHtml(b) + '"' +
+            (b === preferred ? ' selected' : '') + '>' + escapeHtml(b) +
+            (b === preferred ? ' (project)' : (b === data.default ? ' (default)' : '')) + '</option>').join('');
+        sel.disabled = false;
+        await loadCases();
+    } catch (e) {
+        sel.innerHTML = '<option value="">Could not load branches</option>';
+        setFormStatus(e.message, 'error');
+    }
+}
+
+const PLATFORM_NAMES = { android: 'Android', ios: 'iOS' };
+
+async function loadCases() {
+    const repo = document.getElementById('repo-input').value;
+    const ref = document.getElementById('branch-input').value;
+    const box = document.getElementById('cases');
+    setPlatforms(null);
+    if (!ref) { box.innerHTML = '<span class="field-hint">Pick a branch first.</span>'; return; }
+    box.innerHTML = '<span class="field-hint">Loading cases…</span>';
+    try {
+        const data = await getJSON('/api/builds/cases?repo=' + encodeURIComponent(repo) + '&ref=' + encodeURIComponent(ref));
+        setPlatforms(data);
+        box.innerHTML = data.cases.length
+            ? data.cases.map(c => '<label class="check-option"><input type="checkbox" name="case" value="' +
+                escapeHtml(c) + '" checked> ' + escapeHtml(c) + '</label>').join('')
+            : '<span class="field-hint">This branch has no visual-tests/&lt;case&gt;/INSTRUCTION.txt.</span>';
+    } catch (e) {
+        box.innerHTML = '<span class="field-hint" style="color:var(--fail)">' + escapeHtml(e.message) + '</span>';
+    }
+}
+
+// Platforms the project's build plugin can't build on its host (e.g. iOS on
+// a Linux host) and platforms whose build script is missing on the branch
+// are disabled, with the reason; a missing script names its path and links
+// the plugin's example script. data null = no branch info yet (all enabled).
+let buildablePlatforms = ['android', 'ios'];
+function setPlatforms(data) {
+    const hostPlatforms = data && data.platforms && data.platforms.length ? data.platforms : ['android', 'ios'];
+    const recipes = (data && data.recipes) || {};
+    const paths = (data && data.recipe_paths) || {};
+    const hints = [], missing = [];
+    buildablePlatforms = [];
+    for (const cb of document.querySelectorAll('input[name=platform]')) {
+        const p = cb.value;
+        const name = PLATFORM_NAMES[p] || p;
+        let reason = '';
+        if (!hostPlatforms.includes(p)) {
+            reason = 'host';
+            hints.push(escapeHtml(data.plugin || 'The build plugin') + ' can\'t build ' + name +
+                ' on its host (it builds ' + hostPlatforms.map(x => PLATFORM_NAMES[x] || x).join(', ') + ').');
+        } else if (recipes[p] === false) {
+            reason = 'script';
+            const path = paths[p] || ('.monkeytester/build-' + p + '.sh');
+            missing.push('<div class="notice">This branch has no <code>' + escapeHtml(path) + '</code>, so ' + name +
+                ' can\'t be built. Commit the <a href="/api/config/build/template?plugin=' +
+                encodeURIComponent(data.plugin || '') + '&platform=' + encodeURIComponent(p) + '">example ' + name +
+                ' build script</a> at that path (adjust it for your app), then pick the branch again.</div>');
+        }
+        const wasDisabled = cb.disabled;
+        cb.disabled = !!reason;
+        if (reason) cb.checked = false;
+        else { if (wasDisabled) cb.checked = true; buildablePlatforms.push(p); }
+    }
+    const hint = document.getElementById('platform-hint');
+    hint.innerHTML = hints.join(' ');
+    hint.hidden = !hints.length;
+    const box = document.getElementById('recipes-missing');
+    box.innerHTML = missing.join('');
+    box.hidden = !missing.length;
+    document.getElementById('start-btn').disabled = !buildablePlatforms.length;
+}
+
+function setAllCases(on) {
+    document.querySelectorAll('#cases input[name=case]').forEach(cb => { cb.checked = on; });
+}
+
+function checked(name) {
+    return Array.from(document.querySelectorAll('input[name=' + name + ']:checked')).map(cb => cb.value);
+}
+
+document.getElementById('repo-input').addEventListener('change', loadBranches);
+document.getElementById('branch-input').addEventListener('change', loadCases);
+
+document.getElementById('build-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+        repo: document.getElementById('repo-input').value,
+        branch: document.getElementById('branch-input').value,
+        platforms: checked('platform'),
+        cases: checked('case'),
+    };
+    if (!body.platforms.length) { setFormStatus('Pick at least one platform', 'error'); return; }
+    if (!body.cases.length) { setFormStatus('Pick at least one test case', 'error'); return; }
+    const btn = document.getElementById('start-btn');
+    btn.disabled = true;
+    setFormStatus('Starting the build of ' + body.branch + '…');
+    try {
+        const res = await fetch('/api/builds', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        if (data.state === 'dispatch_failed') setFormStatus(data.error, 'error');
+        else setFormStatus('Build started.', 'ok');
+        await loadBuilds();
+    } catch (err) {
+        setFormStatus(err.message, 'error');
+    } finally {
+        btn.disabled = !buildablePlatforms.length;
+    }
+});
+
+function fmtTime(ts) {
+    const d = new Date(ts * 1000);
+    return d.toLocaleString();
+}
+
+const CANCELLABLE = new Set(['queued', 'building']);
+// Open build logs: id -> {text, offset, complete, timer, decoder, error}. The
+// <pre> is re-created on every list refresh, so its text lives here.
+const logs = {};
+
+function jobText(job) {
+    if (!job) return 'waiting';
+    return job.conclusion ? job.conclusion : (job.status || '').replace('_', ' ');
+}
+
+function renderBuild(b) {
+    const state = b.state || 'queued';
+    const lines = [];
+    // Platforms built by the same job share one line: "Android + iOS: … · runs: …".
+    const groups = [];
+    for (const p of b.platforms) {
+        const job = (b.jobs || {})[p];
+        const key = job ? (job.url || job.name || p) : p;
+        const g = groups.find(x => x.key === key);
+        if (g) g.platforms.push(p); else groups.push({key, job, platforms: [p]});
+    }
+    for (const g of groups) {
+        const job = g.job;
+        const label = g.platforms.map(p => PLATFORM_NAMES[p] || p).join(' + ');
+        let text = escapeHtml(jobText(job));
+        if (job && job.url) text = '<a href="' + escapeHtml(job.url) + '" target="_blank" rel="noopener">build ' + text + '</a>';
+        else if (job) text = 'build ' + text;
+        const runs = (b.runs || []).filter(r => (r.platforms || []).some(p => g.platforms.includes(p)));
+        const runLinks = runs.map(r => '<a href="/test.html?run=' + encodeURIComponent(r.run_id) + '">' +
+            escapeHtml(r.case || r.run_id) + '</a>' + (r.status ? ' (' + escapeHtml(r.status) + ')' : '')).join(', ');
+        lines.push('<div><strong>' + label + ':</strong> ' + text + (runLinks ? ' · runs: ' + runLinks : '') + '</div>');
+    }
+    const upload = (b.jobs || {}).upload;
+    if (upload) lines.push('<div><strong>Upload:</strong> ' + escapeHtml(jobText(upload)) + '</div>');
+    if (b.ci_url) {
+        lines.push('<div><a href="' + escapeHtml(b.ci_url) + '" target="_blank" rel="noopener">' +
+            escapeHtml((b.forge_label || 'Build') + ' run') + '</a></div>');
+    }
+    const caps = b.capabilities || [];
+    const actions = [];
+    if (b.build_ref && caps.includes('logs')) {
+        actions.push('<button type="button" class="build-action" data-act="log" data-build="' + escapeHtml(b.id) + '">' +
+            (logs[b.id] ? 'Hide log' : 'Log') + '</button>');
+    }
+    if (b.build_ref && caps.includes('cancel') && CANCELLABLE.has(state)) {
+        actions.push('<button type="button" class="build-action danger" data-act="cancel" data-build="' + escapeHtml(b.id) + '">Cancel</button>');
+    }
+    const log = logs[b.id];
+    return '<div class="build-item" data-build="' + escapeHtml(b.id) + '">' +
+        '<div class="build-head"><span class="build-title">' + escapeHtml(b.repo) + '</span>' +
+        '<span class="build-branch">' + escapeHtml(b.branch) + '</span>' +
+        '<span class="badge state-' + escapeHtml(state) + '">' + escapeHtml(STATE_LABELS[state] || state) + '</span></div>' +
+        '<div class="build-meta">' + escapeHtml(fmtTime(b.created)) + (b.user ? ' · ' + escapeHtml(b.user) : '') +
+        ' · cases: ' + escapeHtml((b.cases || []).join(', ')) + '</div>' +
+        '<div class="build-lines">' + lines.join('') + '</div>' +
+        (b.error ? '<div class="build-error">' + escapeHtml(b.error) + '</div>' : '') +
+        (actions.length ? '<div class="build-actions">' + actions.join('') + '</div>' : '') +
+        (log ? '<pre class="build-log" id="log-' + escapeHtml(b.id) + '">' + escapeHtml(log.text) + '</pre>' +
+               '<div class="build-log-state" id="log-state-' + escapeHtml(b.id) + '">' + escapeHtml(logStateText(log)) + '</div>' : '') +
+        '</div>';
+}
+
+function logStateText(log) {
+    if (log.error) return 'Could not read the log: ' + log.error;
+    if (log.complete) return 'Build finished · ' + log.offset + ' bytes';
+    return 'Following the log while the build runs…';
+}
+
+function showLog(id) {
+    const log = logs[id];
+    const pre = document.getElementById('log-' + id);
+    if (!log || !pre) return;
+    const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+    pre.textContent = log.text;
+    if (atBottom) pre.scrollTop = pre.scrollHeight;
+    const st = document.getElementById('log-state-' + id);
+    if (st) st.textContent = logStateText(log);
+}
+
+// Tail GET /api/builds/<id>/log: ask from the bytes already read until the
+// viewer says X-Log-Complete: 1.
+async function tailLog(id) {
+    const log = logs[id];
+    if (!log) return;
+    clearTimeout(log.timer);
+    let delay = 2000;
+    try {
+        const res = await fetch('/api/builds/' + encodeURIComponent(id) + '/log?offset=' + log.offset, { cache: 'no-store' });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        const buf = await res.arrayBuffer();
+        if (logs[id] !== log) return;
+        log.error = '';
+        log.offset += buf.byteLength;
+        log.text += log.decoder.decode(buf, { stream: true });
+        const size = Number(res.headers.get('X-Log-Size') || 0);
+        log.complete = res.headers.get('X-Log-Complete') === '1' && log.offset >= size;
+        if (log.offset < size) delay = 0;  // more is waiting: read on
+    } catch (e) {
+        if (logs[id] !== log) return;
+        log.error = e.message;
+        delay = 5000;
+    }
+    showLog(id);
+    if (!log.complete && logs[id] === log) log.timer = setTimeout(() => tailLog(id), delay);
+}
+
+function toggleLog(id) {
+    if (logs[id]) {
+        clearTimeout(logs[id].timer);
+        delete logs[id];
+    } else {
+        logs[id] = { text: '', offset: 0, complete: false, timer: null, decoder: new TextDecoder(), error: '' };
+        tailLog(id);
+    }
+    loadBuilds();
+}
+
+async function cancelBuild(id, btn) {
+    if (!confirm('Cancel this build? A running build script is stopped and nothing is uploaded.')) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/builds/' + encodeURIComponent(id) + '/cancel', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        setFormStatus('Build cancelled.', 'ok');
+    } catch (e) {
+        setFormStatus('Cancel failed: ' + e.message, 'error');
+    }
+    loadBuilds();
+}
+
+document.getElementById('builds').addEventListener('click', (e) => {
+    const btn = e.target.closest('button.build-action');
+    if (!btn) return;
+    if (btn.dataset.act === 'log') toggleLog(btn.dataset.build);
+    else if (btn.dataset.act === 'cancel') cancelBuild(btn.dataset.build, btn);
+});
+
+async function loadBuilds() {
+    clearTimeout(pollTimer);
+    try {
+        const data = await getJSON('/api/builds');
+        const builds = data.builds || [];
+        // Keep each open log's scroll position across the re-render.
+        const scroll = {};
+        for (const id of Object.keys(logs)) {
+            const pre = document.getElementById('log-' + id);
+            if (pre) scroll[id] = { top: pre.scrollTop, bottom: pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40 };
+        }
+        document.getElementById('builds-section').hidden = !builds.length;
+        document.getElementById('builds').innerHTML = builds.map(renderBuild).join('');
+        for (const id of Object.keys(logs)) {
+            const pre = document.getElementById('log-' + id);
+            if (!pre) continue;
+            const s = scroll[id];
+            pre.scrollTop = !s || s.bottom ? pre.scrollHeight : s.top;
+        }
+        const active = builds.some(b => !FINAL.has(b.state));
+        pollTimer = setTimeout(loadBuilds, active ? 5000 : 30000);
+    } catch (e) {
+        pollTimer = setTimeout(loadBuilds, 15000);
+    }
+}
+
+loadRepos().catch(e => setFormStatus(e.message, 'error'));
+loadBuilds();
+</script>
+</body>
+</html>
