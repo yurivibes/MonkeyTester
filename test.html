@@ -3,16 +3,301 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VisualTest Viewer - Run Detail</title>
+<title>MonkeyTester - Run Detail</title>
 <style>
 {{CSS}}
+
+/* Pending-specific styles */
+.badge.pending { background: var(--warn); color: var(--on-status); border: 1px solid var(--warn); }
+.badge.running { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.live-progress { background: var(--surface); border: 2px solid var(--border); border-left: 4px solid var(--acid); padding: 12px 16px; margin-bottom: 12px; }
+.live-progress-title { color: var(--accent); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.live-progress-message { margin-top: 4px; font-weight: 600; }
+.live-progress-detail { margin-top: 4px; color: var(--text-muted); font-size: 0.8rem; }
+.snapshot-mismatches { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.snapshot-mismatch-line { display: flex; align-items: baseline; gap: 8px; font-size: 0.85rem; }
+.snapshot-mismatch-pct { color: var(--fail); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4.5em; }
+.step-row.pending-step .step-status { background: var(--text-muted); }
+.step-row.pending-step .step-command { color: var(--text-muted); }
+.step-row.running-step .step-status { background: var(--accent); animation: pulse 1.5s infinite; }
+.step-row.running-step .step-command { color: var(--accent); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.pending-info .pending-badge { background: var(--card); padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; border: 1px solid var(--border); }
+
+/* Live stream inline — shown inside a running test's body */
+.live-stream-inline {
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    position: relative;
+}
+.live-stream-inline img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.live-stream-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.7);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+.live-stream-overlay .spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+.live-stream-label {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.65);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+/* Press overlay — shows where the running test is tapping/swiping on the live stream */
+.press-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+.press-tap {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 3px solid var(--fail);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: press-ring 1.4s ease-out forwards;
+}
+.press-tap::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    background: var(--fail);
+    border-radius: 50%;
+}
+.press-swipe {
+    position: absolute;
+    height: 4px;
+    background: var(--fail);
+    border-radius: 2px;
+    transform-origin: 0 50%;
+    animation: press-fade 1.6s ease-out forwards;
+}
+.press-swipe::before,
+.press-swipe::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--fail);
+    border-radius: 50%;
+    top: -4px;
+}
+.press-swipe::before { left: -6px; }
+.press-swipe::after { right: -6px; }
+@keyframes press-ring {
+    0%   { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+    60%  { opacity: 1; transform: translate(-50%, -50%) scale(1.4); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); }
+}
+@keyframes press-fade {
+    0%   { opacity: 1; }
+    70%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Device-summary variant: collapsible per-device results table.
+   Collapsed shows only the aggregate summary line; expanded shows the
+   device rows with success/failure/total columns. */
+.device-summary-details {
+    margin: 12px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+}
+.device-summary-details > summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 10px 14px;
+}
+.device-summary-details[open] > summary { padding-bottom: 4px; }
+.device-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
+.device-summary-table th {
+    text-align: left;
+    font-weight: 600;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+}
+.device-summary-table td {
+    text-align: left;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+}
+.device-summary-details .pass { color: var(--pass); }
+.device-summary-details .fail { color: var(--fail); }
+.device-summary-table .total { color: var(--text-muted); }
+
+/* Case dashboard: when a run has 2+ test suites each .case-group shows a
+   clickable summary row; selecting it expands that suite's test rows in
+   place (one expanded at a time). Single-suite runs stay flat. */
+.case-group { margin: 10px 0; }
+.case-row-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.case-name { font-weight: 600; }
+.case-counts { color: var(--text-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The bar repeats the counts text beside it, so the row shows only the bar. */
+.case-ratio { display: flex; min-width: 110px; }
+.case-ratio-bar { display: flex; width: 110px; height: 6px; border-radius: 3px; overflow: hidden; background: var(--border); }
+.case-ratio-pass { background: var(--pass); }
+.case-ratio-fail { background: var(--fail); }
+.case-caret { margin-left: auto; color: var(--text-muted); font-size: 0.85rem; transition: transform 0.15s; }
+.case-row-header.open .case-caret { transform: rotate(90deg); }
+.case-rows { display: flex; flex-direction: column; }
+.case-rows:not(.case-open) { display: none; }
+
+/* Test row: [name + steps | video | device list] */
+.test-row .test-row-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+}
+/* The test's top bar sticks to the top of the viewport while its row is on
+   screen. Its containing block is the row itself, so when the next test
+   scrolls up, that test's bar pushes this one out and takes its place. */
+.test-row { --test-header-h: 49px; }
+.test-row > .test-case-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    min-height: var(--test-header-h);
+    box-sizing: border-box;
+    border-radius: 10px 10px 0 0;
+}
+/* The video sticks just below the test's bar instead of sliding under it. */
+.test-row .video-section { margin-top: 0; align-self: start; position: sticky; top: calc(var(--test-header-h) + 12px); }
+.video-empty {
+    background: var(--card);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 12px;
+}
+.test-case-header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Device dropdown in the test's top bar, left of the status badge */
+.test-devices { position: relative; }
+.test-devices:empty { display: none; }
+.tdd-toggle,
+.test-device-chip {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: left;
+}
+.tdd-toggle { max-width: 280px; }
+.tdd-toggle:hover, .test-devices.open .tdd-toggle { border-color: var(--accent); }
+.tdd-caret { margin-left: 2px; color: var(--text-muted); font-size: 0.7rem; transition: transform 0.15s; }
+.test-devices.open .tdd-caret { transform: rotate(180deg); }
+.tdd-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    min-width: 100%;
+    width: max-content;
+    max-width: 340px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.test-devices.open .tdd-menu { display: block; }
+.tdd-title {
+    padding: 2px 4px 6px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+.tdd-menu .test-device-chip { width: 100%; margin-bottom: 4px; padding: 7px 10px; }
+.tdd-menu .test-device-chip:last-child { margin-bottom: 0; }
+.test-device-chip:hover { border-color: var(--accent); }
+.test-device-chip.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.tdc-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.tdc-dot.pass { background: var(--pass); }
+.tdc-dot.fail { background: var(--fail); }
+.tdc-dot.running { background: var(--accent); animation: pulse 1.5s infinite; }
+.tdc-dot.cancelled { background: var(--text-muted); }
+.tdc-dot.unavailable { background: var(--warn); }
+.tdc-dot.queued { background: transparent; border: 1px solid var(--text-muted); }
+.tdc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tdc-video {
+    margin-left: auto;
+    font-size: 0.68rem;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 1px 6px;
+    flex-shrink: 0;
+}
+.tdc-empty { color: var(--text-muted); font-size: 0.8rem; }
 </style>
 </head>
 <body>
 <div class="container">
-    <header>
-        <h1>VisualTest Viewer</h1>
-        <div id="breadcrumb" class="breadcrumb"></div>
+    <header class="site-header">
+        <h1 class="site-brand"><a href="/">MonkeyTester</a></h1>
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation"></nav>
     </header>
     <div id="content">
         <div class="loading">Loading run...</div>
@@ -25,11 +310,636 @@ function getQueryParam(name) {
     return params.get(name);
 }
 
-function updateBreadcrumb(runName) {
-    const bc = document.getElementById('breadcrumb');
-    bc.innerHTML = '<span onclick="location.href=\'index.html\'">Home</span>' +
-        ' <span class="sep">/</span> ' +
-        '<span>' + escapeHtml(runName) + '</span>';
+let currentLiveStream = null;
+// The device switcher shows for runs with more than one device (an Android
+// phone and an iPhone run together), and always on test-b.html.
+const forceDeviceSummary = window.location.pathname.endsWith('/test-b.html');
+let deviceSummaryVariant = forceDeviceSummary;
+// ?device=<id> opens a given device of the run; switching devices updates it.
+let selectedDeviceId = getQueryParam('device');
+let deviceSummaries = [];
+let lastDeviceSummaryFingerprint = null;
+
+if (forceDeviceSummary) {
+    document.title = 'MonkeyTester - Device Summary';
+}
+
+function withSelectedDevice(url, deviceId) {
+    const selected = deviceId === undefined ? selectedDeviceId : deviceId;
+    const selectedSummary = deviceSummaries.find(function(device) {
+        return device.id === selected;
+    });
+    if (!deviceSummaryVariant || !selected || selected === 'legacy' ||
+            (selectedSummary && selectedSummary.status === 'not_supported')) return url;
+    return url + (url.includes('?') ? '&' : '?') + 'device=' + encodeURIComponent(selected);
+}
+
+function renderDeviceSummary(expanded) {
+    if (!deviceSummaryVariant || !deviceSummaries.length) return '';
+    let passed = 0;
+    let failed = 0;
+    let total = 0;
+    deviceSummaries.forEach(function(device) {
+        passed += device.passed || 0;
+        failed += device.failed || 0;
+        total += device.total || 0;
+    });
+    // Collapsed <details> shows only the aggregate <summary> line; opening it
+    // reveals the per-device table (one row per device, success/failure/total).
+    // expanded keeps the user's open/closed choice across poll re-renders.
+    return '<details id="device-summary-grid" class="device-summary-details" aria-label="Test devices"' +
+        (expanded ? ' open' : '') + '>' +
+        '<summary>All devices: <span class="pass">' + passed + ' passed</span>' +
+        ' · <span class="fail">' + failed + ' failed</span>' +
+        ' · ' + total + ' total</summary>' +
+        '<table class="device-summary-table"><thead><tr><th>Device</th><th>Success</th><th>Failure</th><th>Total</th></tr></thead><tbody>' +
+        deviceSummaries.map(function(device) {
+            return '<tr><td>' + escapeHtml(device.name || device.serial || device.id) +
+                '</td><td class="pass">' + (device.passed || 0) +
+                '</td><td class="fail">' + (device.failed || 0) +
+                '</td><td class="total">' + (device.total || 0) + '</td></tr>';
+        }).join('') + '</tbody></table></details>';
+}
+
+async function refreshDeviceSummary(run) {
+    if (!deviceSummaryVariant) return;
+    try {
+        const summary = await fetchJSON('/api/device-summary/' + encodeURIComponent(run));
+        const devices = summary.devices || [];
+        const fingerprint = JSON.stringify(devices);
+        if (fingerprint === lastDeviceSummaryFingerprint) return;
+        // Unchanged data keeps the SAME DOM node, so a live text selection
+        // (or the user's expand/collapse choice) is never destroyed.
+        deviceSummaries = devices;
+        lastDeviceSummaryFingerprint = fingerprint;
+        const existing = document.getElementById('device-summary-grid');
+        // Re-render keeps the user's open/closed choice, never resets it.
+        const html = renderDeviceSummary(existing ? existing.open : false);
+        if (existing) {
+            existing.outerHTML = html;
+        } else if (html) {
+            const anchor = document.getElementById('live-progress') ||
+                document.querySelector('.run-summary');
+            if (anchor) anchor.insertAdjacentHTML('afterend', html);
+        }
+    } catch(e) {
+        console.warn('Failed to refresh device summary:', e);
+    }
+}
+
+// ── Case dashboard: one summary row per test suite in multi-suite runs ──
+let caseMode = false;
+let caseSummaries = [];
+let lastCaseFingerprint = null;
+
+function caseOfTest(name, pendingMap) {
+    const p = pendingMap[name];
+    if (p && p.case) return String(p.case);
+    const i = name.indexOf('__');
+    return i >= 0 ? name.slice(0, i) : '';
+}
+
+const CASE_BADGES = {
+    running: ['running', 'RUNNING'],
+    pending: ['pending', 'QUEUED'],
+    pass: ['pass', 'PASS'],
+    fail: ['fail', 'FAIL'],
+    unknown: ['unknown', '--'],
+};
+
+function caseRatioHtml(c) {
+    const total = Number(c.total) || 0;
+    const passed = Number(c.passed) || 0;
+    const failed = (Number(c.failed) || 0) + (Number(c.unavailable) || 0) +
+        (Number(c.cancelled) || 0);
+    const pct = n => total ? (Math.min(n, total) / total * 100).toFixed(2) + '%' : '0%';
+    const title = passed + ' passed, ' + failed + ' failed, ' + total + ' total';
+    return '<span class="case-ratio" title="' + title + '">' +
+        '<span class="case-ratio-bar">' +
+            '<span class="case-ratio-pass" style="width:' + pct(passed) + '"></span>' +
+            '<span class="case-ratio-fail" style="width:' + pct(failed) + '"></span>' +
+        '</span></span>';
+}
+
+// Inside of a suite's summary row. The open/closed state lives on the
+// header's 'open' class and the sibling .case-rows' 'case-open' class, so
+// refreshing this inner HTML never resets the user's expand/collapse choice.
+function renderCaseHeaderInner(c) {
+    const badge = CASE_BADGES[c.status] || CASE_BADGES.unknown;
+    const counts = (c.passed || 0) + ' passed · ' +
+        ((c.failed || 0) + (c.unavailable || 0) + (c.cancelled || 0)) + ' failed · ' +
+        (c.total || 0) + ' total';
+    return '<span class="case-name">' + escapeHtml(c.case || 'tests') + '</span>' +
+        '<span class="badge ' + badge[0] + '">' + badge[1] + '</span>' +
+        '<span class="case-counts">' + counts + '</span>' +
+        caseRatioHtml(c);
+}
+
+function renderCaseGroupOpen(c, open) {
+    // Opens the .case-group and its .case-rows; the caller appends the
+    // suite's test rows and closes both divs.
+    return '<div class="case-group" data-case="' + escapeHtml(c.case) + '">' +
+        '<div class="case-row-header' + (open ? ' open' : '') + '" role="button" tabindex="0" aria-expanded="' +
+            (open ? 'true' : 'false') + '">' +
+        renderCaseHeaderInner(c) + '<span class="case-caret">▸</span></div>' +
+        '<div class="case-rows' + (open ? ' case-open' : '') + '">';
+}
+
+function setCaseRowsOpen(rows, open) {
+    if (open) {
+        // One suite expanded at a time: selecting one collapses the others.
+        document.querySelectorAll('.case-rows').forEach(function(el) {
+            if (el !== rows) el.classList.remove('case-open');
+        });
+    }
+    rows.classList.toggle('case-open', open);
+    const header = rows.previousElementSibling;
+    if (header) {
+        header.classList.toggle('open', open);
+        header.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+}
+
+// Delegated so the handler survives any re-render of the page's DOM.
+document.addEventListener('click', function(e) {
+    const header = e.target.closest('.case-row-header');
+    if (!header) return;
+    const rows = header.nextElementSibling;
+    if (rows) setCaseRowsOpen(rows, !rows.classList.contains('case-open'));
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    const header = document.querySelector(':focus .case-row-header, .case-row-header:focus');
+    if (!header) return;
+    const rows = header.nextElementSibling;
+    if (rows) setCaseRowsOpen(rows, !rows.classList.contains('case-open'));
+});
+
+async function refreshCaseDashboard(run) {
+    if (!caseMode) return;
+    try {
+        const data = await fetchJSON('/api/cases/' + encodeURIComponent(run));
+        const cases = (data && data.cases) || [];
+        // Mid-run a suite can briefly report one case; keep the dashboard.
+        if (cases.length < 2) return;
+        const fingerprint = JSON.stringify(cases);
+        if (fingerprint === lastCaseFingerprint) return;
+        // Unchanged data keeps the SAME DOM nodes, so an expanded suite
+        // (and text selections) survive the poll tick.
+        lastCaseFingerprint = fingerprint;
+        caseSummaries = cases;
+        const byCase = {};
+        for (const c of cases) byCase[c.case] = c;
+        document.querySelectorAll('.case-group').forEach(function(group) {
+            const header = group.querySelector(':scope > .case-row-header');
+            if (!header) return;
+            const c = byCase[group.dataset.case];
+            if (!c) return;
+            header.innerHTML = renderCaseHeaderInner(c) + '<span class="case-caret">▸</span>';
+        });
+    } catch(e) {
+        console.warn('Failed to refresh case dashboard:', e);
+    }
+}
+
+// ── Per-row device dropdown (in each test's top bar, left of the badge) ──
+// One entry per device the test case ran on. Selecting an entry loads that
+// device's result into the row: status badge, steps (left), and the
+// device's video (right). Devices that did not run this test are left out.
+function tdcDotClass(d) {
+    if (d.test_status) {
+        const st = d.test_status.toUpperCase();
+        if (st === 'UNAVAILABLE') return 'unavailable';
+        return st === 'PASS' ? 'pass' : 'fail';
+    }
+    if (d.pending_status === 'running') return 'running';
+    if (d.pending_status === 'cancelled') return 'cancelled';
+    if (d.pending_status === 'unavailable') return 'unavailable';
+    if (deviceNotStarted(d)) return 'queued';
+    return '';
+}
+
+// Every device the run was queued on belongs in the dropdown, from the start
+// (not only once it reaches this test), so any device's data can be picked.
+function deviceRanTest(d) {
+    return (d.device_status || '').toLowerCase() !== 'not_supported';
+}
+
+function deviceNotStarted(d) {
+    return !(d.test_status || d.pending_status || d.video);
+}
+
+// The device currently shown in each row, keyed by run/test, so the dropdown
+// keeps its selection when the 2s poll re-renders it.
+const rowSelectedDevice = {};
+
+function tdcDeviceLabel(d) {
+    return '<span class="tdc-dot ' + tdcDotClass(d) + '"></span>' +
+        '<span class="tdc-name" title="' + escapeHtml(d.name) + '">' + escapeHtml(d.name) + '</span>' +
+        (d.video ? '<span class="tdc-video">video</span>' : '') +
+        (deviceNotStarted(d) ? '<span class="tdc-video">queued</span>' : '');
+}
+
+function renderTestDeviceChips(run, testName, devices, selectedId) {
+    return devices.map(function(d) {
+        return '<button type="button" role="option" class="test-device-chip' +
+            (d.id === selectedId ? ' selected' : '') + '" data-device="' + escapeHtml(d.id) +
+            '" data-video="' + (d.video_url ? escapeHtml(d.video_url) : '') + '"' +
+            ' aria-selected="' + (d.id === selectedId ? 'true' : 'false') + '">' +
+            tdcDeviceLabel(d) + '</button>';
+    }).join('');
+}
+
+// Empty placeholder in the top bar; filled once /api/test-devices answers.
+function renderTestDeviceList(testName) {
+    return '<div class="test-devices" id="tdc-' + escapeHtml(testName) + '"></div>';
+}
+
+function closeTestDeviceMenus(except) {
+    document.querySelectorAll('.test-devices.open').forEach(function(el) {
+        if (el === except) return;
+        el.classList.remove('open');
+        const t = el.querySelector('.tdd-toggle');
+        if (t) t.setAttribute('aria-expanded', 'false');
+    });
+}
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.test-devices')) closeTestDeviceMenus(null);
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeTestDeviceMenus(null);
+});
+
+function setTestDeviceToggle(el, d) {
+    const toggle = el.querySelector('.tdd-toggle');
+    if (!toggle || !d) return;
+    toggle.innerHTML = tdcDeviceLabel(d) + '<span class="tdd-caret">▾</span>';
+}
+
+function updateTestDeviceList(run, testName, devices) {
+    const el = document.getElementById('tdc-' + testName);
+    if (!el) return;
+    const ran = devices.filter(deviceRanTest);
+    el._devices = ran;
+    if (!ran.length) {
+        el.classList.remove('open');
+        el.innerHTML = '';
+        return;
+    }
+    const key = run + '/' + testName;
+    const selected = ran.find(function(d) { return d.id === rowSelectedDevice[key]; }) || ran[0];
+    const wasOpen = el.classList.contains('open');
+    el.innerHTML =
+        '<button type="button" class="tdd-toggle" aria-haspopup="listbox" aria-expanded="' +
+            (wasOpen ? 'true' : 'false') + '" title="Devices this run is queued on"></button>' +
+        '<div class="tdd-menu" role="listbox">' +
+            '<div class="tdd-title">Devices</div>' +
+            renderTestDeviceChips(run, testName, ran, selected.id) +
+        '</div>';
+    setTestDeviceToggle(el, selected);
+    el.querySelector('.tdd-toggle').addEventListener('click', function(e) {
+        e.stopPropagation();
+        const open = !el.classList.contains('open');
+        closeTestDeviceMenus(el);
+        el.classList.toggle('open', open);
+        this.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    el.querySelectorAll('.test-device-chip').forEach(function(chip) {
+        chip.addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeTestDeviceMenus(null);
+            if (!chip.dataset.device) return;
+            selectTestDevice(run, testName, chip.dataset.device);
+        });
+    });
+}
+
+// Version guard: a row fill started by an older device selection is dropped
+// when a newer one lands first (chip clicks and initial auto-select race).
+const rowVersion = {};
+// Once the device list has filled a row (or a fill is in flight), loadTestCase
+// (which queries the root device — empty for multi-device runs) must not
+// clobber the row's badge/columns.
+const rowOwned = {};
+const rowFillInFlight = {};
+
+// Load one device's result for this test into the row's columns.
+// silent=true: programmatic fill (auto-select / refresh) — does not bump the
+// row version, so a pending user click wins over it.
+function selectTestDevice(run, testName, deviceId, silent) {
+    const key = run + '/' + testName;
+    const bodyEl = document.getElementById('body-' + testName);
+    if (!bodyEl) return;
+    if (!silent) {
+        rowVersion[key] = (rowVersion[key] || 0) + 1;
+    }
+    const version = rowVersion[key] || 0;
+    rowFillInFlight[key] = true;
+    rowSelectedDevice[key] = deviceId;
+    const tdcEl = document.getElementById('tdc-' + testName);
+    if (tdcEl) {
+        tdcEl.querySelectorAll('.test-device-chip').forEach(function(c) {
+            const on = c.dataset.device === deviceId;
+            c.classList.toggle('selected', on);
+            c.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        setTestDeviceToggle(tdcEl, (tdcEl._devices || []).find(function(d) { return d.id === deviceId; }));
+    }
+
+    const contentEl = document.getElementById('content-' + testName);
+    const videoSec = document.getElementById('videosec-' + testName);
+    const badgeEl = document.getElementById('badge-' + testName);
+
+    fetchJSON('/api/test/' + encodeURIComponent(run) + '/' +
+        encodeURIComponent(testName) + '?device=' + encodeURIComponent(deviceId))
+        .then(function(data) {
+            if ((rowVersion[key] || 0) !== version) return;
+            rowFillInFlight[key] = false;
+            if (!data || !data.result_file) {
+                // Only claim the "no results" state once no other fill is
+                // pending — an in-flight loadTestCase for the same device must
+                // be able to land its own data first.
+                if (rowFillInFlight[key]) return;
+                // A pending/running test keeps its live panel (steps + live
+                // stream) — the device dot already shows the state.
+                const dev = ((tdcEl && tdcEl._devices) || []).find(function(d) { return d.id === deviceId; });
+                if (dev && dev.pending_status === 'cancelled') {
+                    // An earlier test failed on this device, so this one never ran.
+                    rowOwned[key] = true;
+                    if (badgeEl) { badgeEl.className = 'badge cancelled'; badgeEl.textContent = 'CANCELLED'; }
+                    if (contentEl) contentEl.innerHTML = '<div class="loading" style="padding:0">Cancelled on this device: an earlier test failed</div>';
+                    if (videoSec) videoSec.innerHTML = '<div class="video-empty">Not run on this device</div>';
+                    return;
+                }
+                if (dev && deviceNotStarted(dev)) {
+                    // Queued on this device; it hasn't reached this test yet.
+                    rowOwned[key] = true;
+                    if (badgeEl) { badgeEl.className = 'badge pending'; badgeEl.textContent = 'QUEUED'; }
+                    if (contentEl) contentEl.innerHTML = '<div class="loading" style="padding:0">Queued: not started on this device yet</div>';
+                    if (videoSec) videoSec.innerHTML = '<div class="video-empty">No video on this device yet</div>';
+                    return;
+                }
+                if (dev && (dev.pending_status === 'pending' || dev.pending_status === 'running')) {
+                    // Not finished on this device yet: show ITS pending steps (and the
+                    // live stream while running), even if the row was showing another
+                    // device's result (e.g. the iPhone's UNAVAILABLE) a moment ago.
+                    rowOwned[key] = true;
+                    showDevicePendingTest(run, testName, deviceId, dev.pending_status, key, version);
+                    return;
+                }
+                const badgeCls = badgeEl ? badgeEl.className : '';
+                if (badgeCls.indexOf('pending') !== -1 || badgeCls.indexOf('running') !== -1) return;
+                rowOwned[key] = true;
+                if (badgeEl) { badgeEl.className = 'badge unknown'; badgeEl.textContent = 'NO DATA'; }
+                if (contentEl) contentEl.innerHTML = '<div class="loading" style="padding:0">No results on this device</div>';
+                if (videoSec) videoSec.innerHTML = '<div class="video-empty">No video on this device</div>';
+                return;
+            }
+            rowOwned[key] = true;
+            if (badgeEl) {
+                const status = (data.status || '').toLowerCase();
+                badgeEl.className = 'badge ' + (status || 'unknown');
+                badgeEl.textContent = (data.status || '--').toUpperCase();
+            }
+            if (contentEl) {
+                contentEl.innerHTML = buildTestDetailHtml(data, run) ||
+                    '<div class="loading" style="padding:0">No data</div>';
+            }
+            const videoUrl = data.video && data.video.name
+                ? '/static/' + run + '/' + data.video.name : '';
+            if (videoSec) {
+                if (videoUrl) {
+                    videoSec.innerHTML =
+                        '<div class="video-container">' +
+                            '<video controls preload="metadata">' +
+                                '<source src="' + videoUrl + '" type="video/mp4">' +
+                                'Your browser does not support the video tag.' +
+                            '</video>' +
+                        '</div>';
+                } else {
+                    videoSec.innerHTML = '<div class="video-empty">No video on this device</div>';
+                }
+            }
+        })
+        .catch(function() {
+            rowFillInFlight[key] = false;
+            if (rowVersion[key] !== version) return;
+            if (contentEl) contentEl.innerHTML = '<div class="loading" style="padding:0">Failed to load test data</div>';
+        });
+}
+
+function getLiveStreamMarkup() {
+    if (currentLiveStream && currentLiveStream.status === 'ios') {
+        // iOS has no live stream: show one fresh screenshot at a time, polled
+        // by the page at a few FPS.
+        const udid = String(currentLiveStream.serial || '');
+        const label = currentLiveStream.label || ('iOS · ' + udid);
+        return '<div class="live-stream-inline live-stream-panel ios-frame-panel">' +
+            '<div class="live-stream-overlay"><div class="spinner"></div><span>Connecting to device…</span></div>' +
+            '<img class="live-stream-img ios-frame-img" data-udid="' + escapeHtml(udid) +
+                '" src="" alt="live device ' + escapeHtml(label) + '" />' +
+            '<div class="press-overlay"></div>' +
+            '<div class="live-stream-label">' + escapeHtml(label) + '</div></div>';
+    }
+
+    if (!currentLiveStream || currentLiveStream.status !== 'mapped') {
+        const reason = currentLiveStream && currentLiveStream.reason
+            ? escapeHtml(currentLiveStream.reason)
+            : 'No preview device is configured for this test run.';
+        return '<div class="live-stream-inline live-stream-panel live-stream-unavailable">' +
+            '<div class="live-stream-overlay" style="position:static;background:transparent;min-height:180px">' +
+                '<span>' + reason + '</span></div></div>';
+    }
+
+    const device = currentLiveStream.device;
+    return '<div class="live-stream-inline live-stream-panel">' +
+        '<div class="live-stream-overlay"><div class="spinner"></div><span>Connecting to ' +
+            escapeHtml(device.name) + '...</span></div>' +
+        '<img class="live-stream-img" src="/stream/' + encodeURIComponent(device.path) +
+            '" alt="live device ' + escapeHtml(device.name) + '" />' +
+        '<div class="press-overlay"></div>' +
+        '<div class="live-stream-label">' + escapeHtml(device.name) + ' (' +
+            escapeHtml(device.path) + ')</div></div>';
+}
+
+function bindLiveStreamPanels(root) {
+    (root || document).querySelectorAll('.live-stream-img').forEach(function(img) {
+        const panel = img.closest('.live-stream-panel');
+        const overlay = panel && panel.querySelector('.live-stream-overlay');
+        if (!overlay) return;
+        // iOS frames start with an empty src — the frame poller fills it in,
+        // so the error/empty-src handling below would fire prematurely.
+        const isIos = img.classList.contains('ios-frame-img');
+        if (isIos) return;
+        const showError = function() {
+            overlay.style.display = 'flex';
+            overlay.innerHTML = '<span>Live device feed unavailable</span>';
+        };
+        img.addEventListener('load', function() {
+            overlay.style.display = 'none';
+        }, { once: true });
+        img.addEventListener('error', showError, { once: true });
+        if (img.complete) {
+            if (img.naturalWidth) overlay.style.display = 'none';
+            else showError();
+        }
+    });
+}
+
+async function refreshLiveStreamDevice(run) {
+    // iOS panels are driven by the frame poller below — don't rebuild them.
+    if (currentLiveStream && (currentLiveStream.status === 'mapped' ||
+                              currentLiveStream.status === 'ios')) return;
+    try {
+        const next = await fetchJSON(withSelectedDevice('/api/stream-device/' + encodeURIComponent(run)));
+        if (next.status === 'mapped' || next.status === 'ios') {
+            currentLiveStream = next;
+            document.querySelectorAll('.live-stream-panel').forEach(function(panel) {
+                panel.outerHTML = getLiveStreamMarkup();
+            });
+            bindLiveStreamPanels(document);
+        }
+    } catch(e) {
+        console.warn('Failed to refresh live stream device:', e);
+    }
+}
+
+// Fill a row with one device's not-yet-finished test: its steps and their
+// statuses from that device's pending_tests.json, plus the live stream while
+// it runs.
+function showDevicePendingTest(run, testName, deviceId, status, key, version) {
+    const contentEl = document.getElementById('content-' + testName);
+    const videoSec = document.getElementById('videosec-' + testName);
+    const badgeEl = document.getElementById('badge-' + testName);
+    const running = status === 'running';
+    if (badgeEl) updatePendingBadge(badgeEl, running ? 'running' : 'pending');
+    fetchJSON('/api/pending/' + encodeURIComponent(run) + '?device=' + encodeURIComponent(deviceId))
+        .then(function(pendingData) {
+            if ((rowVersion[key] || 0) !== version) return;
+            const t = ((pendingData && pendingData.tests) || []).find(function(x) { return x.name === testName; });
+            const steps = (t && t.steps) || [];
+            if (contentEl) {
+                contentEl.innerHTML = steps.length
+                    ? '<div class="steps-section"><h3>' + (running ? 'Steps (' : 'Pending Steps (') + steps.length +
+                      ')</h3><div class="steps-list">' + buildStepRows(testName, steps, t.step_statuses) + '</div></div>'
+                    : '<div class="loading" style="padding:0">' +
+                      (running ? 'Running on this device' : 'Not started on this device yet') + '</div>';
+            }
+            if (videoSec) {
+                if (running) {
+                    // Keep a live stream that's already playing (re-polled every 2s).
+                    if (!videoSec.querySelector('.live-stream-panel')) {
+                        videoSec.innerHTML = '<div class="video-container">' + getLiveStreamMarkup() + '</div>';
+                        bindLiveStreamPanels(videoSec);
+                    }
+                } else {
+                    videoSec.innerHTML = '<div class="video-empty">No video on this device yet</div>';
+                }
+            }
+        })
+        .catch(function() {
+            if (contentEl) contentEl.innerHTML = '<div class="loading" style="padding:0">' +
+                (running ? 'Running on this device' : 'Not started on this device yet') + '</div>';
+        });
+}
+
+function updatePendingBadge(badgeEl, status) {
+    badgeEl.className = 'badge ' + status;
+    badgeEl.textContent = status.toUpperCase();
+}
+
+// A PLUGIN step's inline block (the lines up to END) and any parse error.
+function stepBlockHtml(step) {
+    let html = '';
+    if (step.block && step.block.length) html += '<pre class="step-block">' + escapeHtml(step.block.join('\n')) + '</pre>';
+    if (step.error) html += '<div class="step-reason">' + escapeHtml(step.error) + '</div>';
+    return html;
+}
+
+function buildStepRows(testName, steps, statuses) {
+    let html = '';
+    for (let index = 0; index < steps.length; index++) {
+        const step = steps[index];
+        const status = (statuses && statuses[index]) || 'pending';
+        const rowClass = status === 'running' ? 'running-step' : (status === 'pending' ? 'pending-step' : '');
+        html += '<div class="step-row ' + rowClass + '" id="step-' + escapeHtml(testName) + '-' + index + '">';
+        html += '<span class="step-status ' + escapeHtml(status) + '"></span>';
+        html += '<div class="step-content">';
+        if (step.command) html += '<div class="step-command">' + escapeHtml(step.command) + '</div>';
+        if (step.args) html += '<div class="step-args">' + escapeHtml(step.args) + '</div>';
+        html += stepBlockHtml(step);
+        if (step.description) html += '<div class="step-description">' + escapeHtml(step.description) + '</div>';
+        html += '</div></div>';
+    }
+    return html;
+}
+
+function renderProgress(progress) {
+    if (!progress) return '';
+    const terminal = progress.phase === 'completed' || progress.phase === 'completed_with_failures' || progress.phase === 'failed';
+    const details = [];
+    if (progress.test_name) {
+        let testDetail = 'Test: ' + escapeHtml(progress.test_name);
+        if (progress.test_index && progress.test_total) {
+            testDetail += ' (' + progress.test_index + ' of ' + progress.test_total + ')';
+        }
+        details.push(testDetail);
+    }
+    if (progress.step) {
+        const step = progress.step;
+        let stepDetail = 'Current step';
+        if (progress.step_index && progress.step_total) {
+            stepDetail += ' ' + progress.step_index + ' of ' + progress.step_total;
+        }
+        stepDetail += ': ' + escapeHtml(step.command || '');
+        if (step.args) stepDetail += ' ' + escapeHtml(step.args);
+        details.push(stepDetail);
+    }
+    if (progress.updated_at) details.push('Updated: ' + escapeHtml(progress.updated_at));
+    return '<div class="live-progress" id="live-progress">' +
+        '<div class="live-progress-title">' + (terminal ? 'Run status' : 'Run in progress') + '</div>' +
+        '<div class="live-progress-message">' + escapeHtml(progress.message || progress.phase || 'Working...') + '</div>' +
+        renderSnapshotMismatches(progress.snapshot_mismatches) +
+        (details.length ? '<div class="live-progress-detail">' + details.join(' · ') + '</div>' : '') +
+        '</div>';
+}
+
+// SNAPSHOT steps that did not match their baseline: the percentage of pixels
+// that differ, one line per snapshot (sizes that differ have no percentage).
+function renderSnapshotMismatches(mismatches) {
+    if (!mismatches || !mismatches.length) return '';
+    let html = '<div class="snapshot-mismatches">';
+    for (const m of mismatches) {
+        const pct = (typeof m.diff_percent === 'number')
+            ? m.diff_percent.toFixed(3) + '%' : 'size differs';
+        html += '<div class="snapshot-mismatch-line" title="' + escapeHtml(m.message || '').replace(/"/g, '&quot;') + '">' +
+            '<span class="snapshot-mismatch-pct">' + escapeHtml(pct) + '</span>' +
+            '<span>Snapshot <b>' + escapeHtml(m.name || '') + '</b> does not match' +
+            (m.screen_class ? ' (' + escapeHtml(m.screen_class) + ')' : '') +
+            ' · ' + escapeHtml(m.label || m.test || '') +
+            (typeof m.tolerance === 'number' ? ' · tolerance ' + escapeHtml(String(m.tolerance)) + '%' : '') +
+            '</span></div>';
+    }
+    return html + '</div>';
+}
+
+function updateProgressPanel(progress) {
+    const existing = document.getElementById('live-progress');
+    const html = renderProgress(progress);
+    if (existing) {
+        if (html) existing.outerHTML = html;
+        else existing.remove();
+        return;
+    }
+    if (!html) return;
+    const summary = document.querySelector('.run-summary');
+    if (summary) summary.insertAdjacentHTML('afterend', html);
+}
+
+// Logs button helper: returns a Logs button linked to the given run.
+function getLogsButton(run) {
+    const logsUrl = 'logs.html?run=' + encodeURIComponent(run);
+    return '<button class="btn-secondary" style="margin-left:auto;display:inline-block;vertical-align:middle;" onclick="location.href=\'' + logsUrl + '\'">Logs</button>';
 }
 
 async function loadRun() {
@@ -39,19 +949,41 @@ async function loadRun() {
         return;
     }
 
-    updateBreadcrumb(run);
-    console.log('loadRun: got run param:', run);
+    let deviceSummaryHtml = '';
+    try {
+        const summary = await fetchJSON('/api/device-summary/' + encodeURIComponent(run));
+        const devices = summary.devices || [];
+        deviceSummaryVariant = forceDeviceSummary || devices.length > 1;
+        if (deviceSummaryVariant) {
+            deviceSummaries = devices;
+            const selectedExists = deviceSummaries.some(function(device) {
+                return device.id === selectedDeviceId;
+            });
+            if (!selectedExists) {
+                selectedDeviceId = summary.active_device_id ||
+                    (deviceSummaries.find(function(device) {
+                        return device.status !== 'not_supported';
+                    }) || {}).id || null;
+            }
+            deviceSummaryHtml = renderDeviceSummary(false);
+            lastDeviceSummaryFingerprint = JSON.stringify(devices);
+        }
+    } catch(e) {
+        console.warn('Failed to load device summary:', e);
+    }
 
     // Load metadata
     let metaHtml = '';
+    let items = [];
     try {
-        const metadata = await fetchJSON('/api/metadata/' + encodeURIComponent(run));
+        const metadata = await fetchJSON(withSelectedDevice('/api/metadata/' + encodeURIComponent(run)));
         if (metadata) {
             const meta = metadata;
-            let items = [];
             if (meta.timestamp) items.push('Start: ' + escapeHtml(meta.timestamp));
             if (meta.end_time) items.push('End: ' + escapeHtml(meta.end_time));
             if (meta.script) items.push('Script: ' + escapeHtml(meta.script));
+            if (meta.branch) items.push('Branch: ' + escapeHtml(meta.branch));
+            if (meta.record_snapshots) items.push('<span class="snapshot-recording">Recording snapshot baselines</span>');
             if (meta.apk) {
                 const apk = meta.apk;
                 let apkInfo = 'APK: ' + (apk.build_type || '');
@@ -60,7 +992,7 @@ async function loadRun() {
                 items.push(apkInfo);
             }
             if (meta.device) {
-                items.push('Device: ' + escapeHtml(meta.device.model || meta.device.serial || ''));
+                items.push('Device: ' + escapeHtml(meta.device.display_name || meta.device.model || meta.device.serial || ''));
             } else if (meta.emulator) {
                 items.push('Emulator: ' + escapeHtml(meta.emulator.image || ''));
             }
@@ -70,34 +1002,84 @@ async function loadRun() {
             const options = meta.options || {};
             if (options.debug) items.push('Debug');
             if (options.skip_backend) items.push('No backend');
-            if (items.length) {
-                metaHtml = '<div class="run-meta-bar">' + items.map(i => '<span class="run-meta-item">' + i + '</span>').join('') + '</div>';
-            }
         }
     } catch(e) {
         console.warn('Failed to load metadata:', e);
     }
+    try {
+        currentLiveStream = await fetchJSON(withSelectedDevice('/api/stream-device/' + encodeURIComponent(run)));
+    } catch(e) {
+        currentLiveStream = {
+            status: 'unavailable',
+            reason: 'Unable to resolve the configured preview device for this run.'
+        };
+        console.warn('Failed to load live stream device:', e);
+    }
+    // Always show a Logs button for every run, even if metadata is missing.
+    let logsBtn = getLogsButton(run);
+    // New or changed SNAPSHOT baselines: offer them as a zip to commit in a PR.
+    try {
+        const snaps = await fetchJSON('/api/runs/' + encodeURIComponent(run) + '/snapshots.zip?count=1');
+        if (snaps && snaps.count > 0) {
+            logsBtn = '<a class="btn-secondary snapshot-bundle-btn" href="/api/runs/' + encodeURIComponent(run) +
+                '/snapshots.zip" title="New or changed snapshot captures, laid out as visual-tests/&lt;case&gt;/snapshots/. Commit them in a PR to make them the baselines.">' +
+                'New baselines (' + snaps.count + ')</a>' + logsBtn.replace('margin-left:auto;', 'margin-left:8px;');
+        }
+    } catch(e) {}
+    if (items.length) {
+        metaHtml = '<div class="run-meta-bar">' + items.map(i => '<span class="run-meta-item">' + i + '</span>').join('') + logsBtn + '</div>';
+    } else {
+        metaHtml = '<div class="run-meta-bar"><span class="run-meta-item">Run: ' + escapeHtml(run) + '</span>' + logsBtn + '</div>';
+    }
 
     // Load stats
     let statsHtml = '';
+    if (!deviceSummaryVariant) {
+        try {
+            const stats = await fetchJSON(withSelectedDevice('/api/stats/' + encodeURIComponent(run)));
+            if (stats.total > 0) {
+                statsHtml = '<div class="stats-bar">' +
+                    '<div class="stat-item total"><span class="count">' + stats.total + '</span> total</div>' +
+                    '<div class="stat-item pass"><span class="count">' + stats.passed + '</span> passed</div>' +
+                    '<div class="stat-item fail"><span class="count">' + stats.failed + '</span> failed</div>' +
+                    '</div>';
+            }
+        } catch(e) {
+            console.warn('Failed to load stats:', e);
+        }
+    }
+
+    // Load pending data (before loading files, so we can cross-reference)
+    let pendingData = null;
+    let pendingMap = {}; // testName -> {status, steps, order}
     try {
-        const stats = await fetchJSON('/api/stats/' + encodeURIComponent(run));
-        if (stats.total > 0) {
-            statsHtml = '<div class="stats-bar">' +
-                '<div class="stat-item total"><span class="count">' + stats.total + '</span> total</div>' +
-                '<div class="stat-item pass"><span class="count">' + stats.passed + '</span> passed</div>' +
-                '<div class="stat-item fail"><span class="count">' + stats.failed + '</span> failed</div>' +
-                '</div>';
+        pendingData = await fetchJSON(withSelectedDevice('/api/pending/' + encodeURIComponent(run)));
+        if (pendingData && pendingData.tests) {
+            for (const t of pendingData.tests) {
+                pendingMap[t.name] = t;
+            }
         }
     } catch(e) {
-        console.warn('Failed to load stats:', e);
+        console.warn('No pending data for this run:', e);
+    }
+
+    // Per-suite summaries: a run with 2+ test cases gets a dashboard of
+    // summary rows (clicking one expands its test rows); single-case runs
+    // keep the flat row layout.
+    try {
+        const caseData = await fetchJSON('/api/cases/' + encodeURIComponent(run));
+        caseMode = !!caseData && Array.isArray(caseData.cases) && caseData.cases.length >= 2;
+        if (caseMode) {
+            caseSummaries = caseData.cases;
+            lastCaseFingerprint = JSON.stringify(caseData.cases);
+        }
+    } catch(e) {
+        console.warn('No case summaries for this run:', e);
+        caseMode = false;
     }
 
     // Load files
-    console.log('loadRun: fetching run files...');
-    const files = await fetchJSON('/api/run/' + encodeURIComponent(run));
-    console.log('loadRun: got', files.length, 'files');
-    console.log('loadRun: building test case panels...');
+    const files = await fetchJSON(withSelectedDevice('/api/run/' + encodeURIComponent(run)));
 
     // Group files by test name
     const tests = {};
@@ -105,149 +1087,575 @@ async function loadRun() {
         const basename = f.name.split('/').pop();
         if (basename.endsWith('_result.json')) {
             const testName = basename.replace('_result.json', '');
-            tests[testName] = { json: f, video: null, screenshots: [] };
-        } else if (f.type === 'image') {
-            for (const tn of Object.keys(tests)) {
-                if (basename.startsWith(tn)) {
-                    tests[tn].screenshots.push(f);
-                    break;
-                }
-            }
+            tests[testName] = { json: f, video: null };
         }
     }
 
-    const testNames = Object.keys(tests).sort();
+    // Collect all test names from both files and pending data
+    const allTestNames = new Set(Object.keys(tests));
+    for (const tn of Object.keys(pendingMap)) {
+        allTestNames.add(tn);
+    }
+    const testNames = Array.from(allTestNames).sort();
 
-    // Build test case panels
+    // Build test case panels. Multi-suite runs group rows under a
+    // clickable summary row per test case; single-suite runs stay flat.
+    const groups = [];
+    if (caseMode) {
+        const byCase = new Map();
+        for (const tn of testNames) {
+            const c = caseOfTest(tn, pendingMap);
+            if (!byCase.has(c)) byCase.set(c, []);
+            byCase.get(c).push(tn);
+        }
+        for (const c of caseSummaries) {
+            groups.push({ summary: c, names: byCase.get(c.case) || [] });
+            byCase.delete(c.case);
+        }
+        for (const entry of byCase.entries()) {
+            const [c, names] = entry;
+            groups.push({ summary: { case: c, status: 'unknown', passed: 0,
+                                     failed: 0, unavailable: 0, cancelled: 0,
+                                     running: 0, pending: names.length,
+                                     total: names.length }, names: names });
+        }
+    } else {
+        groups.push({ summary: null, names: testNames });
+    }
     let testsHtml = '<div class="tests-list">';
-    for (const testName of testNames) {
-        const data = tests[testName];
-        const statusLabel = data.json ? 'LOADING' : 'NO DATA';
-        const statusClass = data.json ? '' : 'unknown';
-        testsHtml += '<div class="test-case" id="test-' + escapeHtml(testName) + '">';
+    for (const group of groups) {
+        if (group.summary) testsHtml += renderCaseGroupOpen(group.summary, false);
+        for (const testName of group.names) {
+        const data = tests[testName] || { json: null, video: null };
+        const pending = pendingMap[testName];
+        const hasResult = !!data.json;
+
+        let statusLabel, statusClass;
+        if (!hasResult && pending) {
+            // Check if this test has been started
+            const pendingStatus = pending.status;
+            if (pendingStatus === 'completed') {
+                statusLabel = 'COMPLETED';
+                statusClass = 'pass';
+            } else if (pendingStatus === 'failed') {
+                statusLabel = 'FAILED';
+                statusClass = 'fail';
+            } else if (pendingStatus === 'running') {
+                statusLabel = 'RUNNING';
+                statusClass = 'running';
+            } else if (pendingStatus === 'cancelled') {
+                statusLabel = 'CANCELLED';
+                statusClass = 'cancelled';
+            } else {
+                statusLabel = 'PENDING';
+                statusClass = 'pending';
+            }
+        } else if (!hasResult) {
+            statusLabel = 'NO DATA';
+            statusClass = 'unknown';
+        } else {
+            statusLabel = 'LOADING';
+            statusClass = '';
+        }
+
+        testsHtml += '<div class="test-case test-row" id="test-' + escapeHtml(testName) + '">';
         testsHtml += '<div class="test-case-header">';
-        testsHtml += '<span class="test-case-name">' + escapeHtml(testName) + '</span>';
+        // Multi-case runs label rows "case / test" (the runner's label).
+        const rowLabel = (pending && pending.label) || testName.replace('__', ' / ');
+        testsHtml += '<span class="test-case-name">' + escapeHtml(rowLabel) + '</span>';
+        testsHtml += '<div class="test-case-header-right">';
+        testsHtml += renderTestDeviceList(testName);
         testsHtml += '<span class="badge ' + statusClass + '" id="badge-' + escapeHtml(testName) + '">' + statusLabel + '</span>';
         testsHtml += '</div>';
+        testsHtml += '</div>';
         testsHtml += '<div class="test-case-body" id="body-' + escapeHtml(testName) + '">';
-        testsHtml += '<div class="loading" style="padding:0">Loading...</div>';
+        testsHtml += '<div class="test-row-grid">';
+        testsHtml += '<div class="test-content" id="content-' + escapeHtml(testName) + '">';
+
+        if (!hasResult && pending && pending.status !== 'completed' && pending.status !== 'failed') {
+            // Pending or running test — steps on the left, live stream in the
+            // middle column while running
+            const isRunning = pending.status === 'running';
+            var liveStepsHtml = '';
+            if (pending.steps && pending.steps.length > 0) {
+                const stepHeading = isRunning ? 'Steps (' + pending.steps.length + ')' : 'Pending Steps (' + pending.steps.length + ')';
+                liveStepsHtml += '<div class="steps-section"><h3>' + stepHeading + '</h3>';
+                liveStepsHtml += '<div class="steps-list">';
+                liveStepsHtml += buildStepRows(testName, pending.steps, pending.step_statuses);
+                liveStepsHtml += '</div></div>';
+            }
+            testsHtml += liveStepsHtml || '<div class="loading" style="padding:0">No steps</div>';
+            testsHtml += '</div>';
+            testsHtml += '<div class="video-section" id="videosec-' + escapeHtml(testName) + '">';
+            if (isRunning) {
+                testsHtml += '<div class="video-container">' + getLiveStreamMarkup() + '</div>';
+            }
+            testsHtml += '</div>';
+        } else if (!hasResult) {
+            // No result file (run failed early, or no result generated) — show error + Logs button
+            let statusMsg = '<div class="loading" style="padding:0">No result data for this test</div>';
+            if (pending && pending.status === 'failed') {
+                statusMsg = '<div class="loading" style="padding:0">Test failed — check Logs for details</div>';
+            }
+            // Show any error message from pending data (e.g. "APK installation failed")
+            if (pending && pending.progress && pending.progress.message) {
+                statusMsg += '<div class="live-progress" style="margin-top:8px">' +
+                    '<div class="live-progress-message">' + escapeHtml(pending.progress.message) + '</div>' +
+                    '</div>';
+            }
+            // Always include a Logs button so the user can see console output
+            const runRun = getQueryParam('run');
+            const logsUrl = 'logs.html?run=' + encodeURIComponent(runRun);
+            statusMsg += '<button class="btn-secondary" style="margin-top:8px;margin-left:auto;display:inline-block;width:auto;" onclick="location.href=\'' + logsUrl + '\'">View Logs</button>';
+            testsHtml += '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">' + statusMsg + '</div>';
+            testsHtml += '</div>';
+            testsHtml += '<div class="video-section" id="videosec-' + escapeHtml(testName) + '"></div>';
+        } else {
+            testsHtml += '<div class="loading" style="padding:0">Loading...</div>';
+            testsHtml += '</div>';
+            testsHtml += '<div class="video-section" id="videosec-' + escapeHtml(testName) + '"><div class="video-empty">Loading video…</div></div>';
+        }
+
         testsHtml += '</div>';
-        testsHtml += '</div>';
+        testsHtml += '</div></div>';
+        }
+        if (group.summary) testsHtml += '</div></div>';
     }
     testsHtml += '</div>';
 
     // Inject everything
-    console.log('loadRun: injecting HTML...');
     const container = document.getElementById('content');
-    console.log('loadRun: container found:', !!container);
     container.innerHTML =
         '<div class="tests-panel">' +
             '<div class="run-summary">' + metaHtml + statsHtml + '</div>' +
+            renderProgress(pendingData && pendingData.progress) +
+            deviceSummaryHtml +
             testsHtml +
         '</div>';
+    bindLiveStreamPanels(container);
 
     // Load test data for each test case (async)
     for (const testName of testNames) {
-        loadTestCase(run, testName, tests[testName], files);
+        loadTestCase(run, testName, tests[testName], pendingMap[testName], selectedDeviceId);
+        loadTestDevices(run, testName);
+    }
+    connectRunEvents(run);
+}
+
+// Fetch the devices this test case ran on, fill the top-bar dropdown, and
+// auto-select the first device that actually ran this test so the left and
+// middle columns show its result without any user interaction.
+async function loadTestDevices(run, testName) {
+    try {
+        const data = await fetchJSON('/api/test-devices/' +
+            encodeURIComponent(run) + '/' + encodeURIComponent(testName));
+        const devices = (data && data.devices) || [];
+        updateTestDeviceList(run, testName, devices);
+        const runnable = devices.filter(function(d) {
+            return (d.device_status || '').toLowerCase() !== 'not_supported';
+        });
+        // Only auto-select a device that actually started or finished this
+        // test — a not-yet-started test keeps its pending panel untouched.
+        const started = runnable.filter(function(d) {
+            return d.test_status || d.pending_status === 'running' ||
+                d.pending_status === 'cancelled' || d.video;
+        });
+        // Follow the device picked in the run's device summary.
+        // Keep the device already chosen in this row's dropdown across polls.
+        // A device picked by hand stays picked even if it hasn't started yet.
+        const current = runnable.find(function(d) {
+            return d.id === rowSelectedDevice[run + '/' + testName];
+        });
+        const pick = current || (deviceSummaryVariant && runnable.find(function(d) {
+            return d.id === selectedDeviceId;
+        })) || started[0];
+        if (pick) {
+            selectTestDevice(run, testName, pick.id, true);
+        }
+    } catch(e) {
+        const el = document.getElementById('tdc-' + testName);
+        if (el) el.innerHTML = '<span class="tdc-empty">Devices unavailable</span>';
     }
 }
 
-async function loadTestCase(run, testName, fileInfo, files) {
+async function loadTestCase(run, testName, fileInfo, pendingData, deviceId) {
     const bodyEl = document.getElementById('body-' + testName);
     const badgeEl = document.getElementById('badge-' + testName);
     if (!bodyEl || !badgeEl) return;
 
+    const key = run + '/' + testName;
     let resultData = null;
     try {
-        const data = await fetchJSON('/api/test/' + encodeURIComponent(run) + '/' + encodeURIComponent(testName));
+        const data = await fetchJSON(withSelectedDevice(
+            '/api/test/' + encodeURIComponent(run) + '/' + encodeURIComponent(testName),
+            deviceId
+        ));
         resultData = data;
     } catch(e) {
-        badgeEl.className = 'badge unknown';
-        badgeEl.textContent = 'ERROR';
+        if (rowFillInFlight[key] || rowOwned[key]) return;
+        if (!pendingData || pendingData.status === 'pending') {
+            badgeEl.className = 'badge pending';
+            badgeEl.textContent = 'PENDING';
+        } else if (pendingData) {
+            updatePendingBadge(badgeEl, pendingData.status);
+        } else {
+            badgeEl.className = 'badge unknown';
+            badgeEl.textContent = 'NO DATA';
+        }
         bodyEl.innerHTML = '<div class="loading" style="padding:0">Failed to load test data</div>';
         return;
     }
 
-    if (!resultData) {
-        badgeEl.className = 'badge unknown';
-        badgeEl.textContent = 'NO DATA';
-        bodyEl.innerHTML = '';
+    if (deviceSummaryVariant && deviceId !== selectedDeviceId) return;
+    if (!resultData || !resultData.result_file) {
+        // A per-device fill owns this row (or is in flight) — it writes the
+        // authoritative state. Never clobber it with the root query's answer.
+        if (rowFillInFlight[key] || rowOwned[key]) return;
+        // No real result yet (still pending/running) — just refresh the badge
+        // in case its status changed, and leave the pending/running panel that
+        // loadRun() already rendered from pending_tests.json in place.
+        if (!pendingData || pendingData.status === 'pending') {
+            badgeEl.className = 'badge pending';
+            badgeEl.textContent = 'PENDING';
+        } else if (pendingData) {
+            updatePendingBadge(badgeEl, pendingData.status);
+        } else {
+            badgeEl.className = 'badge unknown';
+            badgeEl.textContent = 'NO DATA';
+        }
         return;
     }
+
+    // The per-row device list owns the left/middle columns once it has filled
+    // them — don't clobber with the root query's (possibly empty) result.
+    if (rowOwned[key] || rowFillInFlight[key]) return;
 
     const status = (resultData.status || '').toLowerCase();
     badgeEl.className = 'badge ' + (status || 'unknown');
     badgeEl.textContent = (resultData.status || '--').toUpperCase();
 
-    // Build steps HTML
-    let stepsHtml = '';
-    const steps = resultData.steps || [];
-    if (steps.length > 0) {
-        stepsHtml += '<div class="steps-section"><h3>Steps</h3>';
-        stepsHtml += '<div class="steps-list">';
-        for (const step of steps) {
-            const stepStatus = (step.status || '').toLowerCase();
-            const s = step.step || step;
-            stepsHtml += '<div class="step-row">';
-            stepsHtml += '<span class="step-status ' + stepStatus + '"></span>';
-            stepsHtml += '<div class="step-content">';
-            if (s.command) stepsHtml += '<div class="step-command">' + escapeHtml(s.command) + '</div>';
-            if (s.args) stepsHtml += '<div class="step-args">' + escapeHtml(s.args) + '</div>';
-            if (s.description) stepsHtml += '<div class="step-description">' + escapeHtml(s.description) + '</div>';
-            if (step.reason) stepsHtml += '<div class="step-reason">' + escapeHtml(step.reason) + '</div>';
-            stepsHtml += '</div></div>';
-        }
-        stepsHtml += '</div></div>';
-    }
-
-    // Build screenshots HTML
-    if (resultData.screenshots && resultData.screenshots.length > 0) {
-        stepsHtml += '<div class="screenshots-section"><h3>Screenshots</h3>';
-        stepsHtml += '<div class="screenshot-grid">';
-        for (const ss of resultData.screenshots) {
-            const ssUrl = '/static/' + run + '/' + encodeURIComponent(ss.name);
-            stepsHtml += '<img src="' + ssUrl + '" alt="screenshot" loading="lazy">';
-        }
-        stepsHtml += '</div></div>';
-    }
-
-    // Build full JSON if available
-    if (resultData.full_json) {
-        stepsHtml += '<details class="json-details"><summary>Show raw JSON</summary>';
-        stepsHtml += '<pre class="json-view">' + escapeHtml(JSON.stringify(resultData.full_json, null, 2)) + '</pre>';
-        stepsHtml += '</details>';
-    }
-
-    // Add video (find any mp4 in this run, typically only one per run)
-    var videoUrl = '';
-    for (var i = 0; i < files.length; i++) {
-        if (files[i].name.endsWith('.mp4')) {
-            videoUrl = '/static/' + run + '/' + files[i].name;
-            break;
-        }
-    }
-
-    if (videoUrl) {
-        bodyEl.innerHTML =
-            '<div class="test-body-layout">' +
-                '<div class="test-content">' +
-                    (stepsHtml || '<div class="loading" style="padding:0">No steps</div>') +
-                '</div>' +
-                '<div class="video-section">' +
-                    '<div class="video-container">' +
-                        '<video controls preload="metadata">' +
-                            '<source src="' + videoUrl + '" type="video/mp4">' +
-                            'Your browser does not support the video tag.' +
-                        '</video>' +
-                    '</div>' +
-                '</div>' +
-            '</div>';
+    // Steps go into the LEFT column of the row. The video and the
+    // device list are sibling columns (rendered by loadRun) — the video is
+    // filled here from the selected device's data, and selecting a device
+    // chip on the right loads that device's result.
+    const contentEl = document.getElementById('content-' + testName);
+    const detailHtml = buildTestDetailHtml(resultData, run);
+    if (contentEl) {
+        contentEl.innerHTML = detailHtml || '<div class="loading" style="padding:0">No data</div>';
     } else {
-        bodyEl.innerHTML = stepsHtml || '<div class="loading" style="padding:0">No data</div>';
+        bodyEl.innerHTML = detailHtml || '<div class="loading" style="padding:0">No data</div>';
+        return;
+    }
+
+    var videoUrl = '';
+    if (resultData.video && resultData.video.name) {
+        videoUrl = '/static/' + run + '/' + resultData.video.name;
+    }
+
+    const videoSec = document.getElementById('videosec-' + testName);
+    if (videoUrl && videoSec) {
+        videoSec.innerHTML =
+            '<div class="video-container">' +
+                '<video controls preload="metadata">' +
+                    '<source src="' + videoUrl + '" type="video/mp4">' +
+                    'Your browser does not support the video tag.' +
+                '</video>' +
+            '</div>';
+    } else if (videoSec) {
+        videoSec.innerHTML = '<div class="video-empty">No video for this test</div>';
     }
 }
 
+// Build the LEFT column (steps + the test file it ran from) for one test result.
+// SNAPSHOT step: status line plus baseline / actual / diff thumbnails.
+function snapshotHtml(snap) {
+    const labels = {match: 'Match', mismatch: 'Mismatch', missing: 'Baseline missing',
+                    recorded: 'Recorded', error: 'Error'};
+    let html = '<div class="snapshot-result ' + escapeHtml(snap.status || 'error') + '">';
+    html += '<div class="snapshot-head"><span class="snapshot-status">' + escapeHtml(labels[snap.status] || snap.status || '') + '</span>';
+    if (snap.screen_class) html += '<span class="snapshot-class">' + escapeHtml(snap.screen_class) + '</span>';
+    html += '</div>';
+    if (snap.message) html += '<div class="snapshot-message">' + escapeHtml(snap.message) + '</div>';
+    const panes = [['Baseline', snap.baseline_url], ['Actual', snap.actual_url], ['Diff', snap.diff_url]];
+    if (panes.some(function(p) { return p[1]; })) {
+        html += '<div class="snapshot-panes">';
+        for (const p of panes) {
+            html += '<figure class="snapshot-pane"><figcaption>' + p[0] + '</figcaption>';
+            html += p[1] ? '<a href="' + p[1] + '" target="_blank"><img src="' + p[1] + '" loading="lazy" alt="' + p[0] + '"></a>'
+                         : '<div class="snapshot-none">none</div>';
+            html += '</figure>';
+        }
+        html += '</div>';
+    }
+    return html + '</div>';
+}
+
+function buildTestDetailHtml(resultData, run) {
+    let html = '';
+    if ((resultData.status || '').toUpperCase() === 'UNAVAILABLE') {
+        // Setup failed on this device (app didn't build, locked, install
+        // failed): no steps ran, so show why and where to look.
+        html += '<div class="setup-failure"><div class="step-reason">Unavailable on this device: ' +
+            escapeHtml(resultData.error || 'setup failed') + '</div>';
+        if (resultData.log_url) {
+            html += '<a class="setup-log-btn" target="_blank" rel="noopener" href="' +
+                escapeHtml(resultData.log_url) + '">View logs</a>';
+        }
+        return html + '</div>';
+    }
+    const steps = resultData.steps || [];
+    if (steps.length > 0) {
+        html += '<div class="steps-section"><h3>Steps</h3>';
+        html += '<div class="steps-list">';
+        for (const step of steps) {
+            const stepStatus = (step.status || '').toLowerCase();
+            const s = step.step || step;
+            html += '<div class="step-row">';
+            html += '<span class="step-status ' + stepStatus + '"></span>';
+            html += '<div class="step-content">';
+            if (s.command) html += '<div class="step-command">' + escapeHtml(s.command) + '</div>';
+            if (s.args) html += '<div class="step-args">' + escapeHtml(s.args) + '</div>';
+            html += stepBlockHtml(s);
+            if (s.description) html += '<div class="step-description">' + escapeHtml(s.description) + '</div>';
+            if (step.reason) html += '<div class="step-reason">' + escapeHtml(step.reason) + '</div>';
+            if (step.snapshot) html += snapshotHtml(step.snapshot);
+            if (step.layout && step.layout.message) {
+                html += '<div class="step-layout ' + (step.layout.passed ? 'ok' : 'bad') + '">' + escapeHtml(step.layout.message) + '</div>';
+            }
+            html += '</div></div>';
+        }
+        html += '</div></div>';
+    }
+
+    const src = resultData.test_source;
+    if (src) {
+        // The .txt files this test ran from, saved by the runner in the run.
+        html += '<details class="source-details"><summary>Show test file</summary>';
+        if (src.instruction != null) {
+            html += '<div class="source-label">INSTRUCTION.txt</div>';
+            html += '<pre class="source-view">' + escapeHtml(src.instruction) + '</pre>';
+        }
+        html += '<div class="source-label">' + escapeHtml(src.test_file) + '</div>';
+        html += '<pre class="source-view">' + escapeHtml(src.test) + '</pre>';
+        html += '</details>';
+    }
+    return html;
+}
+
 loadRun();
+
+// Live updates. The server pushes the run's state over server-sent events
+// (/api/run-events/<run>): one `run` event on connect, then one whenever a
+// file of the run changes, so the page only re-renders when something
+// actually happened. When a test transitions to "running", its body is
+// rebuilt with the live MJPEG stream inline; when it completes,
+// loadTestCase() replaces the body with the recorded video, naturally
+// removing the live stream div. If the event stream is down (or the browser
+// has no EventSource), the old 2s poll of /api/pending takes over.
+function applyPendingUpdate(run, pendingData) {
+    refreshLiveStreamDevice(run);
+    if (pendingData && pendingData.tests) {
+        updateProgressPanel(pendingData.progress);
+        refreshDeviceSummary(run);
+        refreshCaseDashboard(run);
+        // Keep the iOS frame poller running while any test is running.
+        var anyRunning = pendingData.tests.some(function(t) {
+            return t.status === 'running';
+        });
+        iosFramesActive = anyRunning;
+        if (document.querySelectorAll('.test-case').length === 0 && pendingData.tests.length > 0) {
+            loadRun();
+            return;
+        }
+        for (var i = 0; i < pendingData.tests.length; i++) {
+            var t = pendingData.tests[i];
+            var bodyEl = document.getElementById('body-' + t.name);
+            if (!bodyEl) continue;
+
+            if (t.status !== 'running') {
+                // Test is no longer running (completed/failed/pending). If its
+                // body still shows the live-stream placeholder from when it was
+                // running, refresh it so loadTestCase() can swap in the final
+                // steps/recorded video — otherwise the stale live stream
+                // keeps showing whatever the device is doing for a *later* test.
+                if (bodyEl.querySelector('.live-stream-panel')) {
+                    loadTestCase(run, t.name, null, t, selectedDeviceId);
+                    loadTestDevices(run, t.name);
+                }
+                continue;
+            } else {
+                var badgeEl = document.getElementById('badge-' + t.name);
+
+                var hasLiveStream = bodyEl.querySelector('.live-stream-panel');
+                if (hasLiveStream) {
+                    var existingSteps = bodyEl.querySelector('.steps-list');
+                    if (existingSteps) {
+                        existingSteps.innerHTML = buildStepRows(t.name, t.steps || [], t.step_statuses);
+                    }
+                    if (badgeEl) {
+                        badgeEl.className = 'badge running';
+                        badgeEl.textContent = 'RUNNING';
+                    }
+                    loadTestDevices(run, t.name);
+                    continue;
+                }
+
+                var pending = t;
+                var stepsHtml = '';
+                if (pending.steps && pending.steps.length > 0) {
+                    stepsHtml += '<div class="steps-section"><h3>Steps (' + pending.steps.length + ')</h3>';
+                    stepsHtml += '<div class="steps-list">';
+                    stepsHtml += buildStepRows(t.name, pending.steps, pending.step_statuses);
+                    stepsHtml += '</div></div>';
+                }
+
+                var liveStepsHtml = stepsHtml || '<div class="loading" style="padding:0">No steps</div>';
+                var contentEl = document.getElementById('content-' + t.name);
+                var videoSec = document.getElementById('videosec-' + t.name);
+                if (contentEl) contentEl.innerHTML = liveStepsHtml;
+                if (videoSec) videoSec.innerHTML = '<div class="video-container">' + getLiveStreamMarkup() + '</div>';
+                bindLiveStreamPanels(bodyEl);
+                loadTestDevices(run, t.name);
+            }
+        }
+    }
+    // Rows showing a device whose test isn't finished follow THAT device (the
+    // update above follows the device picked in the summary, which may differ).
+    document.querySelectorAll('.test-row').forEach(function(row) {
+        const name = row.id.replace(/^test-/, '');
+        const sel = rowSelectedDevice[run + '/' + name];
+        if (!sel || sel === selectedDeviceId) return;
+        const badge = document.getElementById('badge-' + name);
+        const cls = badge ? badge.className : '';
+        if (/\b(pending|running)\b/.test(cls)) loadTestDevices(run, name);
+    });
+}
+
+let runEvents = null;        // the open EventSource
+let runEventsUrl = null;     // what it was opened for (run + selected device)
+let runEventsLive = false;   // connected: the poll below stands down
+
+// Open (or re-open, when the selected device changed) the run's event stream.
+function connectRunEvents(run) {
+    if (!window.EventSource) return;
+    const url = withSelectedDevice('/api/run-events/' + encodeURIComponent(run));
+    if (runEvents && runEventsUrl === url) return;
+    if (runEvents) runEvents.close();
+    runEventsLive = false;
+    runEventsUrl = url;
+    runEvents = new EventSource(url);
+    runEvents.addEventListener('run', function(e) {
+        runEventsLive = true;
+        let data;
+        try { data = JSON.parse(e.data); } catch (err) { return; }
+        applyPendingUpdate(run, data.pending);
+    });
+    // EventSource reconnects on its own; poll until it does.
+    runEvents.addEventListener('error', function() { runEventsLive = false; });
+}
+
+setInterval(function() {
+    if (runEventsLive) return;
+    var run = getQueryParam('run');
+    if (!run) return;
+    fetchJSON(withSelectedDevice('/api/pending/' + encodeURIComponent(run)))
+        .then(function(pendingData) { applyPendingUpdate(run, pendingData); })
+        .catch(function() { /* ignore poll failures */ });
+}, 2000);
+
+// ── Press overlay: mark where the running test taps/swipes on the live stream ──
+// The runner posts each tap/swipe to the viewer (/api/press-event) with
+// absolute device-pixel coordinates plus the screen size. We poll for new
+// events and draw a fading marker on the live stream panel.
+var pressSeenId = 0;
+var pressPolling = false;
+var iosFramesActive = false;  // true while any test in this run is running
+var iosFrameBusy = false;
+
+// iOS live view: there is no stream, so the view is one fresh
+// device screenshot at a time, polled while the run is active.
+function pollIosFrames() {
+    if (!iosFramesActive || iosFrameBusy) return;
+    var imgs = document.querySelectorAll('.ios-frame-img');
+    if (!imgs.length) return;
+    iosFrameBusy = true;
+    (function next(i) {
+        if (i >= imgs.length || !iosFramesActive) {
+            iosFrameBusy = false;
+            return;
+        }
+        var img = imgs[i];
+        if (!img.isConnected) { next(i + 1); return; }
+        var udid = img.getAttribute('data-udid') || '';
+        if (!udid) { next(i + 1); return; }
+        fetch('/api/frame/' + encodeURIComponent(udid) + '?t=' + Date.now())
+            .then(function(r) { return r.ok ? r.blob() : null; })
+            .then(function(blob) {
+                if (blob) {
+                    var panel = img.closest('.ios-frame-panel');
+                    var overlay = panel && panel.querySelector('.live-stream-overlay');
+                    if (overlay) overlay.style.display = 'none';
+                    img.src = URL.createObjectURL(blob);
+                    img.onload = function() { URL.revokeObjectURL(this.src); };
+                }
+            })
+            .catch(function() { /* frame fetch failed; keep the last frame */ })
+            .then(function() { setTimeout(function() { next(i + 1); }, 300); });
+    })(0);
+}
+setInterval(pollIosFrames, 900);
+
+function drawPressMarker(panel, ev) {
+    var overlay = panel.querySelector('.press-overlay');
+    if (!overlay) return;
+    var img = panel.querySelector('.live-stream-img');
+    var w = ev.w > 0 ? ev.w : (img && img.naturalWidth) || 0;
+    var h = ev.h > 0 ? ev.h : (img && img.naturalHeight) || 0;
+    if (!w || !h) return;
+    var el;
+    if (ev.kind === 'swipe' && ev.x2 !== undefined) {
+        el = document.createElement('div');
+        el.className = 'press-swipe';
+        var x1 = (ev.x / w) * 100, y1 = (ev.y / h) * 100;
+        var x2 = (ev.x2 / w) * 100, y2 = (ev.y2 / h) * 100;
+        var ang = Math.atan2((y2 - y1) * h / 100, (x2 - x1) * w / 100) * 180 / Math.PI;
+        var pxLen = Math.sqrt(Math.pow((x2 - x1) * w / 100, 2) + Math.pow((y2 - y1) * h / 100, 2));
+        el.style.left = x1 + '%';
+        el.style.top = y1 + '%';
+        el.style.width = (pxLen / w * 100) + '%'; // % of panel width
+        el.style.transform = 'rotate(' + ang + 'deg)';
+    } else {
+        el = document.createElement('div');
+        el.className = 'press-tap';
+        el.style.left = ((ev.x || 0) / w * 100) + '%';
+        el.style.top = ((ev.y || 0) / h * 100) + '%';
+    }
+    overlay.appendChild(el);
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 1800);
+}
+
+function pollPressEvents() {
+    var run = getQueryParam('run');
+    if (!run || pressPolling) return;
+    pressPolling = true;
+    fetchJSON('/api/press-events/' + encodeURIComponent(run))
+        .then(function(data) {
+            var events = (data && data.events) || [];
+            for (var i = 0; i < events.length; i++) {
+                var ev = events[i];
+                if (!ev.id || ev.id <= pressSeenId) continue;
+                pressSeenId = Math.max(pressSeenId, ev.id);
+                // Draw on every live stream panel on the page (one per running test)
+                var panels = document.querySelectorAll('.live-stream-panel');
+                for (var p = 0; p < panels.length; p++) {
+                    drawPressMarker(panels[p], ev);
+                }
+            }
+        })
+        .catch(function() { /* ignore poll failures */ })
+        .then(function() { pressPolling = false; });
+}
+setInterval(pollPressEvents, 1000);
 </script>
 </body>
 </html>

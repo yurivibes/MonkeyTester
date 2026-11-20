@@ -1,0 +1,4 @@
+# Simple login test
+
+SNAPSHOT: login_screen mask=status_bar
+VERIFY: Login screen is visible

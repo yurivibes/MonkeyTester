@@ -1,0 +1,38 @@
+name: Docs Drift Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  check-docs:
+    name: Check AGENTS.md is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: detect
+        run: |
+          # Gitea Actions provides these PR refs
+          if [ -n "${GITHUB_HEAD_SHA:-}" ] && [ -n "${GITHUB_BASE_SHA:-}" ]; then
+            git diff --name-only "$GITHUB_BASE_SHA" "$GITHUB_HEAD_SHA" > /tmp/changed_files.txt
+          else
+            # Fallback: compare against parent commit
+            git diff --name-only HEAD~1 HEAD > /tmp/changed_files.txt
+          fi
+
+      - name: Check documentation drift
+        run: bash .gitea/workflows/docs-drift.sh
+
+      - name: Failure notice
+        if: failure()
+        run: |
+          echo ""
+          echo "::error::Source files changed but AGENTS.md was not updated. Fix AGENTS.md and retry."
+          cat /tmp/changed_files.txt | while read f; do echo "  Changed: $f"; done

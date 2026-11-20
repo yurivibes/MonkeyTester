@@ -1,0 +1,8 @@
+*.py[cod]
+*.log
+Run/
+auth_config.json
+gitea_config.json
+build_config.json
+copilot_config.json
+service_tokens.json
