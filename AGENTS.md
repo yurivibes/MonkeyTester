@@ -34,8 +34,8 @@ MonkeyTester-Plugin-Mobile-Controller (Mac, port 8090) — separate repo
 
 Device plugins (Linux or Mac) — separate repos, contract in PLUGIN_API.md
   . MonkeyTester-Plugin-AI (Mac, port 8091): the vision model; address set in Settings → Device Plugins
-  . MonkeyTester-Plugin-Esp32-Sensor (port 8091 on the Linux host): esp32-sensor, the sensor boards
-  . MonkeyTester-Plugin-Esp32-Server (port 8093, fake server 8092): esp32-server, the hub boards
+  . MonkeyTester-Plugin-Esp32 (port 8091 on the Linux host): esp32-sensor, the sensor boards
+  . MonkeyTester-Plugin-Server (port 8093, fake server 8092): esp32-server, the hub boards
   . Reached by PLUGIN test steps through visual-tests/scripts/plugin_client.py
 
 Build plugins (Linux or Mac) — separate repos, contract in BUILD_PLUGIN_API.md
@@ -156,7 +156,7 @@ Implemented in `builds.py` (settings, projects, build records, state) and `build
 
 Build & Test projects live in `build_config.json` next to `app.py` (git-ignored, mode 0600, written atomically): `{"projects": [{"repo", "plugin", "branch"}]}`. Build plugin registrations live in the viewer's `config.json` `plugins` map — the same Settings → Plugins registry as the device plugins: a build entry is `{name: {"url", "token": ""}}` (an object marks a build plugin; a device plugin is the plain url string). The pairing token of every plugin (build and device) lives in `service_tokens.json` (`viewer_auth.plugin_token`, read by builds through `builds.TOKEN_LOOKUP`), sent as `X-Plugin-Token`, never returned — only `{configured, last4}`; a token still in config.json is moved there at viewer start. A repo is in at most one project (run history is keyed by repo). `branch` "" = the forge's default branch. Build records are `Run/.builds/build_<12 hex>.json`.
 
-Migration, once (at viewer start, or the first load when `build_config.json` doesn't exist): a `gitea_config.json` from the old built-in Gitea client becomes the plugin `build-gitea` at `http://127.0.0.1:8094` (no pairing token) plus one project per saved repo with its branch pick; the file is left in place (the build-gitea plugin imports its url+token) and never written. `VT_BUILD_PLUGINS=name=url[,name=url]` is imported the same way, once, into the shared `config.json` `plugins` map (later starts log that it is ignored). Nothing is written when there is nothing to import.
+Migration, once (at viewer start, or the first load when `build_config.json` doesn't exist): a `gitea_config.json` from the old built-in Gitea client becomes the plugin `build-local` at `VT_BUILD_LOCAL_URL` (default `http://127.0.0.1:8094`, no pairing token) plus one project per saved repo with its branch pick; the first time that plugin answers `/health` with `forge.configured` false, the viewer POSTs the saved url+token to its `/config` (`forge_kind: gitea`), then rewrites the file without the token as `gitea_config.json.migrated`. `VT_BUILD_PLUGINS=name=url[,name=url]` is imported the same way, once, into the shared `config.json` `plugins` map (later starts log that it is ignored). Nothing is written when there is nothing to import.
 
 | Method | Route | Description |
 |--------|-------|-------------|
@@ -180,7 +180,7 @@ Build records: `{id, repo, branch, platforms, cases, user, created, state, error
 
 Build `state`: `dispatching`, `queued`, `building` (CI run or a job in progress), `testing` (a run is attached), then `passed` (every run passed and the CI conclusion is `success`), `failed` (tests failed), `build_failed` (a platform's job failed before uploading anything, or nothing was uploaded), `dispatch_failed`, or `cancelled`. Jobs are matched to platforms by name (`Android …`/`iOS …`), else one job covers every platform. A build the plugin still reports as `pending` 180 s (`DISPATCH_FIND_TIMEOUT`) after it was created becomes `dispatch_failed` ("accepted the start but never started a run"); a `build_ref` the plugin answers 404 for becomes `dispatch_failed` too.
 
-Deprecated aliases of the old built-in Gitea client's routes (kept for old pages and scripts; they act on the plugin of the given repo's project, else `build-gitea` when registered, else the first plugin):
+Deprecated aliases of the old built-in Gitea client's routes (kept for old pages and scripts; they act on the plugin of the given repo's project, else `build-local` when registered, else the first plugin):
 
 | Method | Route | Maps onto |
 |--------|-------|-----------|
@@ -400,9 +400,9 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 | `DEBUG` | `false` | Enable debug output |
 | `VT_DISABLE_WEB_RUNS` | (empty) | Set to `1` to hide "Build & Test" from the nav. UI only: the pages still open by URL and their APIs (and CI) keep working. Empty, `0`, `false` or `off` = normal behaviour |
 | `VT_DEVICE_WAIT_SECS` | `3600` | How long a run queues for a busy device before failing |
-| `VT_BUILD_PLUGINS` | (empty) | Build plugins `name=url[,name=url]`, e.g. `build-github=http://127.0.0.1:8095`. Imported once into the shared `config.json` `plugins` map, when `build_config.json` doesn't exist yet; afterwards Settings → Plugins owns the list and the variable is ignored |
+| `VT_BUILD_PLUGINS` | (empty) | Build plugins `name=url[,name=url]`, e.g. `build-local=http://127.0.0.1:8094`. Imported once into the shared `config.json` `plugins` map, when `build_config.json` doesn't exist yet; afterwards Settings → Plugins owns the list and the variable is ignored |
 | `VT_PLUGINS` | (empty) | Device plugins tests may call: `name=url[,name=url]`, e.g. `esp32=http://127.0.0.1:8091`. Not for monkeytester-ai: its address is set in Settings → Device Plugins (`visual_plugin_url`); an entry here is imported once at viewer start, then ignored |
-| `VT_MANAGED_AI_PLUGIN_URL` | (empty) | With `VT_MANAGED_AI_PLUGIN_TOKEN`: the monkeytester-ai plugin's address, supplied by the (archived) MonkeyTester Mac app on every launch ("managed mode"; legacy, inert unless both variables are set). Wins over config.json `visual_plugin_url` in the viewer and the runner; never written to config.json; the `VT_PLUGINS` import is skipped; the Configure panel shows the address read-only and address/token/removal edits get 409. Either variable missing = off |
+| `VT_MANAGED_AI_PLUGIN_URL` | (empty) | With `VT_MANAGED_AI_PLUGIN_TOKEN`: the monkeytester-ai plugin's address, supplied by a launcher app on every launch ("managed mode"; legacy, inert unless both variables are set). Wins over config.json `visual_plugin_url` in the viewer and the runner; never written to config.json; the `VT_PLUGINS` import is skipped; the Configure panel shows the address read-only and address/token/removal edits get 409. Either variable missing = off |
 | `VT_MANAGED_AI_PLUGIN_TOKEN` | (empty) | With `VT_MANAGED_AI_PLUGIN_URL`: the pairing token for every monkeytester-ai call (viewer proxy and the runner's `/v1/chat/completions` key), winning over config.json `visual_api_key` |
 | `PLUGIN_TOKEN` | (empty) | Legacy: imported once (for every plugin registered at the first start) into `service_tokens.json`, then dropped from the viewer's environment |
 | `VT_PLUGIN_TOKEN_<NAME>` | (empty) | Legacy: imported once for that plugin; afterwards the viewer sets it itself from `service_tokens.json` so runners send the Settings value |
@@ -414,11 +414,10 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 |------|---------|
 | 8089 | `app.py` — Web viewer + stream proxy (ThreadingHTTPServer) |
 | 8090 | Mobile Controller, on the Mac (separate repo) |
-| 8091 | MonkeyTester-Plugin-Esp32-Sensor (`esp32-sensor`) on the Linux host; MonkeyTester-Plugin-AI on the Mac (separate repos) |
-| 8092 | Fake server of MonkeyTester-Plugin-Esp32-Server (separate repo) |
-| 8093 | MonkeyTester-Plugin-Esp32-Server (`esp32-server`) device plugin (separate repo) |
-| 8094 | MonkeyTester-Build-Gitea (`build-gitea`) build plugin (separate repo) |
-| 8095 | MonkeyTester-Build-GitHub (`build-github`) build plugin (separate repo) |
+| 8091 | MonkeyTester-Plugin-Esp32 (`esp32-sensor`) on the Linux host; MonkeyTester-Plugin-AI on the Mac (separate repos) |
+| 8092 | Fake server of MonkeyTester-Plugin-Server (separate repo) |
+| 8093 | MonkeyTester-Plugin-Server (`esp32-server`) device plugin (separate repo) |
+| 8094 | MonkeyTester-Plugin-Build-Local (`build-local`) build plugin (separate repo) |
 
 ### Settings files
 | File | Holds |
@@ -426,7 +425,7 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 | `Run/config.json` | Viewer config: video size, theme, Test Variables, device plugins (`plugins`), the AI plugin address |
 | `Conf/device_names.json` | Device id → friendly name |
 | `build_config.json` | Build & Test: build plugins and projects (0600, git-ignored; see API — Build & Test) |
-| `gitea_config.json` | Old built-in Gitea client settings: read once to migrate, never written; the build-gitea plugin imports its url+token |
+| `gitea_config.json` | Old built-in Gitea client settings: read once to migrate, never written; the viewer hands its url+token to the build-local plugin once, then renames it `gitea_config.json.migrated` without the token |
 
 ## Result Storage
 
@@ -460,4 +459,4 @@ results from different devices.
 3. Run tests: `cd visual-tests/scripts && CONTROLLER_URL=http://192.168.125.5:8090 python3 run_on_device.py --device 192.168.1.100:5555 tests/my_test.txt`
 4. View results: `http://127.0.0.1:8089/`
 5. Run from web UI: open Build & Test at `http://127.0.0.1:8089/build.html`
-6. Unit tests: `nix run .#tests`, or without Nix the `python3 -m unittest …` line from `.gitea/workflows/test.yml` (CI runs exactly that list; keep `flake.nix`'s copy of it in step).
+6. Unit tests: `nix run .#tests`, or without Nix the `python3 -m unittest …` line from `.gitea/workflows/test.yml` (keep `flake.nix`'s copy of that list in step).

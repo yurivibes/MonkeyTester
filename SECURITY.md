@@ -22,16 +22,14 @@ this repo and gives the overview for the whole MonkeyTester family. It does **no
 | ESP32 sensor plugin | Linux | 8091 | `127.0.0.1` (`PLUGIN_BIND`) | `PLUGIN_TOKEN` (`X-Plugin-Token`); mandatory on a non-loopback bind |
 | ESP32 hub plugin | Linux | 8093 | `127.0.0.1` (`PLUGIN_BIND`) | `PLUGIN_TOKEN`; mandatory on a non-loopback bind |
 | ESP32 fake hub | Linux | LAN | LAN on purpose: the real sensor board connects to it over Wi-Fi | see that repo's SECURITY.md |
-| Website | Linux | 8001 | `0.0.0.0` | none — public static site by design; never serves `.git` or dotfiles |
 | Mobile-Controller | Mac .71 | 8090 | LAN | `CONTROLLER_TOKEN` (`X-Controller-Token`); mandatory on a non-loopback bind |
 | Build-Local plugin | Mac | 8094 | LAN | `PLUGIN_TOKEN` (`X-Plugin-Token`); mandatory on a non-loopback bind |
 | MonkeyTester-Plugin-AI plugin | Mac | 8091 | `--lan` | `VTAI_TOKEN` (pairing token) |
 
 Every service compares tokens with `hmac.compare_digest`. `/health` stays unauthenticated on
 each service and only says that the service is up (no config, no secrets). The viewer reaches
-the ESP32 plugins on `127.0.0.1` and the Mac services over the LAN. The MonkeyTester Mac app is
-archived; its leftovers in the viewer (`VT_MANAGED_AI_PLUGIN_*`) are inert unless both variables
-are set.
+the ESP32 plugins on `127.0.0.1` and the Mac services over the LAN. The legacy managed-mode
+variables in the viewer (`VT_MANAGED_AI_PLUGIN_*`) are inert unless both are set.
 
 ## The viewer (this repo)
 
@@ -198,5 +196,5 @@ The low findings that remain are `try/except: pass` blocks, `import subprocess`,
 
 ## Reporting a problem
 
-Open an issue in this repository on the home Gitea (`yurivibes/MonkeyTester`), or tell the
+Open an issue at https://github.com/yurivibes/MonkeyTester/issues, or tell the
 maintainer directly. Don't post working exploit details or real tokens in public places.
