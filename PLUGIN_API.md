@@ -9,7 +9,7 @@ Implementations:
 
 | Plugin | Repo | Default port |
 |---|---|---|
-| `esp32` | [MonkeyTester-Plugin-Esp32-Sensor](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32) | 8091 |
+| `esp32` | [MonkeyTester-Plugin-Esp32](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32) | 8091 |
 | `monkeytester-ai` | [MonkeyTester-Plugin-AI](https://github.com/yurivibes/MonkeyTester-Plugin-AI) | 8091 (on the Mac, e.g. `http://192.168.125.71:8091`); address set in Settings → Device Plugins, not `VT_PLUGINS` |
 
 The Mobile Controller still uses its own API (`API.md` in that repo); moving it onto
@@ -308,7 +308,7 @@ a block on a step that also has `script=` all fail the step, naming the line.
 This is how a test tells a device how to behave without the plugin or MonkeyTester
 knowing the device's language. Example, for an app test against a sensor board
 (the rule language is the firmware's, see `docs/vt-control.md` in
-Esp32-Sensor):
+the sensor firmware):
 
 ```
 PLUGIN: esp32 flash firmware_dir=${FIRMWARE_DIR}

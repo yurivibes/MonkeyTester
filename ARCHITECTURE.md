@@ -25,7 +25,7 @@
                           ┌───────────────────────────────────┐
                           │ Device plugins (separate repos),  │
                           │ on the Linux host or the Mac      │
-                          │  MonkeyTester-Plugin-Esp32-Sensor :8091  │
+                          │  MonkeyTester-Plugin-Esp32 :8091  │
                           │   └─ esptool, serial ─► ESP32     │
                           └───────────────────────────────────┘
 
@@ -47,7 +47,7 @@ and it knows nothing about tests or vision models.
 
 Other hardware is reached through **device plugins**: separate services, each owning one
 kind of hardware, that implement the contract in `PLUGIN_API.md` (health, devices,
-actions with param schemas, and jobs). MonkeyTester-Plugin-Esp32-Sensor (port 8091, Linux or Mac) is the
+actions with param schemas, and jobs). MonkeyTester-Plugin-Esp32 (port 8091, Linux or Mac) is the
 first. Tests call them with `PLUGIN:` steps; the plugins to use come from the `plugins`
 map in `Run/config.json` (Settings → Device Plugins; a `VT_PLUGINS` environment variable
 is imported into that map once at viewer start and ignored after that).
@@ -180,7 +180,7 @@ its local model, forwards to a remote OpenAI-compatible server (Remote server: a
 resize switch and optional API key, all stored by the plugin), or forwards to GitHub Copilot
 (Settings → Device Plugins → monkeytester-ai → Configure). The plugin's own address is set on
 the same page and stored in `Run/config.json` as `visual_plugin_url` — the one source for the
-viewer and the runner — except in managed mode, where the MonkeyTester Mac app passes
+viewer and the runner — except in managed mode, where a launcher app passes
 `VT_MANAGED_AI_PLUGIN_URL` + `VT_MANAGED_AI_PLUGIN_TOKEN` (both required) and those win in the
 viewer and the runner (inherited env) without being written to config.json; the panel then shows
 the address read-only and the API refuses address/token edits with 409. A `monkeytester-ai` entry in
@@ -191,7 +191,7 @@ ignored after that). The plugin keeps the GitHub sign-in; the viewer stores no G
 Copilot code. A config.json still saying `visual_provider: "copilot"` stops the runner at start.
 
 **Vision settings** come from the environment unless an endpoint is saved in Settings, which wins.
-(Legacy: the archived MonkeyTester-Mac app used this and the managed mode above; both stay
+(Legacy: an old launcher app used this and the managed mode above; both stay
 harmless when the variables are unset.)
 
 **Device lists** can be partial. If one platform fails, the other's devices stay usable and the
@@ -242,15 +242,14 @@ reason appears as the error next to them.
 python3 -m unittest test_ci_delivery test_controller_client test_platform_targeting test_vision_analyzer test_app_api test_plugin_client test_snapshots test_builds test_build_plugin_client test_platform_steps test_vt_file_payload test_vt_payload_upload test_test_variables test_stale_runs test_projects test_viewer_auth test_security_hardening
 ```
 
-These use stubs for the controller, the vision model and a build plugin (`fake_build_plugin.py`), and run the real `app.py` server. Real
-controller code is tested against this client in MonkeyTester-Mac's `Tests/test_contracts.py`,
-which has both repos as submodules. `.gitea/workflows/test.yml` runs them on PRs.
+These use stubs for the controller, the vision model and a build plugin (`fake_build_plugin.py`), and run the real `app.py` server. The
+same list is in `.gitea/workflows/test.yml`.
 
 ## External Dependencies
 - MonkeyTester-Plugin-Mobile-Controller, on the Mac, for all device access
 - `ffmpeg`, for WebM conversion of saved videos
 - Vision model API (Qwen2.5-VL or similar), called by `vision_analyzer.py`
-- Device plugins such as MonkeyTester-Plugin-Esp32-Sensor, optional, only for tests with `PLUGIN` steps
+- Device plugins such as MonkeyTester-Plugin-Esp32, optional, only for tests with `PLUGIN` steps
 - A build plugin (MonkeyTester-Plugin-Build-Local, `build-local`, port 8094), for Build & Test: it fetches the code from Gitea or GitHub and builds it on its own host
 
 ## Nix Flake

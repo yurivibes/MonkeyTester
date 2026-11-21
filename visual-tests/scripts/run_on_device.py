@@ -78,7 +78,7 @@ elif _VISUAL_CONFIG:
     if ak:
         os.environ["VISUAL_MODEL_API_KEY"] = ak
 
-# Managed mode: the MonkeyTester Mac app passes the monkeytester-ai plugin's
+# Managed mode: a launcher app passes the monkeytester-ai plugin's
 # address and pairing token (both required) to the viewer, and the runner
 # inherits them. They win over config.json (visual_plugin_url,
 # visual_api_key) — the same rule as the viewer's managed_ai_plugin().
