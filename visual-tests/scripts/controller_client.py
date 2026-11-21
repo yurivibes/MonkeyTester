@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Device executor for test runs: an HTTP client for MonkeyTester-Mobile-Controller.
+Device executor for test runs: an HTTP client for MonkeyTester-Plugin-Mobile-Controller.
 
 The Mobile Controller owns every device, iOS and Android, and is its own repo and
 service. This module is what the runner calls for every device operation, so
@@ -49,7 +49,7 @@ def _controller_url():
     if not url:
         raise RuntimeError(
             "CONTROLLER_URL is not set — point MonkeyTester at "
-            "MonkeyTester-Mobile-Controller (e.g. http://192.168.125.5:8090).")
+            "MonkeyTester-Plugin-Mobile-Controller (e.g. http://192.168.125.5:8090).")
     return url.rstrip("/")
 
 
@@ -226,7 +226,7 @@ def get_screen_info():
         scale = float(body["scale"])
     except (KeyError, TypeError, ValueError):
         raise RuntimeError("the controller reported no screen scale; update "
-                           "MonkeyTester-Mobile-Controller (GET /devices/<id>/screen "
+                           "MonkeyTester-Plugin-Mobile-Controller (GET /devices/<id>/screen "
                            "must return width, height and scale)")
     if width <= 0 or height <= 0 or scale <= 0:
         raise RuntimeError(f"bad screen info from the controller: {body}")

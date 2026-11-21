@@ -8,13 +8,13 @@ exact screen position where it is pressing.
 
 MonkeyTester is the web view and the orchestration between the vision model and the
 device. Devices are owned by a separate service,
-[MonkeyTester-Mobile-Controller](http://192.168.125.70:3000/yurivibes/MonkeyTester-Mobile-Controller),
+[MonkeyTester-Plugin-Mobile-Controller](https://github.com/yurivibes/MonkeyTester-Plugin-Mobile-Controller),
 which runs on a Mac. The two talk only over HTTP.
 
 ```
         Linux host (192.168.125.70)                 Mac (192.168.125.5)
 ┌─────────────────────────────────────────┐   ┌──────────────────────────────────┐
-│  viewer (app.py) :8089                  │   │  MonkeyTester-Mobile-Controller  │
+│  viewer (app.py) :8089                  │   │  MonkeyTester-Plugin-Mobile-Controller  │
 │   ├── serves the run pages              │   │  :8090                           │
 │   ├── /stream/<id>, /api/frame/<id> ────┼──►│   ├── Appium, devicectl          │
 │   └── press overlay (tap/swipe markers) │   │   └── adb, ffmpeg                │
@@ -44,16 +44,16 @@ standard library, so there is no `pip install` step. They need:
 | `git` | clone the repo | yes |
 | Pillow | only `visual-tests/scripts/generate_placeholders.py` | no |
 
-Phones are driven by [MonkeyTester-Mobile-Controller](http://192.168.125.70:3000/yurivibes/MonkeyTester-Mobile-Controller)
-on a Mac and the vision model by [MonkeyTester-AI](http://192.168.125.70:3000/yurivibes/MonkeyTester-AI);
-ESP32 boards by [MonkeyTester-Esp32-Sensor](http://192.168.125.70:3000/yurivibes/MonkeyTester-Esp32-Sensor)
-and [MonkeyTester-Esp32-Server](http://192.168.125.70:3000/yurivibes/MonkeyTester-Esp32-Server).
+Phones are driven by [MonkeyTester-Plugin-Mobile-Controller](https://github.com/yurivibes/MonkeyTester-Plugin-Mobile-Controller)
+on a Mac and the vision model by [MonkeyTester-Plugin-AI](https://github.com/yurivibes/MonkeyTester-Plugin-AI);
+ESP32 boards by [MonkeyTester-Plugin-Esp32-Sensor](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32)
+and [MonkeyTester-Plugin-Esp32-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server).
 Build & Test builds your app through a build plugin (see [Build & Test](#build--test)).
 Each is a separate repo with its own install steps, and none of them is needed to install
 the viewer or run its tests.
 
 Clone this repository from wherever you got it (its home is
-[yurivibes/MonkeyTester](http://192.168.125.70:3000/yurivibes/MonkeyTester)) and
+[yurivibes/MonkeyTester](https://github.com/yurivibes/MonkeyTester)) and
 work from the checkout:
 
 ```bash
@@ -143,9 +143,9 @@ See `SECURITY.md` for the threat model and what is not covered (no TLS: use a VP
 Request limits and hardening (path checks, 1 MiB JSON cap, upload cap → 413, security headers)
 are listed in `SECURITY.md` under "Code hardening".
 
-This needs a Mobile Controller and, if you use it, a MonkeyTester-AI on API version 2.
+This needs a Mobile Controller and, if you use it, a MonkeyTester-Plugin-AI on API version 2.
 Open `/api/status` to check that the viewer can reach both. For the vision model,
-add the MonkeyTester-AI service in **Settings → Device Plugins**, in the monkeytester-ai
+add the MonkeyTester-Plugin-AI service in **Settings → Device Plugins**, in the monkeytester-ai
 row's **Configure** panel (the **Plugin address** field and **Pairing token** block at its top):
 its address (e.g. `http://192.168.125.71:8091`) and pairing token. The viewer checks both
 first (`/health` must be the monkeytester-ai plugin and `/config` must accept the token) and
@@ -215,8 +215,8 @@ Other hardware (ESP32 boards, …) is driven through **device plugins**, separat
 services that follow [PLUGIN_API.md](PLUGIN_API.md). Register them in the **Manage device
 plugins** box on the Settings → Device Plugins page — a name and an address (e.g.
 `esp32-sensor=http://127.0.0.1:8091` and `esp32-server=http://127.0.0.1:8093`
-for [MonkeyTester-Esp32-Sensor](http://192.168.125.70:3000/yurivibes/MonkeyTester-Esp32-Sensor) and
-[MonkeyTester-Esp32-Server](http://192.168.125.70:3000/yurivibes/MonkeyTester-Esp32-Server));
+for [MonkeyTester-Plugin-Esp32-Sensor](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32) and
+[MonkeyTester-Plugin-Esp32-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server));
 an address is saved (in the `plugins` map of `Run/config.json`) only once its `GET /health`
 answers with the plugin contract, and a `VT_PLUGINS=name=url[,name=url]` environment
 variable is imported into that map once at viewer start and ignored after that. Call
@@ -260,7 +260,7 @@ read-only access token; the viewer never sees that token.
 
 | Plugin | Repo | Default port | What it does |
 |---|---|---|---|
-| `build-local` | [MonkeyTester-Build-Local](http://192.168.125.70:3000/yurivibes/MonkeyTester-Build-Local) | 8094 | Fetches the code from Gitea or GitHub and builds it on its own host: Android and iOS on a Mac, Android only on Linux |
+| `build-local` | [MonkeyTester-Plugin-Build-Local](https://github.com/yurivibes/MonkeyTester-Plugin-Build-Local) | 8094 | Fetches the code from Gitea or GitHub and builds it on its own host: Android and iOS on a Mac, Android only on Linux |
 
 Any other build system can be connected by a plugin that implements the same contract.
 

@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     img.style.display = 'none';
     img.removeAttribute('src');
     const guide = 'No devices yet — connect a device source first:\n' +
-      '\u2022 Phones and tablets: run MonkeyTester-Mobile-Controller on the machine the devices plug into, then start the viewer with CONTROLLER_URL=http://<controller-host>:<port>.\n' +
+      '\u2022 Phones and tablets: run MonkeyTester-Plugin-Mobile-Controller on the machine the devices plug into, then start the viewer with CONTROLLER_URL=http://<controller-host>:<port>.\n' +
       '\u2022 Extra devices (ESP32 boards, the vision model): configure them in Settings \u2192 Device Plugins.';
     placeholder.innerHTML = escapeHtml(guide).replace(/\n/g, '<br>');
     placeholder.style.display = 'block';

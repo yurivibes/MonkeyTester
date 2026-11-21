@@ -21,7 +21,7 @@ from build_fixture import BUILD_ID, add_build
 
 
 class Peer(BaseHTTPRequestHandler):
-    """Stands in for the Mobile Controller or MonkeyTester-AI."""
+    """Stands in for the Mobile Controller or MonkeyTester-Plugin-AI."""
     health = {}
     status = 200
     paths = []

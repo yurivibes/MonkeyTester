@@ -2,18 +2,18 @@
 """
 Client for the vision model, used to find UI elements by description.
 
-Speaks the OpenAI-style chat completions API, which MonkeyTester-AI, llama.cpp and
+Speaks the OpenAI-style chat completions API, which MonkeyTester-Plugin-AI, llama.cpp and
 hosted services all offer. Every call goes through chat(), so timeouts, auth,
 retries and error text are the same everywhere. Standard library only.
 
-The usual endpoint is the MonkeyTester-AI plugin's /v1/chat/completions. The
+The usual endpoint is the MonkeyTester-Plugin-AI plugin's /v1/chat/completions. The
 plugin decides which provider answers (its local Ollama model or GitHub Copilot,
 chosen in Settings → Device Plugins → monkeytester-ai → Configure), so this
 module never talks to Copilot itself and holds no GitHub token.
 
 Environment (read on each call, because run_on_device.py sets these from config):
   VISION_MODEL_API_URL  — chat completions URL (or VISUAL_MODEL_ENDPOINT)
-  VISION_MODEL_NAME     — model name (or VISUAL_MODEL_NAME); MonkeyTester-AI ignores it
+  VISION_MODEL_NAME     — model name (or VISUAL_MODEL_NAME); MonkeyTester-Plugin-AI ignores it
   VISUAL_MODEL_API_KEY  — bearer token (the plugin's pairing token), when needed
   VISION_TIMEOUT_SECS   — seconds to wait for one reply (default 310)
 """
@@ -28,7 +28,7 @@ from datetime import datetime
 
 DEFAULT_URL = "http://127.0.0.1:8081/v1/chat/completions"
 DEFAULT_MODEL = "Qwen_Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf"
-# Longer than MonkeyTester-AI's own 300s limit, so its answer arrives rather than a
+# Longer than MonkeyTester-Plugin-AI's own 300s limit, so its answer arrives rather than a
 # timeout here. A reloading model or a queued parallel run can take minutes.
 DEFAULT_TIMEOUT_SECS = 310
 RETRY_DELAYS_SECS = (2, 5)  # model restarting, or the service not listening yet

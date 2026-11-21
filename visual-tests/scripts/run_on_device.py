@@ -38,7 +38,7 @@ for _cfg_path in _CONFIG_SOURCES:
             pass
 
 COPILOT_MOVED_MESSAGE = (
-    "GitHub Copilot is now configured on the MonkeyTester-AI plugin: Settings → "
+    "GitHub Copilot is now configured on the MonkeyTester-Plugin-AI plugin: Settings → "
     "Device Plugins → monkeytester-ai → Configure → GitHub Copilot")
 
 if _VISUAL_CONFIG and (_VISUAL_CONFIG.get("visual_provider") or "").strip() == "copilot":

@@ -12,7 +12,7 @@ Implementations:
 
 | Plugin | Repo | Default port | What it does |
 |---|---|---|---|
-| `build-local` | MonkeyTester-Build-Local | 8094 | Fetches the code from Gitea or GitHub and builds it on its own host: Android and iOS on a Mac, Android only on Linux |
+| `build-local` | MonkeyTester-Plugin-Build-Local | 8094 | Fetches the code from Gitea or GitHub and builds it on its own host: Android and iOS on a Mac, Android only on Linux |
 
 ## Who owns what
 

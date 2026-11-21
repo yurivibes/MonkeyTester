@@ -169,7 +169,7 @@ details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
 
     <div class="settings-section" id="deviceConfigSection">
         <div class="plugins-section-title">Controller Plugin</div>
-        <div class="config-info">The <strong>Mobile Controller</strong> plugin (repo <code>MonkeyTester-Mobile-Controller</code>) owns the devices connected to it: it serves the device list and runs the test steps on them. Register its address in the <strong>Manage Mobile Controller</strong> box below; the saved list lives in <code>Run/config.json</code> as <code>controller_url</code>, and the <code>CONTROLLER_URL</code> environment variable is imported into it once on the first viewer start, after which Settings owns the address. Set friendly names for those devices; the names replace the runner-recorded names on run pages.</div>
+        <div class="config-info">The <strong>Mobile Controller</strong> plugin (repo <code>MonkeyTester-Plugin-Mobile-Controller</code>) owns the devices connected to it: it serves the device list and runs the test steps on them. Register its address in the <strong>Manage Mobile Controller</strong> box below; the saved list lives in <code>Run/config.json</code> as <code>controller_url</code>, and the <code>CONTROLLER_URL</code> environment variable is imported into it once on the first viewer start, after which Settings owns the address. Set friendly names for those devices; the names replace the runner-recorded names on run pages.</div>
         <div class="plugin-manage" id="controllerManage"></div>
         <div class="settings-status" id="controllerManageStatus" hidden></div>
         <div class="config-save-all">
