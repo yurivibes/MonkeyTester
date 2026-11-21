@@ -42,7 +42,7 @@ for _secrets_file in (builds.CONFIG_FILE, builds.LEGACY_GITEA_FILE, CONFIG_FILE)
 _LEGACY_COPILOT_FILE = Path(__file__).parent / "copilot_config.json"
 if _LEGACY_COPILOT_FILE.exists():
     print("DEPRECATED: copilot_config.json is no longer used — GitHub Copilot is signed in on "
-          "the MonkeyTester-AI plugin now. Delete the file (it holds a GitHub token).",
+          "the MonkeyTester-Plugin-AI plugin now. Delete the file (it holds a GitHub token).",
           file=sys.stderr, flush=True)
 
 
@@ -94,7 +94,7 @@ def save_device_names(data):
 
 
 def _controller_url():
-    """Base URL of MonkeyTester-Mobile-Controller, which owns every device.
+    """Base URL of MonkeyTester-Plugin-Mobile-Controller, which owns every device.
     Returns '' when unconfigured. Settings → Plugins → Controller Plugin
     owns the address once Run/config.json has the controller_url key (the
     key's presence is the ownership marker, like the plugins map's): a
@@ -256,7 +256,7 @@ DEVICE_ID_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z:._-]{3,}")
 SERVICE_NAME = "monkeytester"
 API_VERSION = 1  # of this viewer's /health and /api/status; see AGENTS.md
 CONTROLLER_API_VERSION = 2
-VISION_API_VERSION = 2  # MonkeyTester-AI; other OpenAI-style endpoints have no /health
+VISION_API_VERSION = 2  # MonkeyTester-Plugin-AI; other OpenAI-style endpoints have no /health
 
 
 def _get_json(url, headers=None, timeout=5):
@@ -543,7 +543,7 @@ def vision_settings():
 
 
 COPILOT_MOVED_MESSAGE = (
-    "GitHub Copilot is now configured on the MonkeyTester-AI plugin: Settings → "
+    "GitHub Copilot is now configured on the MonkeyTester-Plugin-AI plugin: Settings → "
     "Device Plugins → monkeytester-ai → Configure → GitHub Copilot")
 
 
@@ -572,7 +572,7 @@ def models_url(chat_url):
 
 
 def list_local_models(chat_url, api_key=""):
-    """Model ids an OpenAI-style endpoint offers (llama-server, Ollama, MonkeyTester-AI).
+    """Model ids an OpenAI-style endpoint offers (llama-server, Ollama, MonkeyTester-Plugin-AI).
 
     llama-server's router marks which model is loaded; that is passed through so
     the page can preselect it.
@@ -593,7 +593,7 @@ def list_local_models(chat_url, api_key=""):
 
 
 def vision_status():
-    """The vision model's state, for /api/status. /health is MonkeyTester-AI's;
+    """The vision model's state, for /api/status. /health is MonkeyTester-Plugin-AI's;
     an endpoint without one (llama.cpp, hosted APIs) is reported as unchecked.
     The new plugin-based local provider is checked through the plugin's own
     /health on the plugin contract."""

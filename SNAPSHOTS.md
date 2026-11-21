@@ -7,7 +7,7 @@ screen size because they measure in points (iOS) or dp (Android), never raw pixe
 - `ASSERT_LAYOUT` checks where tagged elements are relative to each other or to the screen.
 
 Both need a Mobile Controller whose `GET /devices/<id>/screen` returns `scale` and which serves
-`GET /devices/<id>/elements` (MonkeyTester-Mobile-Controller API.md). With an older controller the
+`GET /devices/<id>/elements` (MonkeyTester-Plugin-Mobile-Controller API.md). With an older controller the
 steps fail and name the missing piece.
 
 ## SNAPSHOT

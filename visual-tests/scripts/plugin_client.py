@@ -534,7 +534,7 @@ def _visual_config(client, timeout):
             "remote": cfg["remote"]}
 
 
-# ── MonkeyTester-AI plugin configuration (GET/POST /config, /copilot/*) ──
+# ── MonkeyTester-Plugin-AI plugin configuration (GET/POST /config, /copilot/*) ──
 # The AI plugin owns the whole vision-provider configuration: its local Ollama
 # model, the remote OpenAI-compatible server (address, model, resize switch,
 # API key), the GitHub Copilot sign-in and which of the three answers vision calls.
@@ -617,7 +617,7 @@ def ai_config(client, timeout=None):
 
 def _wire_config(payload):
     """The plugin's POST /config spelling of one change. A rotation is
-    {"token": {"generate": true}} on the wire (MonkeyTester-AI API.md); a bare
+    {"token": {"generate": true}} on the wire (MonkeyTester-Plugin-AI API.md); a bare
     {"generate": true} is refused there with "unknown setting: generate"."""
     if "generate" in payload:
         rest = {k: v for k, v in payload.items() if k != "generate"}

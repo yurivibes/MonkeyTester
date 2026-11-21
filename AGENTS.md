@@ -1,7 +1,7 @@
 # MonkeyTester — Agent Guide
 
 ## Purpose
-The web view and test orchestration for AI-driven visual testing. Tests use a vision model (Qwen2.5-VL or equivalent) to find UI elements and verify screens, on real iPhones and Android phones. Devices are owned by a separate service, [MonkeyTester-Mobile-Controller](http://192.168.125.70:3000/yurivibes/MonkeyTester-Mobile-Controller), which this repo reaches only over HTTP. Build & Test starts builds through a build plugin (`BUILD_PLUGIN_API.md`, see "API — Build & Test"); the plugin fetches the code from Gitea or GitHub and builds it on its own host, and the apps reach the viewer through `ci/visual-test/submit.py` (see "API — CI upload").
+The web view and test orchestration for AI-driven visual testing. Tests use a vision model (Qwen2.5-VL or equivalent) to find UI elements and verify screens, on real iPhones and Android phones. Devices are owned by a separate service, [MonkeyTester-Plugin-Mobile-Controller](https://github.com/yurivibes/MonkeyTester-Plugin-Mobile-Controller), which this repo reaches only over HTTP. Build & Test starts builds through a build plugin (`BUILD_PLUGIN_API.md`, see "API — Build & Test"); the plugin fetches the code from Gitea or GitHub and builds it on its own host, and the apps reach the viewer through `ci/visual-test/submit.py` (see "API — CI upload").
 
 ## Setup (do this first)
 Install the dependencies with the steps in README.md → **Install** before running or testing anything; that section is the single source for them, so don't install from memory. In short:
@@ -12,7 +12,7 @@ Install the dependencies with the steps in README.md → **Install** before runn
 
 ## Critical Rules
 - **Never modify the code in place.** Don't edit the main checkout (`/mnt/raid1/Workspace/MonkeyTester/MonkeyTester`), which serves the live instance on port 8089, and don't test changes there. Make every change on a branch in its own git worktree and raise a PR. To test it, start a new instance on a new port with `/mnt/raid1/Workspace/visualtest-pr-test/pr-test.sh start <pr-number>`, which gives the PR its own worktree, its own copy of `Run/` and `Conf/`, and a free port in 8100-8199. Use `refresh` after pushing more commits and `stop` when finished.
-- **No device code in this repo.** adb, Appium, devicectl and video capture belong in MonkeyTester-Mobile-Controller. Everything here goes through its HTTP API (`API.md` in that repo).
+- **No device code in this repo.** adb, Appium, devicectl and video capture belong in MonkeyTester-Plugin-Mobile-Controller. Everything here goes through its HTTP API (`API.md` in that repo).
 - **If any endpoint or functionality changes, update this AGENTS.md immediately.** Document the new/changed endpoint, method, path, request/response format, and purpose.
 - **If the architecture changes (new services, new ports, new components), update `ARCHITECTURE.md` and note it in AGENTS.md.**
 - **A new dependency (Python package, system tool) goes into README.md → Install and into `flake.nix` in the same PR.** Prefer the standard library: the viewer has no third-party Python dependencies today.
@@ -29,17 +29,17 @@ MonkeyTester (port 8089) — app.py (ThreadingHTTPServer)
 Runner — visual-tests/scripts/run_on_device.py
   . Runs test steps, calling the vision model and the Mobile Controller
 
-MonkeyTester-Mobile-Controller (Mac, port 8090) — separate repo
+MonkeyTester-Plugin-Mobile-Controller (Mac, port 8090) — separate repo
   . Owns every iPhone and Android phone: input, install, screenshots, stream, video
 
 Device plugins (Linux or Mac) — separate repos, contract in PLUGIN_API.md
-  . MonkeyTester-AI (Mac, port 8091): the vision model; address set in Settings → Device Plugins
-  . MonkeyTester-Esp32-Sensor (port 8091 on the Linux host): esp32-sensor, the sensor boards
-  . MonkeyTester-Esp32-Server (port 8093, fake server 8092): esp32-server, the hub boards
+  . MonkeyTester-Plugin-AI (Mac, port 8091): the vision model; address set in Settings → Device Plugins
+  . MonkeyTester-Plugin-Esp32-Sensor (port 8091 on the Linux host): esp32-sensor, the sensor boards
+  . MonkeyTester-Plugin-Esp32-Server (port 8093, fake server 8092): esp32-server, the hub boards
   . Reached by PLUGIN test steps through visual-tests/scripts/plugin_client.py
 
 Build plugins (Linux or Mac) — separate repos, contract in BUILD_PLUGIN_API.md
-  . build-local (MonkeyTester-Build-Local, port 8094): fetches the code from Gitea or GitHub
+  . build-local (MonkeyTester-Plugin-Build-Local, port 8094): fetches the code from Gitea or GitHub
     and builds it on its own host (Android + iOS on a Mac, Android only on Linux)
   . Holds the code host kind/URL + a READ-ONLY token and the viewer URL; reached by builds.py
     through build_plugin_client.py
@@ -115,7 +115,7 @@ All of these need a session (writes: plus a same-site `Origin`/`Referer`). `GET`
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/health` | Readiness check, open: `{ok, service, api_version}` and nothing else |
-| GET | `/api/status` | Whether each dependency is usable: `{ok, service, api_version, controller: {ok, url, api_version, appium, adb, error?}, vision: {ok, endpoint, checked, api_version?, model?, model_loaded?, error?}, plugins: {<name>: {ok, url, contract_version, plugin, error?}}}`. `vision.checked` is false for an endpoint that isn't MonkeyTester-AI, because only that has `/health`. `plugins` has one entry per `VT_PLUGINS` plugin from its `GET /health` (3 s timeout; `{}` when none are configured; a malformed `VT_PLUGINS` shows as a `VT_PLUGINS` entry with the error). Plugins are optional, so they don't affect the top-level `ok` |
+| GET | `/api/status` | Whether each dependency is usable: `{ok, service, api_version, controller: {ok, url, api_version, appium, adb, error?}, vision: {ok, endpoint, checked, api_version?, model?, model_loaded?, error?}, plugins: {<name>: {ok, url, contract_version, plugin, error?}}}`. `vision.checked` is false for an endpoint that isn't MonkeyTester-Plugin-AI, because only that has `/health`. `plugins` has one entry per `VT_PLUGINS` plugin from its `GET /health` (3 s timeout; `{}` when none are configured; a malformed `VT_PLUGINS` shows as a `VT_PLUGINS` entry with the error). Plugins are optional, so they don't affect the top-level `ok` |
 | GET | `/api/plugins` | The Settings page's view of the active plugins — `VT_PLUGINS` minus monkeytester-ai, plus monkeytester-ai at its Settings address: `{plugins: [{name, url, source: "VT_PLUGINS"|"settings", ok, contract_version, plugin, capabilities, devices, config, error?}], ai_plugin: {name, url, configured, token: {configured, last4}, managed}, error?}` (the monkeytester-ai row also carries `managed`: true when `VT_MANAGED_AI_PLUGIN_URL` + `_TOKEN` supply its address and token) (`error` for a malformed `VT_PLUGINS`). Per plugin, all plugins at once: `GET /health` for state/capabilities and `GET /devices` for the connected boards (3 s each); a plugin that does not answer still lists, with its error. Build plugin registrations from the same `plugins` map are appended with `kind: "build"` and their live build-plugin `/health` (`forge`, `platforms`, `token: {configured, last4}`); device rows have no `kind` |
 
 Any GET whose path contains `..`, a backslash, or an encoded slash returns 400 before routing, so URLs can't leave `Run/`.
@@ -353,11 +353,11 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 | `visual-tests/scripts/run_on_device.py` | CLI: run tests on devices the Mobile Controller serves. Thin shim over `test_runner_core.py`. |
 | `visual-tests/scripts/test_runner_core.py` | Shared test engine: reads `.txt` test files, executes steps, runs vision model, writes results. |
 | `visual-tests/scripts/controller_client.py` | HTTP client for the Mobile Controller: click, input, swipe, screenshot, recording, install. |
-| `visual-tests/scripts/plugin_client.py` | HTTP client for device plugins (`PLUGIN_API.md`): `PluginClient` (health, devices, actions, jobs), `load_plugins_from_env()`, `plugins_status()`, and the MonkeyTester-AI config calls (`ai_config`, `ai_save_config`, `ai_copilot_device_start/poll`, `ai_copilot_remove`, reduced to public shapes). |
+| `visual-tests/scripts/plugin_client.py` | HTTP client for device plugins (`PLUGIN_API.md`): `PluginClient` (health, devices, actions, jobs), `load_plugins_from_env()`, `plugins_status()`, and the MonkeyTester-Plugin-AI config calls (`ai_config`, `ai_save_config`, `ai_copilot_device_start/poll`, `ai_copilot_remove`, reduced to public shapes). |
 | `visual-tests/scripts/apk_manifest.py` | Reads package and version from an APK's binary manifest (no aapt needed). |
 | `visual-tests/scripts/ios_app_archive.py` | Reads the bundle ID from an `.ipa` or `.zip` without unpacking it. |
 | `visual-tests/scripts/device_lock.py` | Per-device run queue (`flock`). |
-| `visual-tests/scripts/vision_analyzer.py` | Vision model API calls (verify, find, check_input, describe), always to the configured endpoint — normally the MonkeyTester-AI plugin, which picks local or Copilot itself. |
+| `visual-tests/scripts/vision_analyzer.py` | Vision model API calls (verify, find, check_input, describe), always to the configured endpoint — normally the MonkeyTester-Plugin-AI plugin, which picks local or Copilot itself. |
 | `visual-tests/scripts/screenshot_diff.py` | Compares two screenshots. |
 | `visual-tests/scripts/snapshots.py` | SNAPSHOT step: stdlib PNG decode/encode, 1x box downscale, screen class, masks, compare. |
 | `visual-tests/scripts/layout.py` | ASSERT_LAYOUT step: parses and checks element relations in pt/dp. |
@@ -414,9 +414,9 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 |------|---------|
 | 8089 | `app.py` — Web viewer + stream proxy (ThreadingHTTPServer) |
 | 8090 | Mobile Controller, on the Mac (separate repo) |
-| 8091 | MonkeyTester-Esp32-Sensor (`esp32-sensor`) on the Linux host; MonkeyTester-AI on the Mac (separate repos) |
-| 8092 | Fake server of MonkeyTester-Esp32-Server (separate repo) |
-| 8093 | MonkeyTester-Esp32-Server (`esp32-server`) device plugin (separate repo) |
+| 8091 | MonkeyTester-Plugin-Esp32-Sensor (`esp32-sensor`) on the Linux host; MonkeyTester-Plugin-AI on the Mac (separate repos) |
+| 8092 | Fake server of MonkeyTester-Plugin-Esp32-Server (separate repo) |
+| 8093 | MonkeyTester-Plugin-Esp32-Server (`esp32-server`) device plugin (separate repo) |
 | 8094 | MonkeyTester-Build-Gitea (`build-gitea`) build plugin (separate repo) |
 | 8095 | MonkeyTester-Build-GitHub (`build-github`) build plugin (separate repo) |
 
@@ -455,7 +455,7 @@ results from different devices.
 
 ## Running the System
 
-1. Start MonkeyTester-Mobile-Controller on the Mac (see its README).
+1. Start MonkeyTester-Plugin-Mobile-Controller on the Mac (see its README).
 2. Start the web viewer: `CONTROLLER_URL=http://192.168.125.5:8090 python3 app.py 8089` (with Nix: `CONTROLLER_URL=… nix run . -- 8089`)
 3. Run tests: `cd visual-tests/scripts && CONTROLLER_URL=http://192.168.125.5:8090 python3 run_on_device.py --device 192.168.1.100:5555 tests/my_test.txt`
 4. View results: `http://127.0.0.1:8089/`

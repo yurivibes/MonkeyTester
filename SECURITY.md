@@ -25,7 +25,7 @@ this repo and gives the overview for the whole MonkeyTester family. It does **no
 | Website | Linux | 8001 | `0.0.0.0` | none — public static site by design; never serves `.git` or dotfiles |
 | Mobile-Controller | Mac .71 | 8090 | LAN | `CONTROLLER_TOKEN` (`X-Controller-Token`); mandatory on a non-loopback bind |
 | Build-Local plugin | Mac | 8094 | LAN | `PLUGIN_TOKEN` (`X-Plugin-Token`); mandatory on a non-loopback bind |
-| MonkeyTester-AI plugin | Mac | 8091 | `--lan` | `VTAI_TOKEN` (pairing token) |
+| MonkeyTester-Plugin-AI plugin | Mac | 8091 | `--lan` | `VTAI_TOKEN` (pairing token) |
 
 Every service compares tokens with `hmac.compare_digest`. `/health` stays unauthenticated on
 each service and only says that the service is up (no config, no secrets). The viewer reaches

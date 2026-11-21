@@ -202,7 +202,7 @@ class RunnerConfigTests(unittest.TestCase):
     def test_legacy_copilot_config_fails_fast_with_the_hint(self):
         result = self.run_with_config({"visual_provider": "copilot", "copilot_model": "gpt-4o"})
         self.assertEqual(result.returncode, 2)
-        self.assertIn("GitHub Copilot is now configured on the MonkeyTester-AI plugin: Settings → "
+        self.assertIn("GitHub Copilot is now configured on the MonkeyTester-Plugin-AI plugin: Settings → "
                       "Device Plugins → monkeytester-ai → Configure → GitHub Copilot", result.stderr)
 
 

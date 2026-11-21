@@ -9,8 +9,8 @@ Implementations:
 
 | Plugin | Repo | Default port |
 |---|---|---|
-| `esp32` | [MonkeyTester-Esp32-Sensor](http://192.168.125.70:3000/yurivibes/MonkeyTester-Esp32-Sensor) | 8091 |
-| `monkeytester-ai` | [MonkeyTester-AI](http://192.168.125.70:3000/yurivibes/MonkeyTester-AI) | 8091 (on the Mac, e.g. `http://192.168.125.71:8091`); address set in Settings → Device Plugins, not `VT_PLUGINS` |
+| `esp32` | [MonkeyTester-Plugin-Esp32-Sensor](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32) | 8091 |
+| `monkeytester-ai` | [MonkeyTester-Plugin-AI](https://github.com/yurivibes/MonkeyTester-Plugin-AI) | 8091 (on the Mac, e.g. `http://192.168.125.71:8091`); address set in Settings → Device Plugins, not `VT_PLUGINS` |
 
 The Mobile Controller still uses its own API (`API.md` in that repo); moving it onto
 this contract is a later step.

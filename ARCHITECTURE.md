@@ -7,7 +7,7 @@
 ```
         Linux host (192.168.125.70)                  Mac (192.168.125.5)
 ┌──────────────────────────────────────┐   ┌───────────────────────────────────┐
-│ MonkeyTester (this repo)             │   │ MonkeyTester-Mobile-Controller    │
+│ MonkeyTester (this repo)             │   │ MonkeyTester-Plugin-Mobile-Controller    │
 │                                      │   │ (separate repo)                   │
 │  app.py :8089                        │   │                                   │
 │   ├─ web UI and run results          │   │  device_controller.py :8090       │
@@ -25,7 +25,7 @@
                           ┌───────────────────────────────────┐
                           │ Device plugins (separate repos),  │
                           │ on the Linux host or the Mac      │
-                          │  MonkeyTester-Esp32-Sensor :8091  │
+                          │  MonkeyTester-Plugin-Esp32-Sensor :8091  │
                           │   └─ esptool, serial ─► ESP32     │
                           └───────────────────────────────────┘
 
@@ -47,7 +47,7 @@ and it knows nothing about tests or vision models.
 
 Other hardware is reached through **device plugins**: separate services, each owning one
 kind of hardware, that implement the contract in `PLUGIN_API.md` (health, devices,
-actions with param schemas, and jobs). MonkeyTester-Esp32-Sensor (port 8091, Linux or Mac) is the
+actions with param schemas, and jobs). MonkeyTester-Plugin-Esp32-Sensor (port 8091, Linux or Mac) is the
 first. Tests call them with `PLUGIN:` steps; the plugins to use come from the `plugins`
 map in `Run/config.json` (Settings → Device Plugins; a `VT_PLUGINS` environment variable
 is imported into that map once at viewer start and ignored after that).
@@ -55,7 +55,7 @@ is imported into that map once at viewer start and ignored after that).
 Builds are reached through **build plugins**: separate services that implement
 `BUILD_PLUGIN_API.md` (health, code host config, repo check, branches, cases, start a build,
 build state, build log, cancel, example build script). `build-local` (port 8094, the
-MonkeyTester-Build-Local repo) fetches the branch from **Gitea or GitHub** with a read-only
+MonkeyTester-Plugin-Build-Local repo) fetches the branch from **Gitea or GitHub** with a read-only
 token, runs the app repo's per-platform build scripts (`recipes` in `/health`, e.g.
 `.monkeytester/build-android.sh`) on its own host — a Mac builds Android and iOS, a Linux host
 Android only — and uploads the apps with the viewer's `GET /ci/submit.py` and `--no-wait`, so
@@ -161,7 +161,7 @@ status, and all report `{ok, service, api_version}` from an open `GET /health`.
 | Client | Talks to | Version check |
 |--------|----------|---------------|
 | `controller_client.py`, `app.py` | Mobile Controller API version 2 | At the start of each run, and in `/api/status` |
-| `vision_analyzer.py`, `screenshot_diff.py` | Any OpenAI-style chat completions endpoint, normally MonkeyTester-AI | In `/api/status`, for MonkeyTester-AI |
+| `vision_analyzer.py`, `screenshot_diff.py` | Any OpenAI-style chat completions endpoint, normally MonkeyTester-Plugin-AI | In `/api/status`, for MonkeyTester-Plugin-AI |
 | `plugin_client.py`, `app.py` | Device plugins, `PLUGIN_API.md` contract_version 1 | On a run's first step for each plugin, and in `/api/status` |
 | `build_plugin_client.py`, `builds.py` | Build plugins, `BUILD_PLUGIN_API.md` contract_version 1 | When a plugin is registered (stored only if `/health` matches), and on every Settings load |
 
@@ -171,10 +171,10 @@ contract); `plugin_client.py` also accepts the `{"error": {"code", "message"}}` 
 **Vision calls** all go through `vision_analyzer.chat()`, so timeouts, auth and retries match.
 It retries a refused connection or a 502, 503 or 504 twice, because a model that's restarting
 recovers by itself. It doesn't retry other errors or a timeout, and it raises `VisionError` with
-the reason. The 310 second timeout is longer than MonkeyTester-AI's own limit of 300, so its
+the reason. The 310 second timeout is longer than MonkeyTester-Plugin-AI's own limit of 300, so its
 answer arrives first.
 
-**Vision provider** is the MonkeyTester-AI plugin's choice, not the viewer's: the runner always
+**Vision provider** is the MonkeyTester-Plugin-AI plugin's choice, not the viewer's: the runner always
 posts to the plugin's `/v1/chat/completions` with the pairing token, and the plugin answers with
 its local model, forwards to a remote OpenAI-compatible server (Remote server: address, model,
 resize switch and optional API key, all stored by the plugin), or forwards to GitHub Copilot
@@ -247,11 +247,11 @@ controller code is tested against this client in MonkeyTester-Mac's `Tests/test_
 which has both repos as submodules. `.gitea/workflows/test.yml` runs them on PRs.
 
 ## External Dependencies
-- MonkeyTester-Mobile-Controller, on the Mac, for all device access
+- MonkeyTester-Plugin-Mobile-Controller, on the Mac, for all device access
 - `ffmpeg`, for WebM conversion of saved videos
 - Vision model API (Qwen2.5-VL or similar), called by `vision_analyzer.py`
-- Device plugins such as MonkeyTester-Esp32-Sensor, optional, only for tests with `PLUGIN` steps
-- A build plugin (MonkeyTester-Build-Local, `build-local`, port 8094), for Build & Test: it fetches the code from Gitea or GitHub and builds it on its own host
+- Device plugins such as MonkeyTester-Plugin-Esp32-Sensor, optional, only for tests with `PLUGIN` steps
+- A build plugin (MonkeyTester-Plugin-Build-Local, `build-local`, port 8094), for Build & Test: it fetches the code from Gitea or GitHub and builds it on its own host
 
 ## Nix Flake
 `flake.nix` provides a dev shell with Python 3 and ffmpeg. The viewer and runner need only the standard library. Use `nix develop -c ...` on a fresh machine.
