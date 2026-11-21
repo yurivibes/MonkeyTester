@@ -50,7 +50,7 @@ Same as [PLUGIN_API.md](PLUGIN_API.md):
   "contract": "monkeytester-build-plugin",
   "contract_version": 1,
   "plugin": {"name": "build-local", "version": "0.1.0"},
-  "forge": {"kind": "gitea", "label": "Gitea", "url": "http://192.168.125.70:3000",
+  "forge": {"kind": "gitea", "label": "Gitea", "url": "https://gitea.example.com",
             "configured": true, "user": "ci-bot"},
   "platforms": ["android", "ios"],
   "recipes": {"android": ".monkeytester/build-android.sh", "ios": ".monkeytester/build-ios.sh"},

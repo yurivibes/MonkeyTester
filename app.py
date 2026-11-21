@@ -366,7 +366,7 @@ def import_ai_plugin_address(env=None):
     (legacy visual_endpoint included, so a config that still has it keeps
     working). Afterwards a monkeytester-ai entry in VT_PLUGINS is ignored and
     that is logged once. Returns the imported URL, or ''.
-    Does nothing in managed mode (the Mac app supplies the address on every
+    Does nothing in managed mode (the launcher app supplies the address on every
     launch)."""
     env = os.environ if env is None else env
     if managed_ai_plugin(env):
@@ -693,7 +693,7 @@ def plugins_overview():
             "error": AI_ROW_NOT_CONFIGURED}]
     for row in out["plugins"]:
         if row.get("name") == pc.AI_PLUGIN_NAME:
-            # managed: the Mac app supplies the address and token; the panel
+            # managed: the launcher app supplies the address and token; the panel
             # shows the address read-only and the server refuses edits (409).
             row["managed"] = managed
     # Build plugin registrations from the same registry (object entries in
@@ -4355,7 +4355,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
     def get_visual_model_config(self):
         """Return the saved visual model config. default_endpoint is what's used
-        when nothing is saved, such as the model the Mac app runs itself.
+        when nothing is saved, such as the model the launcher app runs itself.
 
         The new provider stores no endpoint or model: it names the AI plugin
         (visual_plugin) whose Settings address (visual_plugin_url) is the
@@ -4425,7 +4425,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         if data is None:
             return
         if managed_ai_plugin() and _changes_managed_ai_plugin(data):
-            # The Mac app supplies the address and token on every launch:
+            # The launcher app supplies the address and token on every launch:
             # changing or removing them here would go stale (or break the
             # running plugin's pairing), so refuse instead of storing.
             self.send_json_status(409, {"error": MANAGED_AI_MESSAGE})

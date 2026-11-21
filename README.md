@@ -46,8 +46,8 @@ standard library, so there is no `pip install` step. They need:
 
 Phones are driven by [MonkeyTester-Plugin-Mobile-Controller](https://github.com/yurivibes/MonkeyTester-Plugin-Mobile-Controller)
 on a Mac and the vision model by [MonkeyTester-Plugin-AI](https://github.com/yurivibes/MonkeyTester-Plugin-AI);
-ESP32 boards by [MonkeyTester-Plugin-Esp32-Sensor](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32)
-and [MonkeyTester-Plugin-Esp32-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server).
+ESP32 boards by [MonkeyTester-Plugin-Esp32](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32)
+and [MonkeyTester-Plugin-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server).
 Build & Test builds your app through a build plugin (see [Build & Test](#build--test)).
 Each is a separate repo with its own install steps, and none of them is needed to install
 the viewer or run its tests.
@@ -104,7 +104,7 @@ python3 -m unittest test_ci_delivery test_controller_client test_platform_target
   test_stale_runs test_projects test_security_hardening   # or: nix run .#tests
 ```
 
-The test list is the one `.gitea/workflows/test.yml` runs in CI; the tests need no
+The test list is the one in `.gitea/workflows/test.yml`; the tests need no
 devices, controller or vision model. Then start the viewer (next section) and check
 `curl -s localhost:8089/health` answers `{"ok": true, ...}`.
 
@@ -157,7 +157,7 @@ when the viewer starts and ignored after that, so remove it from `VT_PLUGINS`; t
 device plugins now live in Settings too — register them in the **Manage device plugins**
 box (saved as the `plugins` map in `Run/config.json`, the variable imported into it once).
 
-**App-managed plugin (legacy, archived MonkeyTester Mac app):** when both `VT_MANAGED_AI_PLUGIN_URL` (e.g.
+**App-managed plugin (legacy):** when both `VT_MANAGED_AI_PLUGIN_URL` (e.g.
 `http://127.0.0.1:8091`) and `VT_MANAGED_AI_PLUGIN_TOKEN` (the pairing token) are set, the
 viewer and the runner use them for the monkeytester-ai plugin, winning over config.json's
 `visual_plugin_url`/`visual_api_key`, and monkeytester-ai is the vision plugin even without
@@ -215,8 +215,8 @@ Other hardware (ESP32 boards, …) is driven through **device plugins**, separat
 services that follow [PLUGIN_API.md](PLUGIN_API.md). Register them in the **Manage device
 plugins** box on the Settings → Device Plugins page — a name and an address (e.g.
 `esp32-sensor=http://127.0.0.1:8091` and `esp32-server=http://127.0.0.1:8093`
-for [MonkeyTester-Plugin-Esp32-Sensor](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32) and
-[MonkeyTester-Plugin-Esp32-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server));
+for [MonkeyTester-Plugin-Esp32](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32) and
+[MonkeyTester-Plugin-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server));
 an address is saved (in the `plugins` map of `Run/config.json`) only once its `GET /health`
 answers with the plugin contract, and a `VT_PLUGINS=name=url[,name=url]` environment
 variable is imported into that map once at viewer start and ignored after that. Call
@@ -280,7 +280,7 @@ Setup:
    using). The plugin checks the token with the code host before it stores it. Read-only is
    enough, since the plugin only reads the repo and fetches it with git:
    - **Gitea:** an access token with `read:repository` (plus `read:user`), code host URL the
-     site's own address (e.g. `http://192.168.125.70:3000`).
+     site's own address (e.g. `https://gitea.example.com`).
    - **GitHub:** a fine-grained token with `Contents: read` + `Metadata: read` (or a classic
      token with `repo` scope for private repos), code host URL `https://github.com`
      (`https://<host>` for GitHub Enterprise Server).

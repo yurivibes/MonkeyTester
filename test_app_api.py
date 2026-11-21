@@ -429,7 +429,7 @@ def request(port, method, path, body=None, headers=None, auth=True):
 
 class LoginRequiredTests(ServerCase):
     """Login is always required (no off switch, no localhost exemption).
-    Leftover VT_APP_TOKEN values from an old MonkeyTester-Mac launcher open
+    Leftover VT_APP_TOKEN values from an old launcher app open
     nothing. More auth tests: test_viewer_auth.py."""
 
     def test_signed_in_every_page_and_api_answers(self):
@@ -1960,7 +1960,7 @@ class AiAddressImportTests(unittest.TestCase):
 
 
 class ManagedAiPluginTests(ServerCase):
-    """Managed mode: the MonkeyTester Mac app passes VT_MANAGED_AI_PLUGIN_URL
+    """Managed mode: a launcher app passes VT_MANAGED_AI_PLUGIN_URL
     and VT_MANAGED_AI_PLUGIN_TOKEN (both required). They win over config.json
     for every plugin call, are never written to config.json, the VT_PLUGINS
     import is skipped, and address/token/removal edits are refused (409)."""
