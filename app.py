@@ -95,8 +95,28 @@ def save_device_names(data):
 
 def _controller_url():
     """Base URL of MonkeyTester-Mobile-Controller, which owns every device.
-    Returns '' when unconfigured."""
+    Returns '' when unconfigured. Settings → Plugins → Controller Plugin
+    owns the address once Run/config.json has the controller_url key (the
+    key's presence is the ownership marker, like the plugins map's): a
+    saved "" means removed and the CONTROLLER_URL environment does NOT
+    come back; the environment applies only while the key is absent (it is
+    imported into the key once at viewer start, import_controller_url)."""
+    cfg = load_config()
+    if "controller_url" in cfg:
+        return (cfg.get("controller_url") or "").strip().rstrip("/")
     return (os.environ.get("CONTROLLER_URL") or "").strip().rstrip("/")
+
+
+def controller_plugin_state():
+    """Settings → Plugins → Controller Plugin view:
+    {configured, source ("settings" once config.json owns the slot, "env"
+    before that, "" when unset), url, live: controller_status()}."""
+    cfg = load_config()
+    url = _controller_url()
+    return {"configured": bool(url),
+            "source": "settings" if "controller_url" in cfg else ("env" if url else ""),
+            "url": url,
+            "live": controller_status()}
 
 
 def _controller_headers():
@@ -108,8 +128,8 @@ def _controller_headers():
     return headers
 
 
-_CONTROLLER_UNSET = ("CONTROLLER_URL is not set — point the viewer at "
-                     "MonkeyTester-Mobile-Controller")
+_CONTROLLER_UNSET = ("CONTROLLER_URL is not set — register the Mobile Controller "
+                     "in Settings → Plugins → Controller Plugin")
 
 
 def _joined_errors(payload):
@@ -408,6 +428,34 @@ def import_device_plugins(env=None):
     print(f"imported {len(entries)} device plugin(s) from VT_PLUGINS into config.json; "
           "Settings → Device Plugins owns the list from now on", file=sys.stderr, flush=True)
     return entries
+
+
+def import_controller_url(env=None):
+    """One-time move of CONTROLLER_URL into config.json's controller_url key,
+    run when the viewer starts — the same pattern as import_device_plugins and
+    import_ai_plugin_address: the first start copies the env address when the
+    key is absent, afterwards Settings → Plugins → Controller Plugin owns the
+    address and the environment variable is ignored (that is logged once).
+    Nothing is written when the env has no address, so a later Settings add
+    seeds the slot from scratch."""
+    env = os.environ if env is None else env
+    with _CONFIG_LOCK:
+        cfg = load_config() if CONFIG_FILE.exists() else {}
+        if "controller_url" in cfg:
+            if (env.get("CONTROLLER_URL") or "").strip():
+                print("CONTROLLER_URL is ignored — Settings → Plugins → "
+                      "Controller Plugin (config.json controller_url) owns "
+                      "the address", file=sys.stderr, flush=True)
+            return ""
+        url = (env.get("CONTROLLER_URL") or "").strip().rstrip("/")
+        if not url:
+            return ""
+        cfg["controller_url"] = url
+        save_config(cfg)
+    print("imported CONTROLLER_URL into config.json controller_url; "
+          "Settings → Plugins → Controller Plugin owns the address from now on",
+          file=sys.stderr, flush=True)
+    return url
 
 
 def plugin_base_url(name, env=None):
@@ -2200,7 +2248,7 @@ def get_test_data(run, test_name, device_id=None):
 
 
 def configured_device_name(serial):
-    """Name set for a device id on device-config.html, or ''.
+    """Name set for a device id on the Device Config section of /plugins, or ''.
 
     Run metadata records iOS serials as "ios:<udid>"; the config is keyed by
     the bare controller id, so the prefix is stripped before the lookup.
@@ -2216,7 +2264,7 @@ def configured_device_name(serial):
 def _friendly_device_name(entry):
     """Resolve a display name for one device metadata entry.
 
-    A name set on device-config.html for the device's serial wins, so a
+    A name set on the Device Config section of /plugins for the device's serial wins, so a
     rename shows up on every run, old ones included. Otherwise use the name
     the runner recorded (ro.product.model, e.g. "SM-A155F"; iOS entries carry
     one too), then the serial.
@@ -2715,11 +2763,15 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         elif path == "/player.html" or path == "/player":
             self.serve_page("player.html")
         elif path == "/device-config" or path == "/device-config.html":
-            self.serve_page("device-config.html")
-        elif path == "/configuration.html" or path == "/configuration":
-            # Old Device Config URL; renamed so it can't be confused with /config.
+            # Retired page: the Device Config options now live in their own
+            # section on the Plugins page. Old bookmarks redirect, not 404.
             self.send_response(302)
-            self.send_header("Location", "/device-config")
+            self.send_header("Location", "/plugins")
+            self.end_headers()
+        elif path == "/configuration.html" or path == "/configuration":
+            # Old Device Config URL; the section now lives on /plugins.
+            self.send_response(302)
+            self.send_header("Location", "/plugins")
             self.end_headers()
         elif path == "/config" or path == "/config.html":
             # Configuration: Build & Test + Test Variables. The old single Settings
@@ -2921,6 +2973,10 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         # Device name configuration
         elif path == "/api/config/devices":
             self.send_json(self.get_device_names())
+
+        # Controller Plugin: the Mobile Controller's registration
+        elif path == "/api/config/controller":
+            self.send_json(controller_plugin_state())
 
         # Static files (run outputs)
         elif path.startswith("/static/"):
@@ -3402,6 +3458,10 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             self.update_config()
         elif parsed.path == "/api/config/devices":
             self.save_device_names_from_request()
+        elif parsed.path == "/api/config/controller":
+            # Settings → Plugins → Controller Plugin: add/edit/remove the
+            # Mobile Controller's address (config.json controller_url).
+            self.handle_controller_config()
         elif parsed.path == "/api/config/plugins":
             # Settings → Device Plugins: add/remove/edit device-plugin
             # registrations (config.json `plugins`).
@@ -3848,6 +3908,10 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         #    made fresh at each viewer start and accepted only there.
         env = auth.apply_to_environ(os.environ.copy())
         env["VT_RUNNER_TOKEN"] = auth.RUNNER_TOKEN
+        # Settings → Plugins → Controller Plugin owns the Mobile Controller's
+        # address once config.json has the key; re-export the resolved value
+        # so the runner talks to the same controller the viewer proxies.
+        env["CONTROLLER_URL"] = _controller_url()
         try:
             port = self.server.server_address[1]
             env.setdefault("VIEWER_URL", f"http://127.0.0.1:{port}")
@@ -4003,6 +4067,76 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             self.send_json(config)
         except Exception:
             self.send_error(400)
+
+    def handle_controller_config(self):
+        """POST /api/config/controller — ONE action per request:
+        {"set": {"url": u}} registers/updates the Mobile Controller — the
+        address must answer GET <u>/devices with 200 (a 401/403 wall says
+        the service token has to be saved first), nothing is stored on
+        failure and the controller's own state shows in the reply, mirroring
+        the strict plugin-save rule. The write adds the controller_url key,
+        after which the CONTROLLER_URL environment is ignored.
+        {"remove": true} forgets the address (writes "" — the key stays, so
+        Settings keeps owning the slot and a later env value cannot sneak
+        back in)."""
+        try:
+            data = json.loads(self._body())
+        except ValueError:
+            data = None
+        if not isinstance(data, dict):
+            self.send_json_status(400, {"error": "Invalid JSON: expected an object",
+                                        "code": "bad_request"})
+            return
+
+        def bad(msg, code="bad_request"):
+            self.send_json_status(400, {"error": msg, "code": code})
+
+        if set(data) == {"remove"}:
+            if data["remove"] is not True:
+                bad('remove must be true')
+                return
+            with _CONFIG_LOCK:
+                config = load_config()
+                if "controller_url" not in config and not _controller_url():
+                    bad("no Mobile Controller is registered", "nothing_to_remove")
+                    return
+                config["controller_url"] = ""
+                save_config(config)
+            self.send_json({"ok": True, "removed": "mobile-controller",
+                            "controller": controller_plugin_state()})
+            return
+        if set(data) == {"set"}:
+            op = data["set"]
+            if not isinstance(op, dict) or set(op) != {"url"}:
+                bad('set must be {"url": ...}')
+                return
+            url = str(op["url"] or "").strip().rstrip("/")
+            if not url or not url.startswith(("http://", "https://")):
+                bad("url must be an http(s):// address", "bad_url")
+                return
+            status, body = _get_json(f"{url}/devices", headers=_controller_headers(),
+                                     timeout=5)
+            if status is None:
+                bad(f"the Mobile-Controller at {url} did not answer GET /devices",
+                    "unreachable")
+                return
+            if status in (401, 403):
+                bad("the Mobile-Controller rejected the request (GET /devices: %d) — "
+                    "save its token first in Settings → Configuration → Service tokens" % status,
+                    "token_required")
+                return
+            if status != 200:
+                bad(f"the Mobile-Controller answered GET /devices with status {status}",
+                    "not_a_controller")
+                return
+            with _CONFIG_LOCK:
+                config = load_config()
+                config["controller_url"] = url
+                save_config(config)
+            self.send_json({"ok": True, "set": url,
+                            "controller": controller_plugin_state()})
+            return
+        bad('one action per request: {"set": {"url": ...}} or {"remove": true}')
 
     def handle_plugin_config(self):
         """POST /api/config/plugins — one action per request, in the shared
@@ -5013,8 +5147,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--acid); }
 .vt-warning-banner a { color: var(--fail); font-weight: 600; }
 """
 
-# Shared by the settings pages (config, device-config, plugins,
-# models, run-status). Each page adds only its own section's CSS on top.
+# Shared by the settings pages (config, plugins, run-status). Each page adds only its own section's CSS on top.
 SETTINGS_CSS = r"""
 .settings-section { margin-bottom: 28px; }
 .settings-section h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; }
@@ -5135,7 +5268,6 @@ const NAV_LINKS = [
 // The Settings sidebar opens its first entry.
 const NAV_SETTINGS_LINKS = [
     { href: '/config', label: 'Configuration', icon: 'configuration', paths: ['/config', '/config.html'] },
-    { href: '/device-config', label: 'Device Config', icon: 'devices', paths: ['/device-config', '/device-config.html'] },
     { href: '/plugins', label: 'Plugins', icon: 'plugins', paths: ['/plugins', '/plugins.html'] },
     { href: '/run-status', label: 'Run Status', icon: 'status', paths: ['/run-status', '/run-status.html'] },
     // Admins only (the server answers 403 to everyone else).
@@ -5352,6 +5484,7 @@ if __name__ == "__main__":
     # One-time: move a monkeytester-ai VT_PLUGINS entry into config.json.
     import_ai_plugin_address()
     import_device_plugins()
+    import_controller_url()
     # One-time: gitea_config.json / VT_BUILD_PLUGINS -> build_config.json.
     builds.VIEWER_PORT = port
     builds.migrate(log_ignored=True)

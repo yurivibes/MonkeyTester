@@ -91,6 +91,28 @@ details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
 .plugins-intro { font-size: 0.85rem; color: var(--text-muted); margin-top: 6px; max-width: 640px; }
 #buildManageStatus.saved { color: var(--pass); }
 #buildManageStatus.error { color: var(--fail); }
+#controllerManageStatus.saved { color: var(--pass); }
+#controllerManageStatus.error { color: var(--fail); }
+
+/* Device Config section (moved here from the retired device-config.html page) */
+.config-device-list { display: flex; flex-direction: column; gap: 12px; }
+.config-device { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.config-device-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.config-device-path { font-family: monospace; font-size: 0.8rem; color: var(--text-muted); background: var(--card); padding: 4px 8px; border-radius: 4px; }
+.config-device-name { font-weight: 600; font-size: 0.95rem; }
+.config-device-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.config-device-form input { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; }
+.config-device-form input:focus { outline: none; border-color: var(--accent); }
+.config-device-form input.name-input { flex: 1; min-width: 180px; }
+.config-device-form button { white-space: nowrap; }
+.config-save-status { font-size: 0.75rem; margin-top: 6px; min-height: 16px; }
+.config-save-status.saved { color: var(--pass); }
+.config-save-status.error { color: var(--fail); }
+.config-info { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+.config-save-all { margin-bottom: 16px; display: flex; gap: 10px; align-items: center; }
+.config-save-all button { padding: 8px 16px; background: var(--acid); color: var(--on-acid); border: 2px solid var(--acid); }
+.config-save-all button[disabled] { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+.config-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px; }
 </style>
 </head>
 <body>
@@ -142,6 +164,21 @@ details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
                 <li>The repos themselves live on <a href="/config">Settings → Build &amp; Test</a>: each project picks a build plugin from this registry and a branch; the check column shows whether the plugin can read the repo and whether that branch has the platform's build script (<code>.monkeytester/build-android.sh</code>, <code>.monkeytester/build-ios.sh</code>).</li>
             </ul>
         </details>
+    </div>
+
+
+    <div class="settings-section" id="deviceConfigSection">
+        <div class="plugins-section-title">Controller Plugin</div>
+        <div class="config-info">The <strong>Mobile Controller</strong> plugin (repo <code>MonkeyTester-Mobile-Controller</code>) owns the devices connected to it: it serves the device list and runs the test steps on them. Register its address in the <strong>Manage Mobile Controller</strong> box below; the saved list lives in <code>Run/config.json</code> as <code>controller_url</code>, and the <code>CONTROLLER_URL</code> environment variable is imported into it once on the first viewer start, after which Settings owns the address. Set friendly names for those devices; the names replace the runner-recorded names on run pages.</div>
+        <div class="plugin-manage" id="controllerManage"></div>
+        <div class="settings-status" id="controllerManageStatus" hidden></div>
+        <div class="config-save-all">
+            <button class="btn-secondary" id="saveAllBtn">Save All Changes</button>
+            <span class="config-save-status" id="global-status"></span>
+        </div>
+        <div class="config-device-list" id="device-list">
+            <div class="loading">Loading devices...</div>
+        </div>
     </div>
 </div>
 <script>
@@ -1309,6 +1346,187 @@ function warnIfRunning() {
         } catch (e) {}
     })();
 }
+// ── Device Config section: friendly names for Mobile Controller devices ──
+// Moved from the retired device-config.html page: the options now live in the
+// Device Config section on this page. Same /api/config/devices API and the
+// same greyed Save rule (disabled while every shown name matches the saved map).
+const configUrl = '/api/config/devices';
+
+// The saved device-name map, kept current on every render.
+let savedNames = null;
+
+function saveAllDirty() {
+    if (!savedNames) return true;
+    let dirty = false;
+    document.querySelectorAll('.config-device').forEach(el => {
+        const input = el.querySelector('.name-input');
+        if (!input) return;
+        if (input.value.trim() !== (savedNames[el.dataset.id] || '')) dirty = true;
+    });
+    return dirty;
+}
+
+function updateSaveAllBtn() {
+    const btn = document.getElementById('saveAllBtn');
+    if (btn) btn.disabled = !saveAllDirty();
+}
+
+async function renderDevices() {
+    const listEl = document.getElementById('device-list');
+    listEl.innerHTML = '<div class="loading">Loading devices...</div>';
+
+    const [devices, names] = await Promise.all([
+        fetchJSON('/devices').catch(() => []),
+        fetchJSON(configUrl).catch(() => ({}))
+    ]);
+    savedNames = names;
+
+    if (!devices.length) {
+        listEl.innerHTML = '<div class="loading">No devices found. Check that the Mobile Controller is running and the devices are connected to it.</div>';
+        updateSaveAllBtn();
+        return;
+    }
+
+    let html = '';
+    for (const device of devices) {
+        const id = escapeHtml(device.id);
+        html += '<div class="config-device" data-id="' + id + '">';
+        html += '<div class="config-device-header">';
+        html += '<span class="config-device-path">' + id + '</span>';
+        html += '<span class="config-device-name">' + escapeHtml(device.friendly_name) + '</span>';
+        html += '<span style="font-size:0.75rem;color:var(--text-muted);">' + escapeHtml(device.platform) + '</span>';
+        html += '</div>';
+        html += '<div class="config-device-form">';
+        html += '<div style="flex:1;min-width:180px;"><div class="config-label">Friendly Name</div><input type="text" class="name-input" placeholder="Device name..." value="' + escapeHtml(names[device.id] || '') + '" /></div>';
+        html += '</div>';
+        html += '</div>';
+    }
+    listEl.innerHTML = html;
+    updateSaveAllBtn();
+}
+
+async function saveAllDevices() {
+    const statusEl = document.getElementById('global-status');
+    statusEl.className = 'config-save-status';
+    statusEl.textContent = 'Saving...';
+
+    // Keep names of devices that aren't connected right now.
+    const names = await fetchJSON(configUrl).catch(() => ({}));
+    document.querySelectorAll('.config-device').forEach(el => {
+        const name = el.querySelector('.name-input').value.trim();
+        if (name) names[el.dataset.id] = name;
+        else delete names[el.dataset.id];
+    });
+
+    let ok = false;
+    try {
+        const res = await fetch(configUrl, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(names)
+        });
+        ok = res.ok;
+    } catch (e) {
+        ok = false;
+    }
+
+    statusEl.className = 'config-save-status ' + (ok ? 'saved' : 'error');
+    statusEl.textContent = ok ? 'Saved' : 'Failed to save';
+    if (ok) await renderDevices();
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+}
+
+document.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter' && e.target.classList?.contains('name-input')) {
+        const btn = document.getElementById('saveAllBtn');
+        if (btn && btn.disabled) return; // nothing differs from the saved state
+        await saveAllDevices();
+    }
+});
+
+document.addEventListener('input', updateSaveAllBtn);
+document.addEventListener('change', updateSaveAllBtn);
+
+renderDevices();
+setInterval(renderDevices, 15000);
+
+// No inline onclick (page JS rule): wire the Save button to its handler.
+(function () {
+    const btn = document.getElementById('saveAllBtn');
+    if (btn) btn.addEventListener('click', saveAllDevices);
+})();
+// ── Manage Mobile Controller box: one registration slot (config.json controller_url) ──
+// Settings owns the address once the key exists (the CONTROLLER_URL env was
+// imported into it once on the first viewer start). Save address is greyed
+// while nothing differs from the saved value; Remove appears once registered.
+let controllerStagedUrl = "";
+
+async function loadControllerManage() {
+    let data;
+    try {
+        data = await fetchJSON('/api/config/controller');
+    } catch (e) {
+        return;
+    }
+    renderControllerManage(data);
+}
+
+function renderControllerManage(data) {
+    // Snapshot what the user already typed BEFORE innerHTML replaces the input
+    // (blur events fire late and miss programmatic redraws).
+    const old = document.getElementById('controllerAddressInput');
+    const saved = (data.url || '').trim();
+    if (old && old.value.trim() !== saved) controllerStagedUrl = old.value.trim();
+    const host = document.getElementById('controllerManage');
+    let html = '<div class="plugin-manage-row"><code>' + escapeHtml(saved || 'not configured') + '</code>';
+    html += '<input type="text" id="controllerAddressInput" placeholder="http://<controller-host>:8090" value="' + escapeHtml(controllerStagedUrl || saved) + '" />';
+    html += '<button class="btn-secondary">Save address</button>';
+    if (saved) html += '<button class="btn-secondary">Remove</button>';
+    html += '</div>';
+    host.innerHTML = html;
+    const row = host.querySelector('.plugin-manage-row');
+    const buttons = row.querySelectorAll('button');
+    const saveBtn = buttons[0];
+    saveBtn.disabled = !(controllerStagedUrl && controllerStagedUrl !== saved);
+    saveBtn.addEventListener('click', () => {
+        const inp = document.getElementById('controllerAddressInput');
+        const url = inp ? inp.value.trim() : controllerStagedUrl;
+        if (url) controllerPost({set: {url}}, 'Address saved');
+    });
+    if (buttons.length > 1) {
+        const removeBtn = buttons[1];
+        removeBtn.addEventListener('click', () => controllerPost({remove: true}, 'Removed'));
+    }
+}
+
+async function controllerPost(payload, okMsg) {
+    const statusEl = document.getElementById('controllerManageStatus');
+    statusEl.hidden = false;
+    statusEl.textContent = 'Working...';
+    let out = null, ok = false;
+    try {
+        const res = await fetch('/api/config/controller', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        out = await res.json();
+        ok = res.ok && out && out.ok;
+    } catch (e) {
+        ok = false;
+    }
+    statusEl.className = 'settings-status ' + (ok ? 'saved' : 'error');
+    statusEl.textContent = ok ? okMsg : 'Failed: ' + ((out && out.error) || 'network error');
+    if (ok) {
+        controllerStagedUrl = '';
+        await loadControllerManage();
+    }
+    setTimeout(() => { statusEl.hidden = true; statusEl.textContent = ''; }, 4000);
+}
+
+loadControllerManage();
+setInterval(loadControllerManage, 15000);
+
 </script>
 </body>
 </html>

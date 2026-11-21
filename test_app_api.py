@@ -433,12 +433,13 @@ class LoginRequiredTests(ServerCase):
     nothing. More auth tests: test_viewer_auth.py."""
 
     def test_signed_in_every_page_and_api_answers(self):
-        for path in ("/", "/config", "/device-config", "/plugins", "/users",
+        for path in ("/", "/config", "/plugins", "/users",
                      "/run-status", "/api/status", "/api/runs", "/static/run_1/shot.png"):
             status, _, _ = request(self.port, "GET", path)
             self.assertEqual(status, 200, path)
         for path, target in (("/models", "/plugins"), ("/models.html", "/plugins"),
-                             ("/appearance", "/config"), ("/appearance.html", "/config")):
+                             ("/appearance", "/config"), ("/appearance.html", "/config"),
+                             ("/device-config", "/plugins"), ("/device-config.html", "/plugins")):
             status, headers, _ = request(self.port, "GET", path)
             self.assertEqual((status, headers.get("Location")), (302, target), path)
         self.assertEqual(request(self.port, "HEAD", "/")[0], 200)
@@ -457,7 +458,7 @@ class LoginRequiredTests(ServerCase):
                      "/static/run_1/shot.png", "/api/runs/run_1/result", "/api/config/ci-token",
                      "/api/users"):
             self.assertEqual(request(self.port, "GET", path, auth=False)[0], 401, path)
-        for path in ("/api/config", "/api/runs/delete", "/api/config/plugins", "/api/builds",
+        for path in ("/api/config", "/api/runs/delete", "/api/config/controller", "/api/config/plugins", "/api/builds",
                      "/api/press-event", "/api/users", "/api/config/ci-token"):
             self.assertEqual(request(self.port, "POST", path, {}, auth=False)[0], 401, path)
         self.assertEqual(request(self.port, "HEAD", "/", auth=False)[0], 302)
@@ -570,11 +571,12 @@ class SettingsPagesTests(ServerCase):
     """The settings sections are one page each (login required: these tests
     run signed in as an admin). The Models page is retired: the picker lives inside
     the Device Plugins panel, so /models redirects there. The Appearance page
-    is retired the same way: its Light Mode toggle lives on /config."""
+    is retired the same way: its Light Mode toggle lives on /config. The Device
+    Config page is retired too: its options live in the Device Config section
+    on /plugins."""
     PAGES = {
         "/config": [b'id="buildSection"', b'id="light_mode"'],
-        "/device-config": [b"config-device-list"],
-        "/plugins": [b'id="pluginsList"'],
+        "/plugins": [b'id="pluginsList"', b"config-device-list"],
         "/run-status": [b'id="runStatusPanel"'],
     }
 
@@ -624,8 +626,10 @@ class SettingsPagesTests(ServerCase):
 
     def test_old_urls_redirect(self):
         for path, target in (("/settings", "/config"), ("/settings.html", "/config"),
-                             ("/configuration", "/device-config"),
-                             ("/configuration.html", "/device-config"),
+                             ("/configuration", "/plugins"),
+                             ("/configuration.html", "/plugins"),
+                             ("/device-config", "/plugins"),
+                             ("/device-config.html", "/plugins"),
                              ("/appearance", "/config"), ("/appearance.html", "/config")):
             status, headers, _ = request(self.port, "GET", path)
             self.assertEqual((status, headers.get("Location")), (302, target), path)
@@ -1648,7 +1652,7 @@ class RunEventsTests(ServerCase):
 
 
 class ConfiguredDeviceNameTests(ServerCase):
-    """A name set on device-config.html replaces the runner-recorded name on the run page."""
+    """A name set in the Device Config section on /plugins replaces the runner-recorded name on the run page."""
 
     def setUp(self):
         super().setUp()
@@ -2110,6 +2114,63 @@ class ManagedAiPluginTests(ServerCase):
                                  VT_MANAGED_AI_PLUGIN_TOKEN="secret-tok-9876"),
                          f"{self.url}/v1/chat/completions secret-tok-9876")
         self.assertNotIn(self.url, resolve(VT_MANAGED_AI_PLUGIN_URL=self.url))
+
+
+class ControllerPluginManageTests(ServerCase):
+    """Settings → Plugins → Controller Plugin registers the Mobile Controller
+    itself (config.json controller_url). The key's presence is the ownership
+    marker, like the plugins map's: while it is absent the CONTROLLER_URL
+    environment applies, the first write makes Settings own the slot forever
+    (an empty value = removed, the env does not come back), and the runner
+    always gets the RESOLVED value re-exported into its environment."""
+
+    def test_reports_the_environment_until_the_first_write(self):
+        with patch.dict(os.environ, {"CONTROLLER_URL": self.peer_url}):
+            data = self.get_json("/api/config/controller")
+        self.assertTrue(data["configured"])
+        self.assertEqual((data["source"], data["url"]), ("env", self.peer_url))
+        self.assertFalse((self.runs / "config.json").exists())
+
+    def test_set_requires_the_controller_to_answer_devices(self):
+        status, _, out = request(self.port, "POST", "/api/config/controller",
+                                 {"set": {"url": self.peer_url + "/"}})
+        self.assertEqual(status, 200)
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["set"], self.peer_url)
+        cfg = json.loads((self.runs / "config.json").read_text())
+        self.assertEqual(cfg["controller_url"], self.peer_url)
+        with patch.dict(os.environ, {"CONTROLLER_URL": "http://env-only:8090"}):
+            data = self.get_json("/api/config/controller")
+        self.assertEqual((data["source"], data["url"]), ("settings", self.peer_url))
+
+    def test_dead_address_is_refused(self):
+        status, _, body = request(self.port, "POST", "/api/config/controller",
+                                  {"set": {"url": "http://127.0.0.1:9"}})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["code"], "unreachable")
+        self.assertFalse((self.runs / "config.json").exists())
+
+    def test_token_walled_controller_needs_the_service_token_first(self):
+        Peer.status = 401
+        status, _, body = request(self.port, "POST", "/api/config/controller",
+                                  {"set": {"url": self.peer_url}})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["code"], "token_required")
+        self.assertFalse((self.runs / "config.json").exists())
+
+    def test_remove_owns_the_slot_again(self):
+        with patch.dict(os.environ, {"CONTROLLER_URL": self.peer_url}):
+            status, _, out = request(self.port, "POST", "/api/config/controller",
+                                     {"remove": True})
+        self.assertEqual(status, 200)
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["removed"], "mobile-controller")
+        cfg = json.loads((self.runs / "config.json").read_text())
+        self.assertEqual(cfg["controller_url"], "")
+        with patch.dict(os.environ, {"CONTROLLER_URL": self.peer_url}):
+            data = self.get_json("/api/config/controller")
+        self.assertFalse(data["configured"])
+        self.assertEqual(data["source"], "settings")
 
 
 class CaseSummaryTests(ServerCase):
