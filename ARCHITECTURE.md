@@ -73,7 +73,7 @@ build system needs only a plugin that implements the same contract.
 
 ```
 TestViewerHandler (HTTP request handler)
-  ├─ GET: pages (index, test, logs, player, stream, config, device-config, appearance→config redirect, plugins, models, run-status)
+  ├─ GET: pages (index, test, logs, player, stream, config, device-config→plugins redirect, appearance→config redirect, plugins, models, run-status)
   ├─ GET: API endpoints (runs, test data, metadata, dashboard)
   ├─ POST: /api/run-test (build plugin upload of app + tests for a known build, launch run_on_device.py)
   ├─ POST: /api/config, /api/config/devices
