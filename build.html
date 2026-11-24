@@ -295,7 +295,7 @@ function renderBuild(b) {
         if (job && job.url) text = '<a href="' + escapeHtml(job.url) + '" target="_blank" rel="noopener">build ' + text + '</a>';
         else if (job) text = 'build ' + text;
         const runs = (b.runs || []).filter(r => (r.platforms || []).some(p => g.platforms.includes(p)));
-        const runLinks = runs.map(r => '<a href="/test.html?run=' + encodeURIComponent(r.run_id) + '">' +
+        const runLinks = runs.map(r => '<a href="/test.html?run=' + encodeURIComponent(String(r.run_id).replace(/^run_(?=\d+$)/, '')) + '">' +
             escapeHtml(r.case || r.run_id) + '</a>' + (r.status ? ' (' + escapeHtml(r.status) + ')' : '')).join(', ');
         lines.push('<div><strong>' + label + ':</strong> ' + text + (runLinks ? ' · runs: ' + runLinks : '') + '</div>');
     }

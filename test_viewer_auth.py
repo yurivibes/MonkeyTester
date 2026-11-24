@@ -350,6 +350,8 @@ class CiTokenTests(AuthCase):
         bearer = {"Authorization": f"Bearer {token}"}
         status, _, body = request(self.port, "GET", "/api/runs/run_1/result", headers=bearer, auth=False)
         self.assertEqual(status, 200, body)
+        # The run page link carries the bare run number, not run_<n>.
+        self.assertTrue(body["url"].endswith("/test.html?run=1"), body)
         for method, path in (("GET", "/api/runs"), ("GET", "/config"), ("GET", "/api/config"),
                              ("GET", "/api/config/ci-token"), ("POST", "/api/config")):
             status = request(self.port, method, path, {} if method == "POST" else None,

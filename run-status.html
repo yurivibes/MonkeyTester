@@ -110,7 +110,7 @@ async function pollRunStatus() {
             const esc = (v) => escapeHtml(String(v ?? "")).replace(/"/g, "&quot;");
             for (const d of data.details) {
                 html += `<div class="run-detail-item">`;
-                html += `<a class="run-name" href="/test.html?run=${encodeURIComponent(d.run)}">${esc(d.run)}</a>`;
+                html += `<a class="run-name" href="/test.html?run=${encodeURIComponent(String(d.run).replace(/^run_(?=\d+$)/, ""))}">${esc(d.run)}</a>`;
                 html += `<span class="phase">[${esc(d.phase || "unknown")}]</span>`;
                 if (d.active_steps > 0 || d.queued_tests > 0) {
                     html += `<span style="margin-left:auto;font-size:0.75rem;">${Number(d.active_steps) || 0} active, ${Number(d.queued_tests) || 0} queued</span>`;

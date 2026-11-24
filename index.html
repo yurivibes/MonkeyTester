@@ -277,6 +277,11 @@ function runDisplayLabel(name) {
     return String(name).replace(/^run_/, '#');
 }
 
+// test.html takes the bare run number: run_12 -> test.html?run=12.
+function runPageUrl(name) {
+    return 'test.html?run=' + encodeURIComponent(String(name).replace(/^run_(?=\d+$)/, ''));
+}
+
 async function showRuns() {
     document.getElementById('content').innerHTML = '<div class="loading">Loading results...</div>';
     const runs = await fetchJSON('/api/runs?sort=' + encodeURIComponent(currentSort) + projectQuery());
@@ -304,7 +309,7 @@ async function showRuns() {
                     '<input type="checkbox" class="run-checkbox"' + checked + ' onclick="onRunCheckClick(event, ' + i + ')">' +
                 '</label>' +
                 '<span class="run-info">' +
-                    '<a class="run-id run-open" href="test.html?run=' + encodeURIComponent(name) + '" onclick="event.stopPropagation()">' + escapeHtml(runDisplayLabel(name)) + '</a>' +
+                    '<a class="run-id run-open" href="' + runPageUrl(name) + '" onclick="event.stopPropagation()">' + escapeHtml(runDisplayLabel(name)) + '</a>' +
                     '<span class="run-sub">' +
                         (date ? '<span class="run-date">' + escapeHtml(date) + '</span>' : '') +
                         (repo ? '<span class="run-project" title="Project">' + escapeHtml(repo) + '</span>'
@@ -329,7 +334,7 @@ function onRunRowClick(event, index) {
     if (event.target.closest('.run-check')) return; // checkbox handles selection
     const name = runOrder[index];
     if (!name) return;
-    const url = 'test.html?run=' + encodeURIComponent(name);
+    const url = runPageUrl(name);
     if (event.ctrlKey || event.metaKey) window.open(url, '_blank');
     else window.location.href = url;
 }

@@ -307,8 +307,22 @@
 {{JS}}
 function getQueryParam(name) {
     const params = new URLSearchParams(window.location.search);
-    return params.get(name);
+    const value = params.get(name);
+    // The URL carries the bare run number (?run=12); runs live on disk and in
+    // the API as run_<n>. Old links with ?run=run_12 keep working.
+    if (name === 'run' && value && /^\d+$/.test(value)) return 'run_' + value;
+    return value;
 }
+
+// Rewrite a legacy ?run=run_<n> link to the short ?run=<n> form in place.
+(function canonicalRunParam() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('run');
+    const m = raw && raw.match(/^run_(\d+)$/);
+    if (!m) return;
+    params.set('run', m[1]);
+    history.replaceState(null, '', window.location.pathname + '?' + params.toString() + window.location.hash);
+})();
 
 let currentLiveStream = null;
 // The device switcher shows for runs with more than one device (an Android

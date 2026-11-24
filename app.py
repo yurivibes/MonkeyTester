@@ -2841,7 +2841,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
                 self.send_json_status(404, {"error": "run not found"})
                 return
             host = self.headers.get("Host", "")
-            self.send_json({"run": run, "url": f"http://{host}/test.html?run={run}",
+            self.send_json({"run": run, "url": f"http://{host}/test.html?run={run[len('run_'):]}",
                             **get_run_result(run)})
         elif path.startswith("/api/runs/") and path.endswith("/snapshots.zip"):
             run = path[len("/api/runs/"):-len("/snapshots.zip")]
