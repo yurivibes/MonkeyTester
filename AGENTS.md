@@ -1,7 +1,7 @@
 # MonkeyTester — Agent Guide
 
 ## Purpose
-The web view and test orchestration for AI-driven visual testing. Tests use a vision model (Qwen2.5-VL or equivalent) to find UI elements and verify screens, on real iPhones and Android phones. Devices are owned by a separate service, [MonkeyTester-Plugin-Mobile-Controller](https://github.com/yurivibes/MonkeyTester-Plugin-Mobile-Controller), which this repo reaches only over HTTP. Build & Test starts builds through a build plugin (`BUILD_PLUGIN_API.md`, see "API — Build & Test"); the plugin fetches the code from Gitea or GitHub and builds it on its own host, and the apps reach the viewer through `ci/visual-test/submit.py` (see "API — CI upload").
+The web view and test orchestration for AI-driven visual testing. Tests use a vision model (Qwen2.5-VL or equivalent) to find UI elements and verify screens, on real iPhones and Android phones. Devices are owned by a separate service, MonkeyTester-Plugin-Mobile-Controller, which this repo reaches only over HTTP. Build & Test starts builds through a build plugin (`BUILD_PLUGIN_API.md`, see "API — Build & Test"); the plugin fetches the code from Gitea or GitHub and builds it on its own host, and the apps reach the viewer through `ci/visual-test/submit.py` (see "API — CI upload").
 
 ## Setup (do this first)
 Install the dependencies with the steps in README.md → **Install** before running or testing anything; that section is the single source for them, so don't install from memory. In short:
@@ -459,4 +459,24 @@ results from different devices.
 3. Run tests: `cd visual-tests/scripts && CONTROLLER_URL=http://192.168.125.5:8090 python3 run_on_device.py --device 192.168.1.100:5555 tests/my_test.txt`
 4. View results: `http://127.0.0.1:8089/`
 5. Run from web UI: open Build & Test at `http://127.0.0.1:8089/build.html`
-6. Unit tests: `nix run .#tests`, or without Nix the `python3 -m unittest …` line from `.gitea/workflows/test.yml` (keep `flake.nix`'s copy of that list in step).
+6. Unit tests: `nix run .#tests`, or without Nix the `python3 -m unittest …` line from `.github/workflows/test.yml` (keep `flake.nix`'s copy of that list in step).
+
+## Hosting and review workflow
+This repo isn't tied to one code host: it can live on GitHub, Gitea/Forgejo, GitLab, Bitbucket or a
+mirror. Find the host from the remote you were asked to work against (`git remote -v`, usually
+`origin`) and use that host's tools; the docs never assume one.
+
+| Remote host | Review is called | CLI |
+|---|---|---|
+| github.com or GitHub Enterprise | pull request | `gh pr create` |
+| Gitea / Forgejo | pull request | `tea pr create` |
+| GitLab | merge request | `glab mr create` |
+| Bitbucket | pull request | web UI or REST API |
+
+- `master` changes only through a reviewed PR/MR that a maintainer merges. Never push to `master`
+  and never merge your own PR/MR.
+- Work on a feature branch in its own git worktree, based on the remote's `master`.
+- CI is in `.github/workflows/`, which both GitHub Actions and Gitea Actions run. Its test job runs the same command as `nix run .#tests`; on a host without Actions, run that locally before opening the PR/MR. `ci/docs-drift.sh` fails a PR that changes source files without updating this file.
+- In docs, name sibling repos (e.g. MonkeyTester-Plugin-AI) instead of linking a host URL, link
+  files in this repo with relative paths, and stick to CommonMark plus GFM tables and code
+  fences (no host-only syntax such as `> [!NOTE]` callouts or `#123` autolinks).

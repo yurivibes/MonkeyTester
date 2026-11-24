@@ -6,7 +6,8 @@
 #   1. Write changed files list to /tmp/changed_files.txt (one per line)
 #   2. Run this script
 #
-# CI env (Gitea/GitHub Actions):
+# Env (set by .github/workflows/docs-drift.yml from the PR event; any CI or a
+# local run can set them too):
 #   GITHUB_BASE_SHA  – base commit SHA (PR target)
 #   GITHUB_HEAD_SHA  – head commit SHA (PR source)
 # If neither is set, falls back to HEAD~1..HEAD.
@@ -36,7 +37,7 @@ while IFS= read -r file; do
 
   # Ignore patterns — files that don't require doc updates
   case "$file" in
-    .git/*|README.md|.gitea/*|.github/*|*.lock|*.lockb|*.sum|go.*|vendor/*)
+    .git/*|README.md|.gitea/*|.github/*|.gitlab-ci.yml|bitbucket-pipelines.yml|*.lock|*.lockb|*.sum|go.*|vendor/*)
       continue
       ;;
   esac

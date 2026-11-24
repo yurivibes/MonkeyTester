@@ -37,7 +37,7 @@
           '';
         };
 
-        # Same module list as .gitea/workflows/test.yml.
+        # Same module list as .github/workflows/test.yml.
         tests = pkgs.writeShellApplication {
           name = "monkeytester-tests";
           inherit runtimeInputs;
