@@ -196,5 +196,5 @@ The low findings that remain are `try/except: pass` blocks, `import subprocess`,
 
 ## Reporting a problem
 
-Open an issue at https://github.com/yurivibes/MonkeyTester/issues, or tell the
+Open an issue in this repository's issue tracker, or tell the
 maintainer directly. Don't post working exploit details or real tokens in public places.

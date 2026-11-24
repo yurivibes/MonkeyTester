@@ -18,8 +18,11 @@ jobs:
 
       - name: Detect changed files
         id: detect
+        env:
+          # Same event payload on GitHub Actions and Gitea Actions
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Gitea Actions provides these PR refs
           if [ -n "${GITHUB_HEAD_SHA:-}" ] && [ -n "${GITHUB_BASE_SHA:-}" ]; then
             git diff --name-only "$GITHUB_BASE_SHA" "$GITHUB_HEAD_SHA" > /tmp/changed_files.txt
           else
@@ -28,7 +31,7 @@ jobs:
           fi
 
       - name: Check documentation drift
-        run: bash .gitea/workflows/docs-drift.sh
+        run: bash ci/docs-drift.sh
 
       - name: Failure notice
         if: failure()

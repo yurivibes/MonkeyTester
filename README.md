@@ -8,7 +8,7 @@ exact screen position where it is pressing.
 
 MonkeyTester is the web view and the orchestration between the vision model and the
 device. Devices are owned by a separate service,
-[MonkeyTester-Plugin-Mobile-Controller](https://github.com/yurivibes/MonkeyTester-Plugin-Mobile-Controller),
+MonkeyTester-Plugin-Mobile-Controller,
 which runs on a Mac. The two talk only over HTTP.
 
 ```
@@ -44,16 +44,15 @@ standard library, so there is no `pip install` step. They need:
 | `git` | clone the repo | yes |
 | Pillow | only `visual-tests/scripts/generate_placeholders.py` | no |
 
-Phones are driven by [MonkeyTester-Plugin-Mobile-Controller](https://github.com/yurivibes/MonkeyTester-Plugin-Mobile-Controller)
-on a Mac and the vision model by [MonkeyTester-Plugin-AI](https://github.com/yurivibes/MonkeyTester-Plugin-AI);
-ESP32 boards by [MonkeyTester-Plugin-Esp32](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32)
-and [MonkeyTester-Plugin-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server).
+Phones are driven by MonkeyTester-Plugin-Mobile-Controller
+on a Mac and the vision model by MonkeyTester-Plugin-AI;
+ESP32 boards by MonkeyTester-Plugin-Esp32
+and MonkeyTester-Plugin-Server.
 Build & Test builds your app through a build plugin (see [Build & Test](#build--test)).
 Each is a separate repo with its own install steps, and none of them is needed to install
 the viewer or run its tests.
 
-Clone this repository from wherever you got it (its home is
-[yurivibes/MonkeyTester](https://github.com/yurivibes/MonkeyTester)) and
+Clone this repository from wherever you got it (`git clone <repo-url>`) and
 work from the checkout:
 
 ```bash
@@ -104,7 +103,7 @@ python3 -m unittest test_ci_delivery test_controller_client test_platform_target
   test_stale_runs test_projects test_security_hardening   # or: nix run .#tests
 ```
 
-The test list is the one in `.gitea/workflows/test.yml`; the tests need no
+`nix run .#tests` and CI (`.github/workflows/test.yml`) run the same list; the tests need no
 devices, controller or vision model. Then start the viewer (next section) and check
 `curl -s localhost:8089/health` answers `{"ok": true, ...}`.
 
@@ -215,8 +214,8 @@ Other hardware (ESP32 boards, …) is driven through **device plugins**, separat
 services that follow [PLUGIN_API.md](PLUGIN_API.md). Register them in the **Manage device
 plugins** box on the Settings → Device Plugins page — a name and an address (e.g.
 `esp32-sensor=http://127.0.0.1:8091` and `esp32-server=http://127.0.0.1:8093`
-for [MonkeyTester-Plugin-Esp32](https://github.com/yurivibes/MonkeyTester-Plugin-Esp32) and
-[MonkeyTester-Plugin-Server](https://github.com/yurivibes/MonkeyTester-Plugin-Server));
+for MonkeyTester-Plugin-Esp32 and
+MonkeyTester-Plugin-Server);
 an address is saved (in the `plugins` map of `Run/config.json`) only once its `GET /health`
 answers with the plugin contract, and a `VT_PLUGINS=name=url[,name=url]` environment
 variable is imported into that map once at viewer start and ignored after that. Call
@@ -260,7 +259,7 @@ read-only access token; the viewer never sees that token.
 
 | Plugin | Repo | Default port | What it does |
 |---|---|---|---|
-| `build-local` | [MonkeyTester-Plugin-Build-Local](https://github.com/yurivibes/MonkeyTester-Plugin-Build-Local) | 8094 | Fetches the code from Gitea or GitHub and builds it on its own host: Android and iOS on a Mac, Android only on Linux |
+| `build-local` | MonkeyTester-Plugin-Build-Local | 8094 | Fetches the code from Gitea or GitHub and builds it on its own host: Android and iOS on a Mac, Android only on Linux |
 
 Any other build system can be connected by a plugin that implements the same contract.
 
