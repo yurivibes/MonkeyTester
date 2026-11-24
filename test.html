@@ -997,6 +997,11 @@ async function loadRun() {
             if (meta.end_time) items.push('End: ' + escapeHtml(meta.end_time));
             if (meta.script) items.push('Script: ' + escapeHtml(meta.script));
             if (meta.branch) items.push('Branch: ' + escapeHtml(meta.branch));
+            if (meta.commit || meta.commit_message) {
+                const subject = (meta.commit_message || '').split('\n')[0];
+                items.push('<span title="' + escapeHtml(meta.commit_message || meta.commit).replace(/"/g, '&quot;') + '">Commit: ' +
+                    escapeHtml(((meta.commit || '').slice(0, 7) + ' ' + subject).trim()) + '</span>');
+            }
             if (meta.record_snapshots) items.push('<span class="snapshot-recording">Recording snapshot baselines</span>');
             if (meta.apk) {
                 const apk = meta.apk;

@@ -10,6 +10,9 @@ files) goes into ONE run: the viewer runs every case, in name order, on every
 device. Give --android-app and --ios-app together to cover the Android phones
 and the iPhones in that run; --app with --platform submits a single platform.
 
+The run records the commit under test and its message (shown on the run
+list): HEAD of the checkout this runs in, unless --commit/--commit-message.
+
 --no-wait: upload, print "--- <run_id> started" and exit 0 once the viewer
 has accepted the upload (non-zero when it refused it); the viewer works out
 the test results itself. Without it the script waits for the verdict and
@@ -26,6 +29,7 @@ import argparse
 import json
 import os
 import re
+import subprocess  # nosec B404 - fixed git argv, no shell
 import sys
 import time
 import urllib.error
@@ -232,6 +236,13 @@ def submit_cases(args, apps, case_dirs, payloads_by_case=None):
     platforms = set(apps) | set(failed)
     mode = "all" if len(platforms) > 1 else next(iter(platforms))
     fields = {"device_mode": mode, "branch": args.branch}
+    commit = (getattr(args, "commit", "") or "").strip()
+    if commit:
+        # The commit under test, shown with its message on the run list.
+        fields["commit"] = commit
+        message = getattr(args, "commit_message", "") or ""
+        if message.strip():
+            fields["commit_message"] = message
     repo = (getattr(args, "repo", "") or "").strip()
     if repo:
         # The run's project in the viewer (owner/repo).
@@ -378,6 +389,31 @@ def default_branch(env=None):
     return (env.get("GITHUB_REF_NAME") or "").strip()
 
 
+def git_output(*argv, cwd=None):
+    """stdout of `git <argv>` in cwd, or "" when git or the checkout is missing."""
+    try:
+        out = subprocess.run(["git", *argv], cwd=cwd, capture_output=True,  # nosec B603,B607
+                             text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout if out.returncode == 0 else ""
+
+
+def default_commit(env=None, cwd=None):
+    """(commit id, full message) of the code under test: HEAD of the
+    checkout submit.py runs in (build plugins and CI both run it from the
+    checkout's root), else GITHUB_SHA with no message. ("", "") when neither
+    is known."""
+    env = os.environ if env is None else env
+    sha = git_output("rev-parse", "HEAD", cwd=cwd).strip()
+    if not re.fullmatch(r"[0-9a-f]{7,64}", sha):
+        sha = (env.get("GITHUB_SHA") or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{7,64}", sha):
+            return "", ""
+    message = git_output("log", "-1", "--format=%B", sha, cwd=cwd).strip()
+    return sha, message
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", required=True, help="viewer base URL")
@@ -399,6 +435,12 @@ def main(argv=None):
     parser.add_argument("--tests-dir", default="visual-tests")
     parser.add_argument("--branch", default=default_branch(),
                         help="branch label shown in the viewer (default: GITHUB_REF_NAME when set)")
+    parser.add_argument("--commit", default=None,
+                        help="commit id under test (default: HEAD of the current checkout, "
+                             "else GITHUB_SHA)")
+    parser.add_argument("--commit-message", default=None,
+                        help="commit message shown on the run list (default: the message of --commit "
+                             "from the current checkout)")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""),
                         help="owner/repo the run belongs to in the viewer (default: GITHUB_REPOSITORY)")
     parser.add_argument("--cases", default="",
@@ -413,6 +455,17 @@ def main(argv=None):
     parser.add_argument("--poll", type=float, default=10.0)
     args = parser.parse_args(argv)
     args.url = args.url.rstrip("/")
+    if args.commit is None or args.commit_message is None:
+        sha, message = default_commit()
+        if args.commit is None:
+            args.commit = sha
+        if args.commit_message is None:
+            if args.commit == sha:
+                args.commit_message = message
+            elif re.fullmatch(r"[0-9a-fA-F]{7,64}", args.commit or ""):
+                args.commit_message = git_output("log", "-1", "--format=%B", args.commit).strip()
+            else:
+                args.commit_message = ""
     return run(args)
 
 
