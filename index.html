@@ -35,7 +35,9 @@
 .delete-btn:hover { opacity: 0.9; }
 .run-project { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .run-project.unassigned { font-style: italic; }
-/* Commit under test: short id + subject line, full message on hover */
+/* Commit under test, next to the run #: short id + subject line, full message on hover */
+.run-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; padding-right: 12px; }
+.run-head .run-id { flex-shrink: 0; }
 .run-commit { display: flex; gap: 6px; font-size: 0.8rem; color: var(--text); min-width: 0; }
 .run-commit-sha { font-family: var(--mono); color: var(--text-muted); flex-shrink: 0; }
 .run-commit-msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -327,14 +329,16 @@ async function showRuns() {
                     '<input type="checkbox" class="run-checkbox"' + checked + ' onclick="onRunCheckClick(event, ' + i + ')">' +
                 '</label>' +
                 '<span class="run-info">' +
-                    '<a class="run-id run-open" href="' + runPageUrl(name) + '" onclick="event.stopPropagation()">' + escapeHtml(runDisplayLabel(name)) + '</a>' +
+                    '<span class="run-head">' +
+                        '<a class="run-id run-open" href="' + runPageUrl(name) + '" onclick="event.stopPropagation()">' + escapeHtml(runDisplayLabel(name)) + '</a>' +
+                        runCommitHtml(run) +
+                    '</span>' +
                     '<span class="run-sub">' +
                         (date ? '<span class="run-date">' + escapeHtml(date) + '</span>' : '') +
                         (repo ? '<span class="run-project" title="Project">' + escapeHtml(repo) + '</span>'
                               : '<span class="run-project unassigned" title="No project recorded">Unassigned</span>') +
                         (branch ? '<span class="run-branch">' + escapeHtml(branch) + '</span>' : '') +
                     '</span>' +
-                    runCommitHtml(run) +
                 '</span>' +
             '</span>' +
             '<span class="run-badge">' +
