@@ -149,21 +149,11 @@ details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
 
     <div class="settings-section" id="pluginsBuildSection">
         <div class="plugins-section-title">Build Plugin</div>
-        <div class="plugins-intro">Build &amp; Test builds a branch of your app on a <strong>build plugin</strong>'s own host — a Mac builds Android and iOS, a Linux host Android only — and tests the result on the devices. A build plugin is a separate service that fetches the branch from <strong>Gitea or GitHub</strong>, runs the app repo's build scripts there and uploads the apps back to the viewer. The plugin holds the code host's address and read-only token; the viewer never sees that token.</div>
+        <div class="config-info">A <strong>build plugin</strong> builds a branch of your app on its own host and uploads the apps to the viewer, which then tests them on the devices. Register its address in the box below, and use <strong>Configure</strong> on its card for the code host settings. Projects pick a build plugin on <a href="/config">Settings &rarr; Build &amp; Test</a>.</div>
         <div class="plugins-list" id="buildPluginsList"></div>
         <div class="plugin-configure" id="buildConfigure"></div>
         <div class="plugin-manage" id="buildManage"></div>
         <div class="settings-status" id="buildManageStatus" hidden></div>
-        <details class="plugins-howto">
-            <summary>How to configure a build plugin</summary>
-            <ul>
-                <li>The <strong>local build tool</strong> is <code>build-local</code> at <code>http://127.0.0.1:8094</code>: it builds on its own host — a Mac builds Android and iOS, a Linux host Android only. <strong>Add</strong> registers it: the address is saved only when the plugin's <code>GET /health</code> answers with the build plugin contract (<code>BUILD_PLUGIN_API.md</code>, contract <code>monkeytester-build-plugin</code>) — a refused save shows the plugin's own error.</li>
-                <li>Build plugins live in the SAME <code>Run/config.json</code> <code>plugins</code> map as the Test Plugins above, as object entries <code>{name: {url}}</code> (a plain url string is a Test Plugin). <strong>Add</strong> takes a pairing token only if the plugin was started with its own <code>PLUGIN_TOKEN</code>; leave it blank when editing to keep the saved one. The token is stored in <code>service_tokens.json</code> (mode 0600), not in <code>config.json</code>, and can also be replaced in Settings &rarr; Configuration &rarr; Service tokens. On the first viewer start, entries of <code>VT_BUILD_PLUGINS=name=url[,name=url]</code> are imported into the map once, after which Settings owns the list.</li>
-                <li><strong>Save address</strong> edits a registered plugin's address; <strong>Remove</strong> forgets a registration — refused while a Build &amp; Test project still uses that plugin.</li>
-                <li>Click <strong>Configure</strong> on the card for the plugin's code host settings: <strong>Code host</strong> (Gitea or GitHub), its <strong>URL</strong>, a <strong>read-only token</strong> (paste; sent to the plugin, which checks it with the code host before saving — stored by the plugin only, mode 0600, never shown again; the scopes it needs — Gitea <code>read:repository</code> + <code>read:user</code>, GitHub fine-grained <code>Contents: read</code> + <code>Metadata: read</code>, or a classic <code>repo</code> token for private repos — are in the plugin's README) and the <strong>Viewer URL</strong> the plugin uploads built apps to, prefilled with the address you are using now. <strong>Save</strong> stays greyed while nothing differs from the saved state; <strong>Remove token</strong> appears once one is saved.</li>
-                <li>The repos themselves live on <a href="/config">Settings → Build &amp; Test</a>: each project picks a build plugin from this registry and a branch; the check column shows whether the plugin can read the repo and whether that branch has the platform's build script (<code>.monkeytester/build-android.sh</code>, <code>.monkeytester/build-ios.sh</code>).</li>
-            </ul>
-        </details>
     </div>
 
 
