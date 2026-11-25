@@ -76,6 +76,13 @@ class ChatTests(VisionCase):
             screenshot_diff.compare_images(self.image, self.image)
         self.assertEqual([r[0] for r in Stub.requests], ["Bearer k"] * 5)
 
+    def test_input_field_check_asks_for_a_bbox(self):
+        # The AI plugin centres `coordinates` on the box; without one the model
+        # points at matching text near the field and INPUT taps outside it.
+        vision.check_input_field(self.image, "Email text field")
+        prompt = Stub.requests[0][1]["messages"][0]["content"][1]["text"]
+        self.assertIn('"bbox": [x1, y1, x2, y2]', prompt)
+
     def test_endpoint_is_read_when_called_not_when_imported(self):
         vision.verify_element(self.image, "x")
         self.assertEqual(Stub.requests[0][1]["model"], "m")

@@ -174,10 +174,16 @@ def find_element(image_path, description):
 
 
 def check_input_field(image_path, description):
-    """Check what's in an input field - has text or is it empty/placeholder?"""
+    """Check what's in an input field - has text or is it empty/placeholder?
+
+    The reply asks for a bbox as well as the point. Without a box, Qwen2.5-VL
+    gives a point on whatever text best matches the words (on a join screen,
+    the "enter its link" sentence above the field), and INPUT taps there. The
+    AI plugin replaces `coordinates` with the box centre when a box is present,
+    which lands inside the field."""
     prompt = f"""Find input field: "{description}"
 Check content. Return ONLY JSON:
-{{"found": true/false, "has_text": true/false, "text": "visible text", "is_placeholder": true/false, "coordinates": [x, y]}}"""
+{{"found": true/false, "has_text": true/false, "text": "visible text", "is_placeholder": true/false, "coordinates": [x, y], "bbox": [x1, y1, x2, y2]}}"""
     return _parse_json_response(chat([image_part(image_path), text_part(prompt)]))
 
 
