@@ -197,6 +197,25 @@ def write_private_json(path, data):
         raise
 
 
+# ─── Plugin documentation path (GET /plugins/docs/<name>) ───
+
+def plugin_docs_path(value):
+    """The `docs` field of a plugin's /health when it is a safe same-origin
+    path, else None. Valid: a string starting with "/" (not "//"), no
+    backslash, no scheme, no CR/LF/NUL, at most 256 characters. The viewer
+    appends it to the plugin's own base URL, so anything that could name
+    another host or protocol is refused."""
+    if not isinstance(value, str) or not value or len(value) > 256:
+        return None
+    if not value.startswith("/") or value.startswith("//"):
+        return None
+    if any(c in value for c in ("\\", "\r", "\n", "\x00")):
+        return None
+    if re.match(r"^/*[A-Za-z][A-Za-z0-9+.-]*:", value) or "://" in value:
+        return None
+    return value
+
+
 # ─── HTTP handler hardening ───
 
 SECURITY_HEADERS = (
@@ -231,16 +250,30 @@ def harden_handler(cls):
 
     def send_response(self, code, message=None):
         self._mt_response_started = True
+        self._mt_header_names = set()
         orig_send_response(self, code, message)
 
     def end_headers(self):
         if not getattr(self, "_mt_security_headers_sent", False):
             self._mt_security_headers_sent = True
+            sent = getattr(self, "_mt_header_names", None) or set()
             for name, value in SECURITY_HEADERS:
-                self.send_header(name, value)
+                if name.lower() not in sent:
+                    self.send_header(name, value)
         orig_end_headers(self)
 
+    orig_send_header = cls.send_header
+
+    def send_header(self, keyword, value):
+        # A route may set its own value for a hardening header (the plugin
+        # docs page sends Referrer-Policy: no-referrer); end_headers then
+        # skips the default instead of sending the header twice.
+        sent = self.__dict__.setdefault("_mt_header_names", set())
+        sent.add(str(keyword).lower())
+        orig_send_header(self, keyword, value)
+
     cls.send_response = send_response
+    cls.send_header = send_header
     cls.end_headers = end_headers
 
     def guard(method, not_found_if_silent):

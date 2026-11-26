@@ -99,14 +99,47 @@ Readiness. Never blocks on hardware.
   "host": {"os": "linux", "hostname": "server"},
   "devices": 1,
   "capabilities": ["events", "uploads"],
+  "docs": "/docs",
   "error": null
 }
 ```
 
 `capabilities` lists the optional parts of this contract the plugin supports.
 
+`docs` (optional) is the path of the plugin's documentation page, normally `"/docs"`
+(see [`GET /docs`](#get-docs-optional)). Advertise it only when the page can actually be
+served (a packaged install without its README omits the field); no field means no
+documentation, and the viewer shows no link.
+
 MonkeyTester refuses a plugin whose `contract` differs or whose `contract_version`
 is not one it supports.
+
+### `GET /docs` (optional)
+
+The plugin's documentation (setup, endpoints, configuration) as one self-contained
+HTML page, rendered from the repo's `README.md` by the shared `docs_page.py`. Offered
+only when `GET /health` has `"docs": "/docs"`.
+
+- Auth like every other route: only `/health` is open, so with a token configured
+  `/docs` needs `X-Plugin-Token` (401 otherwise).
+- `200`, `Content-Type: text/html; charset=utf-8`, with
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`. No scripts, no
+  external assets.
+- README missing or unreadable: `404` with the usual error body.
+
+Browsers never call it directly. On Settings → Plugins, a row whose plugin reports
+`docs` shows a **Documentation** link under its address; it opens the viewer's
+`GET /plugins/docs/<name>` in a new tab, and the viewer fetches the page from the
+plugin with the plugin's saved token (no redirects followed, `text/html` only, at most
+2 MiB) and serves it under a sandbox CSP (`… img-src data: …; sandbox`), so nothing in
+it can run on the viewer's origin. The viewer accepts `docs` only as a path: a string
+starting with `/` (not `//`), no `\`, no scheme, no CR/LF, at most 256 characters.
+
+The same applies to monkeytester-ai (pairing token as `X-Plugin-Token`), to build
+plugins ([BUILD_PLUGIN_API.md](BUILD_PLUGIN_API.md)) and to the Mobile Controller: its
+`GET /health` may carry `"docs": "/docs"` and its `GET /docs` takes `X-Controller-Token`
+like its other routes; its row's link is `/plugins/docs/controller`.
 
 ### `GET /devices`
 
