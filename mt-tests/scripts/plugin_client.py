@@ -717,6 +717,10 @@ def plugins_overview(env=None, timeout=3, tokens=None, ai_url="", ai_token=None,
                      config=None)
         if body is not None:
             entry["capabilities"] = body.get("capabilities") or []
+            # The optional /health `docs` path, raw: the viewer validates it
+            # and passes only a docs true/false on to the browser.
+            if isinstance(body.get("docs"), str):
+                entry["docs"] = body["docs"]
             try:
                 entry["devices"] = client.devices(timeout=timeout)
             except PluginError:

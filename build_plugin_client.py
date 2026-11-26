@@ -317,6 +317,9 @@ def health_entry(client, timeout=3):
                  viewer_url=str(body.get("viewer_url") or ""),
                  queue={"running": queue.get("running"), "waiting": queue.get("waiting")} if queue else None,
                  capabilities=[str(c) for c in body.get("capabilities") or [] if isinstance(c, str)])
+    if isinstance(body.get("docs"), str):
+        # Optional GET /docs path, raw; the viewer validates it (docs: true/false).
+        entry["docs"] = body["docs"]
     if not entry["ok"]:
         entry["error"] = str(body.get("error") or "plugin reports not ok")
     return entry

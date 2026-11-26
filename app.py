@@ -9,6 +9,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 import zipfile
 import io
@@ -287,7 +289,8 @@ def controller_status():
                 "error": f"API version is {version}, expected {CONTROLLER_API_VERSION}; "
                          "update whichever is older"}
     return {"ok": bool(body.get("ok")), "url": base, "api_version": version,
-            "appium": body.get("appium"), "adb": body.get("adb")}
+            "appium": body.get("appium"), "adb": body.get("adb"),
+            "docs": sec.plugin_docs_path(body.get("docs")) is not None}
 
 
 _PLUGIN_SELECTED_CACHE = {}  # plugin name -> (selected model id, when)
@@ -710,7 +713,124 @@ def plugins_overview():
         out["plugins"].append(row)
     out["ai_plugin"] = {"name": pc.AI_PLUGIN_NAME, "url": url, "configured": bool(url),
                         "token": token_info(key), "managed": managed}
+    # docs: the plugin's /health advertises a valid GET /docs path, so the
+    # /plugins row shows its Documentation link (served via /plugins/docs/<name>).
+    for row in out["plugins"]:
+        row["docs"] = sec.plugin_docs_path(row.get("docs")) is not None
     return out
+
+
+# ─── Plugin documentation (GET /plugins/docs/<name>) ───
+# A plugin whose /health advertises "docs": "/docs" serves its README as an
+# HTML page. The browser never talks to a plugin: the viewer fetches the page
+# with that plugin's saved token and serves it under a sandbox CSP, so a
+# script in the plugin's page can never run on the viewer's origin.
+PLUGIN_DOCS_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+PLUGIN_DOCS_HEALTH_TIMEOUT = 3
+PLUGIN_DOCS_TIMEOUT = 10
+PLUGIN_DOCS_MAX_BYTES = 2 * 1024 * 1024
+PLUGIN_DOCS_CSP = ("default-src 'none'; style-src 'unsafe-inline'; img-src data:; "
+                   "base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox")
+PLUGIN_DOCS_ERROR_CSP = ("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
+                         "form-action 'none'; frame-ancestors 'none'")
+CONTROLLER_ROW_KEY = "controller"  # the Controller Plugin row's key on /plugins
+
+
+class PluginDocsError(Exception):
+    """status 404 (no such plugin / no documentation) or 502 (fetch failed)."""
+
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def plugin_docs_target(name):
+    """(base url, request headers) for a /plugins row key, from the viewer's
+    own config — the same lookups the rows and Configure panels use — or None
+    for an unknown name. Device plugins, monkeytester-ai and build plugins
+    send X-Plugin-Token; the Mobile Controller (row key "controller", unless a
+    plugin is registered under that name) sends X-Controller-Token."""
+    if not isinstance(name, str) or not PLUGIN_DOCS_NAME_RE.fullmatch(name):
+        return None
+    pc = _plugin_client()
+    cfg = load_config()
+    if name == pc.AI_PLUGIN_NAME:
+        url = ai_plugin_url(cfg)
+        if not url:
+            return None
+        key = ai_pairing_token(cfg)
+        return url.rstrip("/"), ({"X-Plugin-Token": key} if key else {})
+    try:
+        devices = pc.load_plugins(cfg)
+    except pc.PluginError:
+        devices = {}
+    if name in devices:
+        token = auth.plugin_token(name) or devices[name].token or ""
+        return devices[name].url.rstrip("/"), ({"X-Plugin-Token": token} if token else {})
+    registry = _builds().registry_plugins()
+    if name in registry:
+        token = registry[name].get("token") or builds._saved_token(name)
+        return registry[name]["url"].rstrip("/"), ({"X-Plugin-Token": token} if token else {})
+    if name == CONTROLLER_ROW_KEY:
+        base = _controller_url()
+        if base:
+            return base, _controller_headers()
+    return None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Turn every 3xx into an HTTPError: the docs proxy never follows one."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def fetch_plugin_docs(name):
+    """The plugin's documentation page as bytes. Raises PluginDocsError:
+    404 for an unknown name or a missing/invalid /health `docs` path, 502
+    when the plugin is offline, redirects, answers non-HTML, an error or
+    more than PLUGIN_DOCS_MAX_BYTES."""
+    target = plugin_docs_target(name)
+    if not target:
+        raise PluginDocsError(404, f"There is no plugin named {name!r} on this viewer.")
+    base, headers = target
+    opener = urllib.request.build_opener(_NoRedirect)
+
+    def open_(path, timeout, accept):
+        req = urllib.request.Request(sec.check_http_url(base + path),
+                                     headers={**headers, "Accept": accept})
+        return opener.open(req, timeout=timeout)  # nosec B310
+
+    try:
+        with open_("/health", PLUGIN_DOCS_HEALTH_TIMEOUT, "application/json") as resp:
+            health = json.loads(resp.read(256 * 1024).decode() or "{}")
+    except urllib.error.HTTPError as e:
+        e.close()
+        raise PluginDocsError(502, f"GET /health answered HTTP {e.code}") from None
+    except Exception as e:
+        raise PluginDocsError(502, f"the plugin is unreachable ({getattr(e, 'reason', e)})") from None
+    docs = sec.plugin_docs_path(health.get("docs") if isinstance(health, dict) else None)
+    if not docs:
+        raise PluginDocsError(404, "This plugin has no documentation.")
+    try:
+        with open_(docs, PLUGIN_DOCS_TIMEOUT, "text/html") as resp:
+            if resp.headers.get_content_type() != "text/html":
+                raise PluginDocsError(502, "the plugin answered with "
+                                           f"{resp.headers.get_content_type()}, not text/html")
+            body = resp.read(PLUGIN_DOCS_MAX_BYTES + 1)
+    except PluginDocsError:
+        raise
+    except urllib.error.HTTPError as e:
+        e.close()
+        if 300 <= e.code < 400:
+            raise PluginDocsError(502, f"the plugin answered with a redirect (HTTP {e.code})") from None
+        raise PluginDocsError(502, f"GET {docs} answered HTTP {e.code}") from None
+    except Exception as e:
+        raise PluginDocsError(502, f"the plugin is unreachable ({getattr(e, 'reason', e)})") from None
+    if len(body) > PLUGIN_DOCS_MAX_BYTES:
+        raise PluginDocsError(502, "the page is larger than 2 MiB")
+    return body
 
 
 AI_NOT_CONFIGURED = ("no monkeytester-ai plugin configured — set its address first "
@@ -2862,6 +2982,10 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             self.end_headers()
         elif path == "/plugins" or path == "/plugins.html":
             self.serve_page("plugins.html")
+        elif path.startswith("/plugins/docs/"):
+            # A plugin's documentation page, fetched from the plugin by the
+            # viewer (the /plugins rows' Documentation link opens it).
+            self.serve_plugin_docs(path[len("/plugins/docs/"):])
         elif path == "/models" or path == "/models.html":
             # The model picker now lives inside the Device Plugins panel:
             # clicking the AI plugin row configures it there. Old bookmarks
@@ -3243,6 +3367,52 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             self.wfile.write(body.encode())
         else:
             self.send_error(404)
+
+    def serve_plugin_docs(self, name):
+        """GET /plugins/docs/<name>: the plugin's GET /docs page, proxied with
+        its saved token and served under a sandbox CSP (PLUGIN_DOCS_CSP), so
+        nothing in it can run on the viewer's origin. Unknown name or no
+        documentation → 404 page; fetch failure → 502 page."""
+        try:
+            body = fetch_plugin_docs(name)
+        except PluginDocsError as e:
+            self.send_plugin_docs_error(name, e.status, e.message)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Security-Policy", PLUGIN_DOCS_CSP)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_plugin_docs_error(self, name, status, message):
+        """Small self-contained HTML page for a docs failure, everything escaped."""
+        import html as _html
+        shown = name if PLUGIN_DOCS_NAME_RE.fullmatch(name or "") else "this plugin"
+        if status == 404:
+            title = "No documentation"
+            text = message
+        else:
+            title = "Documentation unavailable"
+            text = f"Couldn't load the documentation for {shown}: {message}"
+        page = ("<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+                f"<title>{_html.escape(title)}</title><style>body{{font-family:sans-serif;"
+                "max-width:640px;margin:40px auto;padding:0 16px;line-height:1.5}</style>"
+                f"</head><body><h1>{_html.escape(title)}</h1><p>{_html.escape(text)}</p>"
+                "<p><a href=\"/plugins\">Back to Plugins</a></p></body></html>").encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(page)))
+        # Its own CSP without `sandbox`: the page is the viewer's own (no
+        # plugin bytes), and its Back link must keep the session cookie.
+        self.send_header("Content-Security-Policy", PLUGIN_DOCS_ERROR_CSP)
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(page)
 
     def serve_font(self, name):
         """GET /fonts/<name>.woff2 — one of the woff2 files in fonts/.

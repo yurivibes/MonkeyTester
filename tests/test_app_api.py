@@ -269,7 +269,7 @@ class PluginSettingsTests(ServerCase):
                                            "contract_version": 1,
                                            "plugin": {"name": "esp32", "version": "0.1.0"},
                                            "capabilities": ["flash"],
-                                           "config": None,
+                                           "config": None, "docs": False,
                                            "devices": [{"id": "ab:cd", "model": "C3",
                                                         "state": "ready"}]})
         self.assertFalse(by_name["monkeytester-ai"]["ok"])  # listed, not configured

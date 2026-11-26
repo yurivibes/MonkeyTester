@@ -57,6 +57,7 @@ Same as [PLUGIN_API.md](PLUGIN_API.md):
   "viewer_url": "http://192.168.1.10:8089",
   "queue": {"running": "br_0123456789abcdef", "waiting": 0},
   "capabilities": ["logs", "cancel"],
+  "docs": "/docs",
   "error": null
 }
 ```
@@ -68,9 +69,20 @@ Same as [PLUGIN_API.md](PLUGIN_API.md):
   → `android`). Build & Test offers only these.
 - `recipes`: the file in the app repo that builds each platform.
 - `capabilities`: optional parts of this contract the plugin supports (`logs`, `cancel`).
+- `docs` (optional): path of the plugin's documentation page, `"/docs"`; present only when
+  the page can be served (see `GET /docs` below).
 
 MonkeyTester refuses a plugin whose `contract` differs or whose `contract_version` it
 does not support.
+
+### `GET /docs` (optional)
+
+The plugin's README as one self-contained HTML page, exactly as in
+[PLUGIN_API.md → `GET /docs`](PLUGIN_API.md#get-docs-optional): pairing token required
+like every route but `/health`, `text/html; charset=utf-8` under a strict CSP, `404` when
+the README can't be read. The viewer's Build Plugin row shows a **Documentation** link
+when `/health` reports `docs`; it opens `/plugins/docs/<name>`, which the viewer fetches
+with the saved token and serves under a sandbox CSP.
 
 ### `GET /config` / `POST /config`
 
