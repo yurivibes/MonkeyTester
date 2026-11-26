@@ -177,19 +177,19 @@ class RunnerConfigTests(unittest.TestCase):
         # The live config after the one-time import: the legacy keys are still
         # there, and MT_PLUGINS still names another monkeytester-ai address.
         out, _ = self.resolved_endpoint(
-            {"visual_endpoint": "http://192.168.125.71:8091/v1/chat/completions",
+            {"visual_endpoint": "http://192.168.1.20:8091/v1/chat/completions",
              "visual_model": "qwen2.5vl:7b", "visual_api_key": "pair-tok-4242",
              "visual_plugin": "monkeytester-ai", "visual_plugin_url": "http://10.0.0.5:8091/"},
-            mt_plugins="monkeytester-ai=http://192.168.125.71:8091")
+            mt_plugins="monkeytester-ai=http://192.168.1.20:8091")
         self.assertEqual(out, {"VISION_MODEL_API_URL": "http://10.0.0.5:8091/v1/chat/completions",
                                "VISUAL_MODEL_API_KEY": "pair-tok-4242", "VISION_MODEL_NAME": ""})
 
     def test_live_legacy_config_before_the_import_still_works(self):
         out, _ = self.resolved_endpoint(
-            {"visual_endpoint": "http://192.168.125.71:8091/v1/chat/completions",
+            {"visual_endpoint": "http://192.168.1.20:8091/v1/chat/completions",
              "visual_model": "qwen2.5vl:7b", "visual_api_key": "pair-tok-4242"},
-            mt_plugins="monkeytester-ai=http://192.168.125.71:8091")
-        self.assertEqual(out["VISION_MODEL_API_URL"], "http://192.168.125.71:8091/v1/chat/completions")
+            mt_plugins="monkeytester-ai=http://192.168.1.20:8091")
+        self.assertEqual(out["VISION_MODEL_API_URL"], "http://192.168.1.20:8091/v1/chat/completions")
         self.assertEqual(out["VISION_MODEL_NAME"], "qwen2.5vl:7b")
 
     def test_visual_plugin_without_address_falls_back_to_legacy_endpoint(self):

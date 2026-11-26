@@ -54,12 +54,14 @@ Same as [PLUGIN_API.md](PLUGIN_API.md):
             "configured": true, "user": "ci-bot"},
   "platforms": ["android", "ios"],
   "recipes": {"android": ".monkeytester/build-android.sh", "ios": ".monkeytester/build-ios.sh"},
-  "viewer_url": "http://192.168.125.70:8089",
+  "viewer_url": "http://192.168.1.10:8089",
   "queue": {"running": "br_0123456789abcdef", "waiting": 0},
   "capabilities": ["logs", "cancel"],
   "error": null
 }
 ```
+
+`viewer_url` above (`http://192.168.1.10:8089`) is an example address; the real value is your viewer's own address.
 
 - `forge` is the code host the plugin reads from (`kind`: `gitea` or `github`).
 - `platforms`: what this host can build (detected at start: Xcode → `ios`, an Android SDK

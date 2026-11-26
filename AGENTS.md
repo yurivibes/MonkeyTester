@@ -11,7 +11,7 @@ Install the dependencies with the steps in README.md → **Install** before runn
 - Device plugins and the Mobile Controller are separate repos, each with its own AGENTS.md and README.md → Install. The viewer runs and its tests pass without any of them.
 
 ## Critical Rules
-- **Never modify the code in place.** Don't edit the main checkout (`/mnt/raid1/Workspace/MonkeyTester/MonkeyTester`), which serves the live instance on port 8089, and don't test changes there. Make every change on a branch in its own git worktree and raise a PR. To test it, start a new instance on a new port with `/mnt/raid1/Workspace/monkeytester-pr-test/pr-test.sh start <pr-number>`, which gives the PR its own worktree, its own copy of `Run/` and `Conf/`, and a free port in 8100-8199. Use `refresh` after pushing more commits and `stop` when finished.
+- **Never modify the code in place.** Don't edit the main checkout, which serves the live instance on port 8089, and don't test changes there. Make every change on a branch in its own git worktree and raise a PR. To test it, start a new instance on a new port with the lab's `pr-test.sh start <pr-number>` script (kept outside this repo), which gives the PR its own worktree, its own copy of `Run/` and `Conf/`, and a free port in 8100-8199. Use `refresh` after pushing more commits and `stop` when finished.
 - **No device code in this repo.** adb, Appium, devicectl and video capture belong in MonkeyTester-Plugin-Mobile-Controller. Everything here goes through its HTTP API (`API.md` in that repo).
 - **If any endpoint or functionality changes, update this AGENTS.md immediately.** Document the new/changed endpoint, method, path, request/response format, and purpose.
 - **If the architecture changes (new services, new ports, new components), update `ARCHITECTURE.md` and note it in AGENTS.md.**
@@ -387,7 +387,7 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 ### Environment Variables
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `CONTROLLER_URL` | (empty, required) | Mobile Controller base URL, e.g. `http://192.168.125.5:8090`. Imported once at viewer start into `config.json` `controller_url` when that key is absent; afterwards Settings → Plugins → Controller Plugin (POST /api/config/controller) owns the address and this variable is ignored. The runner always receives the RESOLVED value (`app.py` re-exports `CONTROLLER_URL` into the run environment) |
+| `CONTROLLER_URL` | (empty, required) | Mobile Controller base URL, e.g. `http://192.168.1.20:8090` (example address; use your controller's). Imported once at viewer start into `config.json` `controller_url` when that key is absent; afterwards Settings → Plugins → Controller Plugin (POST /api/config/controller) owns the address and this variable is ignored. The runner always receives the RESOLVED value (`app.py` re-exports `CONTROLLER_URL` into the run environment) |
 | `CONTROLLER_TOKEN` / `IOS_CONTROLLER_TOKEN` | (empty) | Legacy: imported once into Settings → Service tokens, then ignored (the viewer overwrites `CONTROLLER_TOKEN` in its own environment from `service_tokens.json`, and runners read that) |
 | `MT_CI_TOKEN` | (empty) | Viewer: legacy, imported once as the CI token, then ignored. `submit.py`: the CI token it sends |
 | `MT_RUNNER_TOKEN` | (set by the viewer) | Per-start secret the runner sends on press events; never set it yourself |
@@ -456,9 +456,11 @@ results from different devices.
 
 ## Running the System
 
+> **Note:** IP addresses in this document (`192.168.1.10` for the Linux host, `192.168.1.20` for the Mac, `192.168.1.100:5555` for an Android phone) are examples only. Don't use them as-is; replace them with your own machines' addresses.
+
 1. Start MonkeyTester-Plugin-Mobile-Controller on the Mac (see its README).
-2. Start the web viewer: `CONTROLLER_URL=http://192.168.125.5:8090 python3 app.py 8089` (with Nix: `CONTROLLER_URL=… nix run . -- 8089`)
-3. Run tests: `cd mt-tests/scripts && CONTROLLER_URL=http://192.168.125.5:8090 python3 run_on_device.py --device 192.168.1.100:5555 tests/my_test.txt`
+2. Start the web viewer: `CONTROLLER_URL=http://192.168.1.20:8090 python3 app.py 8089` (with Nix: `CONTROLLER_URL=… nix run . -- 8089`)
+3. Run tests: `cd mt-tests/scripts && CONTROLLER_URL=http://192.168.1.20:8090 python3 run_on_device.py --device 192.168.1.100:5555 tests/my_test.txt`
 4. View results: `http://127.0.0.1:8089/`
 5. Run from web UI: open Build & Test at `http://127.0.0.1:8089/build.html`
 6. Unit tests: `nix run .#tests`, or without Nix the `python3 -m unittest …` line from `.github/workflows/test.yml` (keep `flake.nix`'s copy of that list in step).

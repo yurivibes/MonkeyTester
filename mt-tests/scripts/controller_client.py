@@ -12,7 +12,7 @@ Coordinates are DEVICE PIXELS everywhere, the same space the vision model works
 in. The controller converts them where a device needs something else.
 
 Environment:
-  CONTROLLER_URL   — controller base URL (e.g. http://192.168.125.5:8090). REQUIRED.
+  CONTROLLER_URL   — controller base URL (e.g. http://192.168.1.20:8090; example address, use your controller's). REQUIRED.
   CONTROLLER_TOKEN — shared token, only sent when the controller requires it.
   DEVICE_ID        — target device (set by run_on_device.py per device).
 """
@@ -49,7 +49,7 @@ def _controller_url():
     if not url:
         raise RuntimeError(
             "CONTROLLER_URL is not set — point MonkeyTester at "
-            "MonkeyTester-Plugin-Mobile-Controller (e.g. http://192.168.125.5:8090).")
+            "MonkeyTester-Plugin-Mobile-Controller (e.g. http://192.168.1.20:8090; example address, use your controller's).")
     return url.rstrip("/")
 
 

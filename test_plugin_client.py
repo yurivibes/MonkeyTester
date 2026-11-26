@@ -562,14 +562,14 @@ class RemoteProviderShapeTests(unittest.TestCase):
 
     def test_public_remote_never_carries_the_key(self):
         body = {"provider": "remote",
-                "remote": {"url": "http://192.168.125.70:8080", "model": "video-model",
+                "remote": {"url": "http://192.168.1.10:8080", "model": "video-model",
                            "models": [{"id": "video-model"}, {"id": "qwen2.5-vl-7b"}, "x", {}],
                            "resize": False, "api_key": "sk-secret-5678",
                            "key": {"configured": True, "last4": "5678", "value": "sk-secret-5678"},
                            "error": None}}
         out = plugin_client.public_ai_config(body)
         self.assertEqual(out["provider"], "remote")
-        self.assertEqual(out["remote"], {"url": "http://192.168.125.70:8080", "model": "video-model",
+        self.assertEqual(out["remote"], {"url": "http://192.168.1.10:8080", "model": "video-model",
                                          "models": [{"id": "video-model"}, {"id": "qwen2.5-vl-7b"},
                                                     {"id": "x"}],
                                          "resize": False,

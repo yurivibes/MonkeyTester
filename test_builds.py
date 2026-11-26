@@ -165,10 +165,10 @@ class PluginSettingsTests(BuildCase):
         # Code host kind (Gitea or GitHub) and the viewer URL pass through too.
         status, body = self.call("POST", "/api/config/build/plugins/build-local/config",
                                  {"forge_kind": "github", "forge_url": "https://github.com", "token": FORGE_TOKEN,
-                                  "viewer_url": "http://192.168.125.70:8089"})
+                                  "viewer_url": "http://192.168.1.10:8089"})
         self.assertEqual(status, 200, body)
         self.assertEqual((body["config"]["forge_kind"], body["config"]["viewer_url"]),
-                         ("github", "http://192.168.125.70:8089"))
+                         ("github", "http://192.168.1.10:8089"))
         self.assertEqual(self.call("GET", "/api/config/build")[1]["plugins"][0]["forge"]["label"], "GitHub")
         for bad in ({"forge_kind": "svn"}, {"viewer_url": None}, {"forge_url": 5}):
             self.assertEqual(self.call("POST", "/api/config/build/plugins/build-local/config", bad)[0], 400, bad)
@@ -570,20 +570,20 @@ class MigrationTests(BuildCase):
 
     def test_mt_build_local_url_sets_the_address(self):
         self.write_legacy()
-        cfg = builds.migrate({"MT_BUILD_LOCAL_URL": "http://192.168.125.71:8094/"})
-        self.assertEqual(cfg["plugins"]["build-local"]["url"], "http://192.168.125.71:8094")
+        cfg = builds.migrate({"MT_BUILD_LOCAL_URL": "http://192.168.1.20:8094/"})
+        self.assertEqual(cfg["plugins"]["build-local"]["url"], "http://192.168.1.20:8094")
 
     def test_token_is_handed_to_the_unconfigured_plugin_once(self):
         legacy = self.write_legacy(token=FORGE_TOKEN)
         FakeBuildPlugin.forge = {"forge_kind": "", "forge_url": "", "token": "", "user": "", "viewer_url": ""}
         with patch.dict(os.environ, {"MT_BUILD_LOCAL_URL": self.plugin_url,
-                                     "MT_PUBLIC_URL": "http://192.168.125.70:8089/"}):
+                                     "MT_PUBLIC_URL": "http://192.168.1.10:8089/"}):
             status, body = self.call("GET", "/api/config/build")  # first load migrates and hands over
         self.assertEqual(status, 200, body)
         posts = [c for c in FakeBuildPlugin.calls if c[:2] == ("POST", "/config")]
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0][2], {"forge_kind": "gitea", "forge_url": "http://gitea:3000",
-                                       "token": FORGE_TOKEN, "viewer_url": "http://192.168.125.70:8089"})
+                                       "token": FORGE_TOKEN, "viewer_url": "http://192.168.1.10:8089"})
         self.assertTrue(body["plugins"][0]["forge"]["configured"])
         self.assertEqual([p["repo"] for p in body["projects"]], [REPO, OTHER])
         # The viewer no longer holds the token.

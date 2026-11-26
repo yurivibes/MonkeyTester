@@ -11,8 +11,10 @@ device. Devices are owned by a separate service,
 MonkeyTester-Plugin-Mobile-Controller,
 which runs on a Mac. The two talk only over HTTP.
 
+> **Note:** IP addresses in this document (`192.168.1.10` for the Linux host, `192.168.1.20` for the Mac, `192.168.1.100:5555` for an Android phone) are examples only. Don't use them as-is; replace them with your own machines' addresses.
+
 ```
-        Linux host (192.168.125.70)                 Mac (192.168.125.5)
+        Linux host (192.168.1.10)                 Mac (192.168.1.20)
 ┌─────────────────────────────────────────┐   ┌──────────────────────────────────┐
 │  viewer (app.py) :8089                  │   │  MonkeyTester-Plugin-Mobile-Controller  │
 │   ├── serves the run pages              │   │  :8090                           │
@@ -112,8 +114,8 @@ devices, controller or vision model. Then start the viewer (next section) and ch
 Set up the Mobile Controller on the Mac first (see its README), then:
 
 ```bash
-CONTROLLER_URL=http://192.168.125.5:8090 python3 app.py 8089
-# or, with Nix: CONTROLLER_URL=http://192.168.125.5:8090 nix run . -- 8089
+CONTROLLER_URL=http://192.168.1.20:8090 python3 app.py 8089
+# or, with Nix: CONTROLLER_URL=http://192.168.1.20:8090 nix run . -- 8089
 # optional, only if the controller is started with CONTROLLER_TOKEN:
 # CONTROLLER_TOKEN=<token>
 # optional: cap on one /api/run-test upload in MiB (default 600, read into memory):
@@ -146,7 +148,7 @@ This needs a Mobile Controller and, if you use it, a MonkeyTester-Plugin-AI on A
 Open `/api/status` to check that the viewer can reach both. For the vision model,
 add the MonkeyTester-Plugin-AI service in **Settings → Device Plugins**, in the monkeytester-ai
 row's **Configure** panel (the **Plugin address** field and **Pairing token** block at its top):
-its address (e.g. `http://192.168.125.71:8091`) and pairing token. The viewer checks both
+its address (e.g. `http://192.168.1.20:8091`) and pairing token. The viewer checks both
 first (`/health` must be the monkeytester-ai plugin and `/config` must accept the token) and
 saves nothing if that fails; the address goes into `Run/config.json` as `visual_plugin_url`
 and can be changed later in the same panel. The plugin's row stays read-only (it shows the
@@ -174,7 +176,7 @@ decides who answers. The panel has a provider choice:
 
 - **Local model** — one of the plugin's installed (Ollama) models.
 - **Remote server** — an OpenAI-compatible server at an address you enter (e.g. the Linux
-  llama-server `http://192.168.125.70:8080`): *Load models* saves the address on the plugin
+  llama-server `http://192.168.1.10:8080`): *Load models* saves the address on the plugin
   (which checks `/v1/models` first) and lists the server's models. *Resize screenshots for
   Qwen2.5-VL* (on by default) keeps the plugin's resize + coordinate hint + rescale; off
   forwards requests unchanged except the model. An optional API key is stored by the
