@@ -5181,7 +5181,8 @@ h1.site-brand::before { content: ""; width: 14px; height: 14px; flex-shrink: 0; 
 .badge.pass { background: var(--pass); border-color: var(--pass); color: var(--on-status); }
 .badge.fail, .badge.error { background: var(--fail); border-color: var(--fail); color: var(--on-status); }
 .badge.running { background: var(--running); border-color: var(--running); color: var(--on-status); }
-.badge.unavailable, .badge.recording, .badge.pending { background: var(--warn); border-color: var(--warn); color: var(--on-status); }
+.badge.unavailable, .badge.recording { background: var(--warn); border-color: var(--warn); color: var(--on-status); }
+.badge.pending { background: transparent; border: 1px solid var(--warn); color: var(--warn); }
 .badge.skip, .badge.unknown, .badge.cancelled { background: transparent; color: var(--text-muted); border: 1px dashed var(--text-muted); }
 @keyframes pulse-running { 0%, 100% { box-shadow: 0 0 0 0 var(--running); } 50% { box-shadow: 3px 3px 0 0 var(--running); } }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--acid); }
