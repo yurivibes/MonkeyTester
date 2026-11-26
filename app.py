@@ -717,7 +717,23 @@ def plugins_overview():
     # /plugins row shows its Documentation link (served via /plugins/docs/<name>).
     for row in out["plugins"]:
         row["docs"] = sec.plugin_docs_path(row.get("docs")) is not None
+        _add_row_names(pc, row)
     return out
+
+
+def _add_row_names(pc, row):
+    """The /plugins row's names from its /health `plugin` field: display_name
+    is what the Name column shows — the name the plugin reports right now —
+    (the row key while the plugin can't be reached; monkeytester-ai for the
+    AI row), default_name its fixed ID (PLUGIN_API.md) and renamable whether
+    its Configure panel offers the Name section. The row key (`name`) stays
+    the registry key / route segment. Build plugins are never renamable
+    here: the rename call is in the device-plugin contract only."""
+    name, default, renamable = pc.plugin_names(row.get("plugin"))
+    key = row.get("name") or ""
+    row["display_name"] = name or key
+    row["default_name"] = default or key
+    row["renamable"] = bool(renamable) and row.get("kind") != "build"
 
 
 # ─── Plugin documentation (GET /plugins/docs/<name>) ───
@@ -891,6 +907,54 @@ def _ai_plugin_address_op(url, api_key=None):
                  "token": token_info(cfg.get("visual_api_key") or "")}
 
 
+def _plugin_registry(cfg):
+    """The shared Settings → Plugins registry {name: entry} (device url
+    strings and build objects): config.json `plugins` once it owns the list,
+    else the still-live MT_PLUGINS device entries (monkeytester-ai never
+    joins: its address is visual_plugin_url)."""
+    pc = _plugin_client()
+    raw = cfg.get("plugins")
+    if isinstance(raw, dict):
+        return dict(raw)
+    try:
+        return {n: u for n, u in pc.parse_plugins(os.environ.get("MT_PLUGINS", ""))
+                if n != pc.AI_PLUGIN_NAME}
+    except pc.PluginError:
+        return {}
+
+
+def _ai_reported_name(cfg):
+    """The name the monkeytester-ai plugin reports on /health right now
+    (None when none is configured or it doesn't answer)."""
+    url = ai_plugin_url(cfg)
+    if not url:
+        return None
+    status, body = _get_json(f"{url.rstrip('/')}/health", timeout=3)
+    if status != 200 or not isinstance(body, dict):
+        return None
+    return _plugin_client().plugin_names(body.get("plugin"))[0]
+
+
+def rename_collision(new, own_key, cfg):
+    """The name_taken message when `new` is already the name of ANOTHER
+    registered row — a device or build plugin key in the registry, or the
+    monkeytester-ai row (its reserved key, or the custom name it reports) —
+    else None. `own_key` is the row being renamed (its own name is never a
+    collision). Checked by the viewer before it calls the plugin."""
+    pc = _plugin_client()
+    ai = pc.AI_PLUGIN_NAME
+    if own_key != ai:
+        if new == ai:
+            return f"{ai} is reserved for the vision-model plugin; pick another name"
+        if new == _ai_reported_name(cfg):
+            return f"the vision-model plugin is already named {new}; pick another name"
+    registry = _plugin_registry(cfg)
+    if new in registry and new != own_key:
+        kind = "build" if isinstance(registry[new], dict) else "test"
+        return f"a {kind} plugin named {new} is already registered; pick another name"
+    return None
+
+
 def ai_plugin_client(cfg=None):
     """(plugin_client module, PluginClient) for the monkeytester-ai plugin at
     its Settings address (config.json visual_plugin_url), authenticated with
@@ -964,6 +1028,9 @@ def visual_plugin_info(timeout=6):
     token = token_info(key)
     provider, copilot, config_error = "local", pc.public_copilot({}), None
     remote = pc.public_remote({})
+    # The name the plugin reports (/health plugin.name), its fixed default
+    # and whether it accepts a rename: the Configure panel's Name section.
+    cur_name, default_name, renamable = pc.plugin_names(chosen["plugin"] if chosen else None)
     if chosen:
         try:
             public = pc.ai_config(clients[chosen["name"]], timeout=timeout)
@@ -993,6 +1060,9 @@ def visual_plugin_info(timeout=6):
             "plugins": infos,
             "configured": bool(url),
             "managed": bool(managed_ai_plugin()),
+            "name": cur_name or pc.AI_PLUGIN_NAME,
+            "default_name": default_name or pc.AI_PLUGIN_NAME,
+            "renamable": bool(renamable),
             "error": None if chosen else (
                 (infos[0].get("error") or "monkeytester-ai is not answering") if infos
                 else AI_NOT_CONFIGURED)}
@@ -3715,6 +3785,11 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             # Settings → Device Plugins: add/remove/edit device-plugin
             # registrations (config.json `plugins`).
             self.handle_plugin_config()
+        elif parsed.path.startswith("/api/config/plugins/") and parsed.path.endswith("/config"):
+            # A device plugin's Configure panel (Name section): rename.
+            if self._admin_required():
+                self.handle_device_plugin_config(
+                    unquote(parsed.path[len("/api/config/plugins/"):-len("/config")]))
         elif parsed.path == "/api/config/visual-model":
             self.save_visual_model_config()
         elif parsed.path == "/api/visual-model/models":
@@ -4546,7 +4621,10 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         hname = hplugin.get("name") if isinstance(hplugin, dict) else hplugin
         if not (isinstance(hname, str) and pc.PLUGIN_NAME_RE.fullmatch(hname)):
             hname = None
-        if hname == ai or row == ai:
+        # The AI is recognised by its fixed ID (plugin.default_name, else
+        # plugin.name for older builds), never by a name the user changed.
+        hident = pc.plugin_identity(hplugin) if hname else None
+        if hident == ai or row == ai:
             # monkeytester-ai is added through the same Add row, but it is
             # stored the AI way (config.json visual_plugin_url +
             # visual_plugin, the op's token becomes visual_api_key) and
@@ -4554,7 +4632,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             if managed_ai_plugin():
                 self.send_json_status(409, {"error": MANAGED_AI_MESSAGE})
                 return
-            if row is not None and (row != ai or (hname is not None and hname != ai)):
+            if row is not None and (row != ai or (hident is not None and hident != ai)):
                 bad("the vision-model plugin is added/removed through the Add row")
                 return
             with _CONFIG_LOCK:
@@ -4573,6 +4651,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
                 return
             self.send_json({"ok": True, "ai": True,
                             "plugin": {"name": ai, "url": body["plugin_url"],
+                                       "display_name": hname or ai,
                                        "token": body["token"]}})
             return
         if hname is None:
@@ -4674,6 +4753,102 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         out = {"ok": True, "plugin": info, "plugins": safe_plugins(base)}
         if renamed:
             out["renamed_from"] = old
+        self.send_json(out)
+
+    def handle_device_plugin_config(self, row):
+        """POST /api/config/plugins/<row>/config — a device plugin's Configure
+        panel, relayed to the plugin's POST /config. Admins only. The only
+        relayed setting is the rename {"name": new} (PLUGIN_API.md): the
+        plugin must say renamable: true on /health (else 400 not_renamable),
+        the name must match PLUGIN_NAME_RE (400 bad_request), a name another
+        registered row uses is 400 name_taken before the plugin is called,
+        and the plugin's current name is a no-op. On success the registry row
+        is RE-KEYED like an address-edit rename: key moved in place, service
+        token plugin:<old> -> plugin:<new>, response renamed_from. The
+        monkeytester-ai row renames through /api/config/visual-model."""
+        pc = _plugin_client()
+
+        def bad(msg, code="bad_request", status=400):
+            self.send_json_status(status, {"error": msg, "code": code})
+
+        data = self._read_json_body()
+        if data is None:
+            return
+        if not pc.valid_plugin_name(row):
+            bad(f"no plugin {row!r} registered", "not_found", 404)
+            return
+        if row == pc.AI_PLUGIN_NAME:
+            bad("the vision-model plugin is renamed in its Configure panel "
+                "(POST /api/config/visual-model {\"name\"})")
+            return
+        if set(data) != {"name"}:
+            bad('body must be {"name": "<new name>"}: the rename is the only setting the '
+                "viewer relays to a device plugin")
+            return
+        new = data["name"]
+        if not pc.valid_plugin_name(new):
+            bad(f"name must match {pc.PLUGIN_NAME_RE.pattern}")
+            return
+        with _CONFIG_LOCK:
+            cfg = load_config()
+            base = _plugin_registry(cfg)
+            if row not in base:
+                bad(f"no plugin {row!r} registered", "not_found", 404)
+                return
+            if isinstance(base[row], dict):
+                bad(f"{row} is a build plugin; build plugins can't be renamed")
+                return
+            try:
+                url = pc.normalize_plugin_url(base[row])
+                devices = pc.load_plugins(cfg)
+            except pc.PluginError as e:
+                bad(e.message, e.code)
+                return
+            token = auth.plugin_token(row) or (devices[row].token if row in devices else "") or ""
+            client = pc.PluginClient(row, url, token=token or None, timeout=5)
+            try:
+                health = client.health(timeout=5)
+            except pc.PluginError as e:
+                self._send_plugin_error(e)
+                return
+            current, default, renamable = pc.plugin_names(health.get("plugin"))
+            if not renamable:
+                bad(f"{current or row} can't be renamed (its /health doesn't say renamable: true)",
+                    "not_renamable")
+                return
+            info = {"name": row, "url": url, "default_name": default or row}
+            if new == current and new == row:
+                self.send_json({"ok": True, "unchanged": True, "plugin": info,
+                                "config": {"name": current, "default_name": default or ""}})
+                return
+            taken = rename_collision(new, row, cfg)
+            if taken:
+                bad(taken, "name_taken")
+                return
+            if new != current:
+                try:
+                    reply = pc.rename_plugin(client, new)
+                except pc.PluginError as e:
+                    self._send_plugin_error(e)
+                    return
+            else:
+                reply = {"name": current, "default_name": default or ""}
+            if new != row:
+                # Re-key in place, like an address-edit rename (#19).
+                base = {(new if k == row else k): v for k, v in base.items()}
+                cfg["plugins"] = base
+                save_config(cfg)
+                saved = auth.plugin_token(row)
+                if saved:
+                    auth.set_service_token(f"plugin:{row}", "")
+                    auth.set_service_token(f"plugin:{new}", saved)
+                _PLUGIN_SELECTED_CACHE.pop(row, None)
+                print(f"plugin {row} renamed to {new} at {url} (its Configure panel)",
+                      file=sys.stderr, flush=True)
+        info["name"] = new
+        out = {"ok": True, "plugin": info, "config": reply}
+        if new != row:
+            out["renamed_from"] = row
         self.send_json(out)
 
     def handle_delete_runs(self):
@@ -4789,6 +4964,11 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         once and the viewer never echoes it; clear_token removes only the
         viewer's copy. The viewer stores no GitHub token.
 
+        name (admins only): renames a plugin whose /health says renamable:
+        true — sent FIRST as POST /config {name}; the current name is a
+        no-op, a name another registered row uses is 400 name_taken and a
+        non-renamable plugin 400 not_renamable, both before any plugin call.
+
         The old local shape ({endpoint, model_name, api_key, clear_api_key})
         still works for old setups and logs a deprecation.
         """
@@ -4862,7 +5042,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         legacy_shape = any(k in data for k in ("endpoint", "model_name", "api_key", "clear_api_key"))
         remote_keys = _plugin_client().REMOTE_KEYS
         new_shape = plugin_name or any(k in data for k in (
-            "model", "copilot_model", "generate_token", "clear_token", *remote_keys)) or (
+            "model", "copilot_model", "generate_token", "clear_token", "name", *remote_keys)) or (
             provider is not None and not legacy_shape)
         plugin_config = None
         if legacy_shape and provider in ("copilot", "remote"):
@@ -4881,6 +5061,35 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
                 return
             name = client.name
             changes = []
+            if "name" in data:
+                # Rename (PLUGIN_API.md): only a plugin whose /health says
+                # renamable: true gets POST /config {name}; a name another
+                # registered row already uses is refused before any call.
+                # It goes first, so a refused name sends nothing else.
+                if not self._admin_required():
+                    return
+                new_name = data.get("name")
+                if not pc.valid_plugin_name(new_name):
+                    self.send_json_status(400, {"error": f"name must match {pc.PLUGIN_NAME_RE.pattern}",
+                                                "code": "bad_request"})
+                    return
+                try:
+                    health = client.health(timeout=5)
+                except pc.PluginError as e:
+                    self._send_plugin_error(e)
+                    return
+                current, _default, renamable = pc.plugin_names(health.get("plugin"))
+                if not renamable:
+                    self.send_json_status(400, {"error": f"{current or name} can't be renamed "
+                                                         "(its /health doesn't say renamable: true)",
+                                                "code": "not_renamable"})
+                    return
+                if new_name != current:  # the current name is a no-op
+                    taken = rename_collision(new_name, pc.AI_PLUGIN_NAME, cfg)
+                    if taken:
+                        self.send_json_status(400, {"error": taken, "code": "name_taken"})
+                        return
+                    changes.append({"name": new_name})
             for field in ("model", "copilot_model"):
                 if field in data:
                     value = (data.get(field) or "").strip()

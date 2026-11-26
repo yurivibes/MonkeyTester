@@ -270,6 +270,9 @@ class PluginSettingsTests(ServerCase):
                                            "plugin": {"name": "esp32", "version": "0.1.0"},
                                            "capabilities": ["flash"],
                                            "config": None, "docs": False,
+                                           # Name column: the name /health reports.
+                                           "display_name": "esp32", "default_name": "esp32",
+                                           "renamable": False,
                                            "devices": [{"id": "ab:cd", "model": "C3",
                                                         "state": "ready"}]})
         self.assertFalse(by_name["monkeytester-ai"]["ok"])  # listed, not configured
@@ -755,6 +758,9 @@ def ai_state():
             "token": "secret-tok-9876", "rotations": 0, "provider": "local",
             "copilot_user": "", "copilot_token": "", "copilot_model": "gpt-4o",
             "polls": 0, "require_token": False, "plugin_name": "monkeytester-ai",
+            # Renamable AI builds (PLUGIN_API.md): default_name None = an
+            # older build that sends no default_name / renamable.
+            "default_name": None, "renamable": False,
             "remote_url": "", "remote_model": "", "remote_resize": True, "remote_key": ""}
 
 
@@ -799,13 +805,26 @@ class AiPlugin(BaseHTTPRequestHandler):
 
     def _config_body(self):
         tok = AiPlugin.state["token"]
-        return {"model": {"selected": AiPlugin.state["selected"],
+        body = {"model": {"selected": AiPlugin.state["selected"],
                           "installed": list(AiPlugin.state["installed"])},
                 "token": {"configured": bool(tok), "last4": tok[-4:] if tok else ""},
                 "port": 8091, "ollama_port": 8093, "max_pixels": 100352,
                 "api_version": 3, "service": "monkeytester-ai",
                 "provider": AiPlugin.state["provider"], "copilot": self._copilot(),
                 "remote": self._remote()}
+        if AiPlugin.state["renamable"]:
+            body.update(name=AiPlugin.state["plugin_name"],
+                        default_name=AiPlugin.state["default_name"])
+        return body
+
+    def _plugin_block(self):
+        st = AiPlugin.state
+        block = {"name": st["plugin_name"], "version": "0.3.0"}
+        if st["default_name"] is not None:
+            block["default_name"] = st["default_name"]
+        if st["renamable"]:
+            block["renamable"] = True
+        return block
 
     def _authorized(self):
         """With require_token, everything but /health needs the pairing token
@@ -829,7 +848,7 @@ class AiPlugin(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._send(200, {"ok": True, "contract": "monkeytester-plugin",
                              "contract_version": 1,
-                             "plugin": {"name": AiPlugin.state["plugin_name"], "version": "0.3.0"},
+                             "plugin": self._plugin_block(),
                              "devices": 1, "service": "monkeytester-ai",
                              "api_version": 3, "port": 8091, "error": None,
                              "provider": AiPlugin.state["provider"],
@@ -865,6 +884,20 @@ class AiPlugin(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         st = AiPlugin.state
+        if self.path == "/config" and "name" in body:
+            # The rename call (renamable builds only; the real plugin keeps
+            # it in settings.json and reports it on /health at once).
+            new = body["name"]
+            if not st["renamable"]:
+                self._bad("unknown setting: name", "bad_request")
+                return
+            if not (isinstance(new, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", new)):
+                self._bad(f"bad name {new!r}", "bad_request")
+                return
+            st["plugin_name"] = new
+            if len(body) == 1:
+                self._send(200, {"ok": True, "config": self._config_body()})
+                return
         if self.path == "/config" and any(k.startswith("remote_") for k in body):
             # Validate everything before changing anything (the plugin spec).
             url = st["remote_url"]

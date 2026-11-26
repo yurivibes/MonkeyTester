@@ -90,6 +90,8 @@
 .plugin-configure .switch-row { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; margin-top: 8px; }
 .plugin-configure .switch-row input, .plugin-configure .provider-row input { width: auto; padding: 0; }
 .plugin-configure .remote-error { font-size: 0.8rem; color: var(--fail); margin: 6px 0; max-width: 480px; }
+/* Name section (renamable plugins): inline error under the name input. */
+.plugin-configure .name-error { font-size: 0.8rem; color: var(--fail); margin: 6px 0; max-width: 480px; }
 .plugin-configure input[type="text"], .plugin-configure input[type="url"], .plugin-configure input[type="password"] {
     width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--border);
     color: var(--text); padding: 8px 12px; font-size: 0.9rem;
@@ -479,15 +481,22 @@ function renderTestTable() {
     syncPluginTable(document.getElementById("pluginsTbody"), testRows.map(p => {
         const managed = p.__ai && !!p.managed;
         const open = panelOpen && configureFor === p.name;
+        // The row key stays the registry key (monkeytester-ai for the AI
+        // slot); the Name column shows the name the plugin reports.
         return {
-            key: p.name, name: p.name,
+            key: p.name, name: p.display_name || p.name,
             status: statusCell(p.ok, p.__ai && !aiPluginState.configured),
             saved: p.url || "", readonly: managed, docs: !!p.docs,
             details: detailsHtml(p, { managed }),
             open,
-            actions: actionsHtml({ save: !managed, configure: !!(p.config || p.__ai), remove: !managed, open }),
+            // A renamable plugin always has a Configure panel: its Name section.
+            actions: actionsHtml({ save: !managed, configure: !!(p.config || p.__ai || p.renamable),
+                                   remove: !managed, open }),
         };
-    }), "No Test Plugins added yet \u2014 add one above.", closePluginConfigure);
+    }), "No Test Plugins added yet \u2014 add one above.", () => {
+        // A rename re-keys the open row: don't close its panel meanwhile.
+        if (!pluginRenameInFlight) closePluginConfigure();
+    });
 }
 
 // okMsg: a string, or a function of the response (the plugin's name comes
@@ -516,7 +525,7 @@ function savedAddressMsg(out, name) {
 }
 
 function addedName(out, fallback) {
-    return (out && out.plugin && out.plugin.name) || fallback;
+    return (out && out.plugin && (out.plugin.display_name || out.plugin.name)) || fallback;
 }
 
 wireTable("pluginsTbody", async (act, name, url, btn) => {
@@ -811,6 +820,8 @@ function attrEscape(value) {
 }
 
 let configureFor = "";
+let pluginRenameInFlight = false;  // a Name-section Save is re-keying the open row
+let devicePanelSaved = null;       // {name, defaultName}: a device plugin's Name-only panel
 let savedPanel = null;  // saved-state snapshot of the last render
 let staged = {};        // field -> intended value, only while it differs from savedPanel
 let lastPluginInfo = null;  // last /api/visual-model/plugin reply
@@ -854,13 +865,17 @@ function togglePluginConfigure(name) {
     panel.classList.add("open");
     panel.innerHTML = '<div class="hint">Loading\u2026</div>';
     renderTestTable();  // Configure shows pressed
-    renderPluginConfigure(name);
+    const row = testRows.find(r => r.name === name);
+    // A renamable device plugin with no settings of its own: Name-only panel.
+    if (row && !row.__ai && !row.config) renderDeviceNamePanel(name);
+    else renderPluginConfigure(name);
 }
 
 function closePluginConfigure() {
     stopCopilotPoll();
     configureFor = "";
     savedPanel = null;
+    devicePanelSaved = null;
     staged = {};
     const panel = document.getElementById("pluginConfigure");
     if (panel) closeConfigureRow(document.getElementById("pluginsTbody"), panel,
@@ -911,6 +926,13 @@ function stagePanelFields(saved, current) {
     if (saved.url && current.pluginChoice === "remove") out.plugin_remove = true;
     if (current.copilotChoice === "sign_in" && !saved.copilotSignedIn) out.copilot_op = "sign_in";
     if (current.copilotChoice === "sign_out" && saved.copilotSignedIn) out.copilot_op = "sign_out";
+    // Name (renamable plugins only): staged while it is a valid name that
+    // differs from the saved one. An invalid name never stages (the panel
+    // shows the error inline and keeps Save greyed).
+    if (saved.renamable && typeof current.name === "string") {
+        const n = current.name.trim();
+        if (n && n !== saved.name && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(n)) out.name = n;
+    }
     return out;
 }
 
@@ -929,7 +951,8 @@ function planSavePayload(fields) {
     if (fields.copilot_op === "sign_in")
         steps.push({ kind: "copilot_in", body: {}, url: "/api/visual-model/plugin/copilot/device/start" });
     const body = {};
-    const CONFIG_KEYS = ["remote_url", "remote_model", "remote_resize", "remote_api_key", "model", "copilot_model", "provider"];
+    // name rides in the config body; the viewer sends it to the plugin first.
+    const CONFIG_KEYS = ["name", "remote_url", "remote_model", "remote_resize", "remote_api_key", "model", "copilot_model", "provider"];
     for (const key of CONFIG_KEYS) if (key in fields) body[key] = fields[key];
     if (Object.keys(body).length) steps.push({ kind: "config", body, url: CFG });
     if (fields.copilot_op === "sign_out")
@@ -939,13 +962,13 @@ function planSavePayload(fields) {
 // ── STAGING MACHINE END ──
 
 const STAGE_LABEL = {
-    plugin_url: "plugin address", provider: "provider",
+    plugin_url: "plugin address", provider: "provider", name: "name",
     model: "local model", copilot_model: "Copilot model",
     remote_url: "remote server address", remote_model: "remote model",
     remote_resize: "resize switch", remote_api_key: "remote API key",
     plugin_remove: "plugin removal",
 };
-const STAGE_ORDER = ["token_op", "plugin_remove", "plugin_url", "provider", "model", "copilot_model",
+const STAGE_ORDER = ["token_op", "plugin_remove", "plugin_url", "name", "provider", "model", "copilot_model",
                      "remote_url", "remote_model", "remote_resize", "remote_api_key", "copilot_op"];
 function labelFor(k, v) {
     if (k === "token_op") return "pairing token " + v;       // set / replace / remove
@@ -975,6 +998,9 @@ function panelFieldValues() {
         tokenChoice: sel("pluginTokenChoice"),
         pluginChoice: "",
         copilotChoice: sel("pluginCopilotChoice"),
+        // undefined while the panel has no Name section (not renamable).
+        name: document.getElementById("pluginNameInput")
+            ? String(document.getElementById("pluginNameInput").value || "") : undefined,
     };
 }
 
@@ -991,6 +1017,7 @@ function stageMatchesSaved(k, v) {
         case "remote_url": return norm(s.remote.url) === norm(v);
         case "remote_model": return s.remote.model === v;
         case "remote_resize": return s.remote.resize === v;
+        case "name": return s.name === v;
         case "token_value": return s.tokenConfigured;
         default: return false;  // remote_api_key: the plugin never echoes it back
     }
@@ -1019,13 +1046,19 @@ function recomputeStaged() {
 
 function updateSaveState() {
     const btn = document.getElementById("pluginSaveAll");
-    if (btn) btn.disabled = !Object.keys(staged).length;
+    // An invalid name blocks the whole Save (it is shown inline under the field).
+    const nameOk = checkNameField();
+    if (btn) btn.disabled = !Object.keys(staged).length || !nameOk;
     updateSaveHint();
 }
 
 function updateSaveHint() {
     const hint = document.getElementById("pluginSaveHint");
     if (!hint) return;
+    if (!checkNameField()) {
+        hint.textContent = "Fix the name first \u2014 Save stays greyed while it is invalid.";
+        return;
+    }
     if (!Object.keys(staged).length) {
         hint.textContent = "Nothing pending \u2014 Save stays greyed until a field differs from the saved state.";
         return;
@@ -1044,6 +1077,134 @@ function updateSaveHint() {
         blocker = " Remote server not ready: enter the server address and Load models first.";
     }
     hint.textContent = "Pending: " + pendingLabels(staged).join(", ") + "." + blocker;
+}
+
+// ── Name section (renamable plugins, PLUGIN_API.md) ──
+// Shown in a plugin's Configure panel only when its /health says
+// renamable: true. The plugin owns the name: Save sends {name} through the
+// viewer to the plugin's POST /config. The input is a STAGED field — the
+// panel's Save stays greyed until it differs from the saved name, re-checked
+// on input AND change — and "Reset to default" only puts default_name into
+// the input (Save still applies it). Values go in via .value/.textContent
+// and data-* attributes, never into HTML strings.
+const PLUGIN_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+function nameSectionHtml(forTests) {
+    return '<div class="panel-section" id="pluginNameSection">'
+        + '<div class="panel-section-head">Name</div>'
+        + '<div class="inline-row"><input type="text" id="pluginNameInput" autocomplete="off" spellcheck="false" '
+        + 'maxlength="64" aria-label="Plugin name" aria-describedby="pluginNameDefault pluginNameError">'
+        + '<button class="btn-secondary" id="pluginNameReset" type="button">Reset to default</button></div>'
+        + '<div class="hint" id="pluginNameDefault"></div>'
+        + '<div class="name-error" id="pluginNameError" role="alert" hidden></div>'
+        + '<div class="hint">The plugin stores this name and reports it; the Name column shows it. '
+        + 'Letters, digits, <code>-</code> and <code>_</code>, up to 64 characters.'
+        + (forTests ? " Tests call the plugin by this name (<code>PLUGIN: &lt;name&gt; \u2026</code>), so "
+            + "update the tests that use it after a rename." : "")
+        + "</div></div>";
+}
+
+// Fill the section after the panel's innerHTML is set.
+function fillNameSection(value, defaultName) {
+    const inp = document.getElementById("pluginNameInput");
+    const reset = document.getElementById("pluginNameReset");
+    const hint = document.getElementById("pluginNameDefault");
+    if (!inp) return;
+    inp.value = value;
+    if (reset) reset.dataset.default = defaultName;
+    if (hint) hint.textContent = "Default: " + defaultName;
+}
+
+// Client-side regex check with the error inline. True when there is no Name
+// section or the typed name is valid.
+function checkNameField() {
+    const inp = document.getElementById("pluginNameInput");
+    const err = document.getElementById("pluginNameError");
+    if (!inp) return true;
+    const v = inp.value.trim();
+    const msg = !v ? "Enter a name."
+        : PLUGIN_NAME_PATTERN.test(v) ? ""
+        : "Use letters, digits, - and _ only, starting with a letter or digit (up to 64 characters).";
+    if (err) { err.textContent = msg; err.hidden = !msg; }
+    inp.setAttribute("aria-invalid", msg ? "true" : "false");
+    return !msg;
+}
+
+function wireNameSection(onEdit) {
+    const inp = document.getElementById("pluginNameInput");
+    const reset = document.getElementById("pluginNameReset");
+    if (inp) {
+        inp.addEventListener("input", onEdit);
+        inp.addEventListener("change", onEdit);
+    }
+    if (reset) reset.addEventListener("click", () => {
+        if (!inp) return;
+        inp.value = reset.dataset.default || "";
+        onEdit();
+    });
+}
+
+// A renamable device plugin without other settings: the panel holds only the
+// Name section and its own Save, posting to /api/config/plugins/<key>/config.
+// A rename re-keys the row server-side, so the open configure row follows
+// the new key before the table reloads.
+function renderDeviceNamePanel(key) {
+    const panel = document.getElementById("pluginConfigure");
+    const p = testRows.find(r => r.name === key) || {};
+    devicePanelSaved = { name: p.display_name || key, defaultName: p.default_name || key };
+    panel.innerHTML = '<div class="plugin-configure-head"><h4 id="pluginConfigureTitle"></h4>'
+        + '<div class="url"><code id="pluginConfigureUrl"></code></div></div>'
+        + nameSectionHtml(true)
+        + '<div class="inline-row" style="margin-top:10px"><button class="btn-secondary save-btn" '
+        + 'id="deviceNameSave" type="button" disabled>Save changes</button></div>'
+        + '<div class="settings-status" id="pluginConfigureStatus"></div>';
+    document.getElementById("pluginConfigureTitle").textContent = devicePanelSaved.name;
+    document.getElementById("pluginConfigureUrl").textContent = p.url || "";
+    fillNameSection(devicePanelSaved.name, devicePanelSaved.defaultName);
+    wireNameSection(updateDeviceNameSave);
+    document.getElementById("deviceNameSave").addEventListener("click", saveDeviceName);
+    updateDeviceNameSave();
+}
+
+function updateDeviceNameSave() {
+    const btn = document.getElementById("deviceNameSave");
+    const inp = document.getElementById("pluginNameInput");
+    if (!btn || !inp || !devicePanelSaved) return;
+    const ok = checkNameField();
+    btn.disabled = !ok || inp.value.trim() === devicePanelSaved.name;
+}
+
+async function saveDeviceName() {
+    const key = configureFor;
+    const inp = document.getElementById("pluginNameInput");
+    if (!key || !inp || !checkNameField()) return;
+    const name = inp.value.trim();
+    const btn = document.getElementById("deviceNameSave");
+    if (btn) btn.disabled = true;
+    pluginSetStatus("Renaming\u2026", "");
+    pluginRenameInFlight = true;
+    let out;
+    try {
+        out = await postJSON("/api/config/plugins/" + encodeURIComponent(key) + "/config", { name });
+        const newKey = (out.plugin && out.plugin.name) || key;
+        if (newKey !== key && configureFor === key) {
+            const c = configureRowOf(document.getElementById("pluginsTbody"));
+            if (c) c.dataset.for = newKey;  // the panel follows the re-keyed row
+            configureFor = newKey;
+        }
+        await loadPlugins();  // Name column (and the row key) from the server
+    } catch (e) {
+        pluginSetStatus("Not saved: " + e.message, "error");
+        updateDeviceNameSave();
+        return;
+    } finally {
+        pluginRenameInFlight = false;
+    }
+    const newKey = (out.plugin && out.plugin.name) || key;
+    if (configureFor !== newKey) return;  // closed meanwhile
+    renderDeviceNamePanel(newKey);  // re-render from server state: Save greys again
+    pluginSetStatus(out.renamed_from ? "Renamed " + out.renamed_from + " \u2192 " + newKey + "."
+                    : "Saved.", "saved");
 }
 
 function managedPluginSection(url) {
@@ -1077,6 +1238,11 @@ async function renderPluginConfigure(name) {
             '<option value="' + attrEscape(id) + '">' +
             escapeHtml(id === selected ? id + " (selected)" : id) + "</option>").join("");
         const token = data.token || { configured: false, last4: "" };
+        // Name section: the name the plugin reports, its fixed default, and
+        // whether its /health offers the rename at all.
+        const renamable = !!(data.configured && data.renamable);
+        const currentName = String(data.name || name);
+        const defaultName = String(data.default_name || AI_NAME_DEFAULT);
         const pluginOk = !!data.ok || !!info.ok;
         const copilot = data.copilot || { configured: false, models: [] };
         const PROVIDERS = ["local", "remote", "copilot"];
@@ -1107,7 +1273,7 @@ async function renderPluginConfigure(name) {
                 + '<option value="sign_in">Sign in with GitHub (Save arms the flow)</option></select></div>'
                 + '<div id="pluginCopilotDevice" hidden></div>';
         panel.innerHTML =
-            '<div class="plugin-configure-head"><h4>' + escapeHtml(name) + "</h4>"
+            '<div class="plugin-configure-head"><h4>' + escapeHtml(data.configured && data.name ? data.name : name) + "</h4>"
             + '<div class="url"><code>' + (escapeHtml(String(info.url || data.url || "")) || "not configured") + "</code></div></div>"
             + (data.legacy_copilot
                 ? '<div class="legacy-hint" id="pluginLegacyHint">This viewer\u2019s saved settings still select GitHub Copilot the old way, so test runs refuse to start. '
@@ -1145,6 +1311,9 @@ async function renderPluginConfigure(name) {
             + "call), Replace (Save asks the service for a new one, shown once by the service itself) or "
             + "Remove (Save forgets the viewer\u2019s copy).</div></div>"
             + '</div>'))  // end of the Plugin section
+            // ── "Name" section: only when the plugin's /health says
+            // renamable: true. A staged field of the single Save below. ──
+            + (renamable ? nameSectionHtml(false) : "")
             // ── "Configuration" section (below Plugin): provider radios,
             // model dropdowns, Remote server subsection, Copilot select; the
             // single Save is the LAST element, at its bottom. ──
@@ -1239,6 +1408,8 @@ async function renderPluginConfigure(name) {
         if (tcSel && staged.token_op) tcSel.value = staged.token_op;
         const cpSel = document.getElementById("pluginCopilotChoice");
         if (cpSel && staged.copilot_op) cpSel.value = staged.copilot_op;
+        // A staged name that never applied comes back into the field.
+        if (renamable) fillNameSection(staged.name !== undefined ? staged.name : currentName, defaultName);
         savedPanel = {
             configured: !!data.configured,
             url: aiPluginState.url,
@@ -1249,6 +1420,7 @@ async function renderPluginConfigure(name) {
             copilotSignedIn: !!copilot.configured,
             remote: { url: remote.url || "", model: remote.model || "",
                       resize: remote.resize !== false, keyConfigured: !!rKey.configured },
+            renamable, name: currentName,
         };
         recomputeStaged();  // greys Save when the panel matches the saved state
         wirePluginConfigure(name);
@@ -1272,6 +1444,9 @@ function wirePluginConfigure(name) {
         const el = document.getElementById(id);
         if (el) el.addEventListener("change", () => recomputeStaged());
     });
+    // The Name field re-checks on every keystroke (input) and on change, so
+    // Save lights up / greys again at once; Reset to default stages too.
+    wireNameSection(() => recomputeStaged());
     // No action buttons: the only buttons left are the single Save and the
     // two fetch buttons (Refresh list, Load models).
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
@@ -1374,6 +1549,7 @@ async function savePanelChanges() {
     // Re-render from the SERVER state: staged values that never applied come
     // back into the fields, so the Save button stays dirty for a retry.
     await renderPluginConfigure(configureFor);
+    await loadPlugins();  // the row's Name cell follows a rename
     pluginSetStatus(parts.join(" \u2014 ") || "Nothing to save", bad.length || skipped.length ? "error" : "saved");
 }
 
