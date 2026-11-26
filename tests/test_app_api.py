@@ -530,6 +530,12 @@ class ThemeFirstPaintTests(ServerCase):
         status, body = raw_get(self.port, "/")
         self.assertNotIn(b'<html lang="en" data-theme="light"', body)
 
+    def test_shared_js_does_not_reapply_a_browser_copy_of_the_theme(self):
+        # A per-browser localStorage copy that is missing or says "dark"
+        # used to strip the server-rendered light theme until /api/config
+        # answered: a dark flash on every page switch in light mode.
+        self.assertNotIn("mt-theme", app.SHARED_JS)
+
 
 class ThemeFontsTests(ServerCase):
     """The shared theme self-hosts its web fonts under /fonts/, so pages make
