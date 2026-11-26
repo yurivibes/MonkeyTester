@@ -363,7 +363,7 @@ def record_setup_failure(test_files, device_id, message, log_file=None):
             "label": test_label(tf),
             "case": test_case_of(tf),
             "order": i,
-            "steps": [{k: st[k] for k in ('line', 'command', 'args', 'raw', 'block', 'error') if k in st}
+            "steps": [{k: st[k] for k in ('line', 'command', 'args', 'raw', 'block', 'error', 'platform') if k in st}
                       for st in steps],
             "step_statuses": ["skipped"] * len(steps),
             "status": "unavailable",
@@ -2369,7 +2369,7 @@ def _run_device_tests(test_files, apk_version, apk_package, apk_path, args, pend
             'label': test_label(tf),
             'case': test_case_of(tf),
             'order': i,
-            'steps': [{k: s[k] for k in ('line', 'command', 'args', 'raw', 'block', 'error') if k in s}
+            'steps': [{k: s[k] for k in ('line', 'command', 'args', 'raw', 'block', 'error', 'platform') if k in s}
                       for s in steps],
             'step_statuses': ['pending'] * len(steps),
             'status': 'pending'

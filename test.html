@@ -19,6 +19,9 @@
 .snapshot-mismatch-pct { color: var(--fail); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4.5em; }
 .step-row.pending-step .step-status { background: transparent; border: 1px solid var(--warn); }
 .step-row.pending-step .step-command { color: var(--warn); }
+/* Steps gated for the other platform never run on this device: no box, struck text. */
+.step-row.other-platform-step .step-status { background: transparent; border: none; }
+.step-row.other-platform-step .step-command, .step-row.other-platform-step .step-args { color: var(--text-muted); text-decoration: line-through; }
 .step-row.running-step .step-status { background: var(--accent); animation: pulse 1.5s infinite; }
 .step-row.running-step .step-command { color: var(--accent); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
@@ -835,7 +838,7 @@ function showDevicePendingTest(run, testName, deviceId, status, key, version) {
             if (contentEl) {
                 contentEl.innerHTML = steps.length
                     ? '<div class="steps-section"><h3>' + (running ? 'Steps (' : 'Pending Steps (') + steps.length +
-                      ')</h3><div class="steps-list">' + buildStepRows(testName, steps, t.step_statuses) + '</div></div>'
+                      ')</h3><div class="steps-list">' + buildStepRows(testName, steps, t.step_statuses, devicePlatformOf(deviceId)) + '</div></div>'
                     : '<div class="loading" style="padding:0">' +
                       (running ? 'Running on this device' : 'Not started on this device yet') + '</div>';
             }
@@ -870,12 +873,18 @@ function stepBlockHtml(step) {
     return html;
 }
 
-function buildStepRows(testName, steps, statuses) {
+function buildStepRows(testName, steps, statuses, devicePlatform) {
     let html = '';
     for (let index = 0; index < steps.length; index++) {
         const step = steps[index];
         const status = (statuses && statuses[index]) || 'pending';
-        const rowClass = status === 'running' ? 'running-step' : (status === 'pending' ? 'pending-step' : '');
+        // A step gated for the OTHER platform (`IF IOS:` on an Android device,
+        // etc.) never runs here: empty box, struck-out text.
+        const stepPlatform = stepPlatformOf(step);
+        const otherPlatform = stepPlatform && devicePlatform && stepPlatform !== devicePlatform;
+        let rowClass;
+        if (otherPlatform) rowClass = 'other-platform-step';
+        else rowClass = status === 'running' ? 'running-step' : (status === 'pending' ? 'pending-step' : '');
         html += '<div class="step-row ' + rowClass + '" id="step-' + escapeHtml(testName) + '-' + index + '">';
         html += '<span class="step-status ' + escapeHtml(status) + '"></span>';
         html += '<div class="step-content">';
@@ -886,6 +895,22 @@ function buildStepRows(testName, steps, statuses) {
         html += '</div></div>';
     }
     return html;
+}
+
+// A step's gated platform ('android'/'ios') from step.platform (new runs)
+// or its raw prefix (inline `IF IOS:` form, for runs started before that field
+// existed). Null when the step runs on every platform.
+function stepPlatformOf(step) {
+    if (step.platform) return String(step.platform).toLowerCase();
+    const m = /^IF (ANDROID|IOS):/.exec(step.raw || '');
+    return m ? m[1].toLowerCase() : null;
+}
+
+// The platform of the device a pending panel belongs to, from the run's
+// device summary. Null when unknown (nothing is struck out then).
+function devicePlatformOf(deviceId) {
+    const d = deviceSummaries.find(function(x) { return x.id === deviceId; });
+    return (d && d.platform) ? String(d.platform).toLowerCase() : null;
 }
 
 function renderProgress(progress) {
@@ -1200,7 +1225,7 @@ async function loadRun() {
                 const stepHeading = isRunning ? 'Steps (' + pending.steps.length + ')' : 'Pending Steps (' + pending.steps.length + ')';
                 liveStepsHtml += '<div class="steps-section"><h3>' + stepHeading + '</h3>';
                 liveStepsHtml += '<div class="steps-list">';
-                liveStepsHtml += buildStepRows(testName, pending.steps, pending.step_statuses);
+                liveStepsHtml += buildStepRows(testName, pending.steps, pending.step_statuses, devicePlatformOf(selectedDeviceId));
                 liveStepsHtml += '</div></div>';
             }
             testsHtml += liveStepsHtml || '<div class="loading" style="padding:0">No steps</div>';
@@ -1509,7 +1534,7 @@ function applyPendingUpdate(run, pendingData) {
                 if (hasLiveStream) {
                     var existingSteps = bodyEl.querySelector('.steps-list');
                     if (existingSteps) {
-                        existingSteps.innerHTML = buildStepRows(t.name, t.steps || [], t.step_statuses);
+                        existingSteps.innerHTML = buildStepRows(t.name, t.steps || [], t.step_statuses, devicePlatformOf(selectedDeviceId));
                     }
                     if (badgeEl) {
                         badgeEl.className = 'badge running';
@@ -1524,7 +1549,7 @@ function applyPendingUpdate(run, pendingData) {
                 if (pending.steps && pending.steps.length > 0) {
                     stepsHtml += '<div class="steps-section"><h3>Steps (' + pending.steps.length + ')</h3>';
                     stepsHtml += '<div class="steps-list">';
-                    stepsHtml += buildStepRows(t.name, pending.steps, pending.step_statuses);
+                    stepsHtml += buildStepRows(t.name, pending.steps, pending.step_statuses, devicePlatformOf(selectedDeviceId));
                     stepsHtml += '</div></div>';
                 }
 
