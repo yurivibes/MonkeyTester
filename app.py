@@ -5313,17 +5313,16 @@ function applyTheme(theme) {
         document.documentElement.removeAttribute('data-theme');
     }
 }
-// Apply instantly from localStorage (the head snippet already applied it
-// pre-paint; this keeps it in sync within JS)
-try { applyTheme(localStorage.getItem('mt-theme')); } catch (e) {}
-// Sync with the server-side setting (authoritative)
+// serve_page already stamps the saved theme on <html> before first paint.
+// Don't re-apply a per-browser copy here: a browser whose copy is missing or
+// stale stripped the light theme until /api/config answered (a dark flash on
+// every page switch). The server setting is the only source.
 Promise.resolve().then(() => fetchJSON('/api/config')).then(cfg => {
     applyTheme(cfg.theme);
 }).catch(() => {});
 function setTheme(theme) {
     theme = theme === 'light' ? 'light' : 'dark';
     applyTheme(theme);
-    try { localStorage.setItem('mt-theme', theme); } catch (e) {}
     fetch('/api/config', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
