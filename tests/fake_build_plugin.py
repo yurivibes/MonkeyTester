@@ -5,8 +5,8 @@ the code host config (kind, url, token, user, viewer_url), the platforms its
 host builds, the repos with their branches, cases and build scripts, and the
 builds it started with their logs. A code host token other than FORGE_TOKEN is
 refused like a code host would (400 forge_refused). Not a test module itself
-(no test_ prefix), so the CI list needs no entry for it. Also runnable on its
-own for a scratch viewer: `python3 fake_build_plugin.py <port>`.
+(no test_ prefix), so test discovery skips it. Also runnable on its
+own for a scratch viewer: `python3 tests/fake_build_plugin.py <port>`.
 """
 import json
 import sys

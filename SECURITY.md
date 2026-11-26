@@ -124,7 +124,7 @@ This is defence in depth, not a claim of "no vulnerabilities". It covers the hom
 single-user setup. Authentication (login, sessions, CSRF, CI and service tokens) is described
 in its own section.
 
-Shared helpers live in `security_utils.py` and are unit-tested in `test_security_hardening.py`.
+Shared helpers live in `security_utils.py` and are unit-tested in `tests/test_security_hardening.py`.
 
 ### Paths
 - Every GET and POST path goes through `has_path_traversal` before routing. It refuses `..`

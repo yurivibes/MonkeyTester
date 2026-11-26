@@ -15,10 +15,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-from build_fixture import BUILD_ID, add_build
-from test_app_api import ServerCase
+from tests.build_fixture import BUILD_ID, add_build
+from tests.test_app_api import ServerCase
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "mt-tests" / "scripts"))
 sys.path.insert(0, str(ROOT / "ci" / "mt-submit"))
 import layout

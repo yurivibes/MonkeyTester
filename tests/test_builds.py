@@ -19,8 +19,8 @@ from unittest.mock import patch
 
 import app
 import builds
-from fake_build_plugin import FORGE_TOKEN, REPO, TEMPLATES, FakeBuildPlugin, start
-from test_app_api import FAKE_RUNNER, Peer, ServerCase
+from tests.fake_build_plugin import FORGE_TOKEN, REPO, TEMPLATES, FakeBuildPlugin, start
+from tests.test_app_api import FAKE_RUNNER, Peer, ServerCase
 
 OTHER = "blackjackfruit/Other-App"
 

@@ -15,15 +15,15 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "mt-tests" / "scripts"))
 sys.path.insert(0, str(ROOT / "ci" / "mt-submit"))
 with patch.dict(os.environ, {"VISION_TESTS_DIR": tempfile.mkdtemp()}):
     import test_runner_core as core
 import app
 import submit
-from test_app_api import ServerCase
-from build_fixture import BUILD_ID, add_build
+from tests.test_app_api import ServerCase
+from tests.build_fixture import BUILD_ID, add_build
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 

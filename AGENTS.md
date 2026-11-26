@@ -342,10 +342,10 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 | `build_plugin_client.py` | HTTP client for build plugins (`BUILD_PLUGIN_API.md`): `BuildPluginClient` (health with contract check, config, check_repo, branches, cases, start_build, build, template), `health_entry`, `validate`, `public_config`, `parse_build_plugins`. |
 | `ci/mt-submit/submit.py` | CI upload script (served at `GET /ci/submit.py`); sends `MT_CI_TOKEN` as `Authorization: Bearer` when set. (The composite action `ci/mt-submit/action.yml` was removed in #80.) |
 | `viewer_auth.py` | Accounts (seed admin/admin, migration, scrypt, sessions, users admin), login throttle, CI token, runner token, `service_tokens.json` (env import once, `apply_to_environ`). |
-| `test_viewer_auth.py` | Tests for login, accounts, CSRF, throttle, CI/runner/service tokens. |
-| `fake_build_plugin.py` | Test helper: an in-process fake build plugin answering the whole contract (used by `test_builds.py`, `test_build_plugin_client.py`). |
-| `build_fixture.py` | Test helper: `add_build()` records a build so tests can POST to `/api/run-test`. |
-| `security_utils.py` | Shared hardening helpers: `safe_join`/`UnsafePath`, allowlist validators (device id, run id, bundle id, branch, test name), `safe_filename`, `check_http_url`, body limits (`body_length`, `max_upload_bytes`, `MAX_JSON_BODY_BYTES`), `write_private_json`, and the `harden_handler` class decorator. Tested by `test_security_hardening.py` (in the CI list). |
+| `tests/test_viewer_auth.py` | Tests for login, accounts, CSRF, throttle, CI/runner/service tokens. |
+| `tests/fake_build_plugin.py` | Test helper: an in-process fake build plugin answering the whole contract (used by `test_builds.py`, `test_build_plugin_client.py`). |
+| `tests/build_fixture.py` | Test helper: `add_build()` records a build so tests can POST to `/api/run-test`. |
+| `security_utils.py` | Shared hardening helpers: `safe_join`/`UnsafePath`, allowlist validators (device id, run id, bundle id, branch, test name), `safe_filename`, `check_http_url`, body limits (`body_length`, `max_upload_bytes`, `MAX_JSON_BODY_BYTES`), `write_private_json`, and the `harden_handler` class decorator. Tested by `tests/test_security_hardening.py`. |
 | `SECURITY.md` | Security notes; "Code hardening" lists the path, limit, header, subprocess and secret-file rules. |
 | `BUILD_PLUGIN_API.md` | The build plugin contract. |
 
@@ -463,7 +463,7 @@ results from different devices.
 3. Run tests: `cd mt-tests/scripts && CONTROLLER_URL=http://192.168.1.20:8090 python3 run_on_device.py --device 192.168.1.100:5555 tests/my_test.txt`
 4. View results: `http://127.0.0.1:8089/`
 5. Run from web UI: open Build & Test at `http://127.0.0.1:8089/build.html`
-6. Unit tests: `nix run .#tests`, or without Nix the `python3 -m unittest …` line from `.github/workflows/test.yml` (keep `flake.nix`'s copy of that list in step).
+6. Unit tests: `nix run .#tests`, or without Nix `python3 -m unittest discover -s tests -t .` (same as `.github/workflows/test.yml`). Unit tests live in `tests/` (runner tests in `tests/runner/`); any new `test_*.py` there is picked up automatically, no list to update. Shared helpers are imported as `tests.<module>`.
 
 ## Hosting and review workflow
 This repo isn't tied to one code host: it can live on GitHub, Gitea/Forgejo, GitLab, Bitbucket or a

@@ -17,11 +17,12 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mt-tests" / "scripts"))
 with patch.dict(os.environ, {"VISION_TESTS_DIR": tempfile.mkdtemp()}):
     import test_runner_core as core
 import app
-from test_app_api import ServerCase
+from tests.build_fixture import BUILD_ID, add_build
+from tests.test_app_api import ServerCase
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
@@ -106,8 +107,9 @@ class MultiCaseUploadTests(ServerCase):
             "submit", Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py")
         submit = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(submit)
+        add_build()
         ctype, body = submit.build_multipart(
-            {"device_mode": "android"},
+            {"device_mode": "android", "build_request": BUILD_ID},
             [("apk", "app.apk", b"PK"),
              ("tests", "eula/INSTRUCTION.txt", b"MODE: once\n"),
              ("tests", "eula/t.txt", b"WAIT: 0\n"),

@@ -20,8 +20,8 @@ import threading
 import app
 import builds
 import viewer_auth as auth
-from build_fixture import BUILD_ID, add_build
-from test_app_api import (TEST_COOKIE, TEST_PASSWORD, TEST_USER, ServerCase, request)
+from tests.build_fixture import BUILD_ID, add_build
+from tests.test_app_api import (TEST_COOKIE, TEST_PASSWORD, TEST_USER, ServerCase, request)
 
 
 def mode(path):

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import app
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "mt-tests" / "scripts"))
 sys.path.insert(0, str(ROOT / "ci" / "mt-submit"))
 import controller_client
