@@ -83,6 +83,9 @@
    and the Build Plugin section (the local build tool). Cards, manage boxes
    and Configure panels reuse the classes above. */
 .plugins-section-title { font-size: 1.05rem; font-weight: 700; margin: 20px 0 8px; }
+.plugins-section-title { display: flex; align-items: center; gap: 8px; }
+.section-help-btn { width: 22px; height: 22px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; line-height: 1; cursor: pointer; background: transparent; color: var(--text); border: 1px solid var(--border-strong); }
+.section-help-btn:hover, .section-help-btn[aria-expanded="true"] { background: var(--acid); color: var(--on-acid); border-color: var(--acid); }
 #buildManageStatus.saved { color: var(--pass); }
 #buildManageStatus.error { color: var(--fail); }
 #controllerManageStatus.saved { color: var(--pass); }
@@ -119,8 +122,8 @@
     <h2 class="page-title">Plugins</h2>
 
     <div class="settings-section" id="pluginsTestSection">
-        <div class="plugins-section-title">Test Plugins</div>
-        <div class="config-info">A <strong>test plugin</strong> gives tests something the phones can't: a device plugin drives extra hardware a test talks to, and the vision-model plugin reads the screenshots. Register device plugins in the box below; a plugin with its own settings, such as the vision-model plugin, has a <strong>Configure</strong> button on its row. Tests call a plugin by its registered name.</div>
+        <div class="plugins-section-title">Test Plugins<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="testPluginsHelp" title="What is this?" aria-label="What is a test plugin?">?</button></div>
+        <div class="config-info" id="testPluginsHelp" hidden>A <strong>test plugin</strong> gives tests something the phones can't: a device plugin drives extra hardware a test talks to, and the vision-model plugin reads the screenshots. Register device plugins in the box below; a plugin with its own settings, such as the vision-model plugin, has a <strong>Configure</strong> button on its row. Tests call a plugin by its registered name.</div>
         <div class="plugins-none bad" id="pluginsError" hidden></div>
         <div class="plugins-list" id="pluginsList"></div>
         <div class="plugin-configure" id="pluginConfigure"></div>
@@ -130,8 +133,8 @@
     </div>
 
     <div class="settings-section" id="pluginsBuildSection">
-        <div class="plugins-section-title">Build Plugin</div>
-        <div class="config-info">A <strong>build plugin</strong> builds a branch of your app on its own host and uploads the apps to the viewer, which then tests them on the devices. Register its address in the box below, and use <strong>Configure</strong> on its card for the code host settings. Projects pick a build plugin on <a href="/config">Settings &rarr; Build &amp; Test</a>.</div>
+        <div class="plugins-section-title">Build Plugin<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="buildPluginHelp" title="What is this?" aria-label="What is a build plugin?">?</button></div>
+        <div class="config-info" id="buildPluginHelp" hidden>A <strong>build plugin</strong> builds a branch of your app on its own host and uploads the apps to the viewer, which then tests them on the devices. Register its address in the box below, and use <strong>Configure</strong> on its card for the code host settings. Projects pick a build plugin on <a href="/config">Settings &rarr; Build &amp; Test</a>.</div>
         <div class="plugins-list" id="buildPluginsList"></div>
         <div class="plugin-configure" id="buildConfigure"></div>
         <div class="plugin-manage" id="buildManage"></div>
@@ -140,8 +143,8 @@
 
 
     <div class="settings-section" id="deviceConfigSection">
-        <div class="plugins-section-title">Controller Plugin</div>
-        <div class="config-info">A <strong>controller plugin</strong> owns the phones and tablets connected to it: it lists those devices and runs the test steps on them. Register its address in the box below. Friendly names set for its devices replace the runner-recorded names on run pages.</div>
+        <div class="plugins-section-title">Controller Plugin<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="controllerPluginHelp" title="What is this?" aria-label="What is a controller plugin?">?</button></div>
+        <div class="config-info" id="controllerPluginHelp" hidden>A <strong>controller plugin</strong> owns the phones and tablets connected to it: it lists those devices and runs the test steps on them. Register its address in the box below. Friendly names set for its devices replace the runner-recorded names on run pages.</div>
         <div class="plugin-manage" id="controllerManage"></div>
         <div class="settings-status" id="controllerManageStatus" hidden></div>
         <div class="config-save-all">
@@ -1499,6 +1502,17 @@ async function controllerPost(payload, okMsg) {
 loadControllerManage();
 setInterval(loadControllerManage, 15000);
 
+
+// ── Section help: the "?" next to each section title shows/hides its intro ──
+document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.section-help-btn');
+    if (!btn) return;
+    const box = document.getElementById(btn.getAttribute('aria-controls'));
+    if (!box) return;
+    const open = box.hidden;
+    box.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
 </script>
 </body>
 </html>
