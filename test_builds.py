@@ -27,7 +27,7 @@ OTHER = "blackjackfruit/Other-App"
 
 def load_submit():
     spec = importlib.util.spec_from_file_location(
-        "submit", Path(app.__file__).parent / "ci" / "visual-test" / "submit.py")
+        "submit", Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py")
     submit = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(submit)
     return submit
@@ -555,7 +555,7 @@ class MigrationTests(BuildCase):
     def test_gitea_config_becomes_the_build_local_plugin_and_projects(self):
         legacy = self.write_legacy()
         before = legacy.read_text()
-        with patch.dict(os.environ, {"VT_BUILD_LOCAL_URL": ""}):
+        with patch.dict(os.environ, {"MT_BUILD_LOCAL_URL": ""}):
             cfg = builds.load_config()  # first load migrates
         self.assertEqual(cfg["plugins"], {"build-local": {"url": "http://127.0.0.1:8094", "token": ""}})
         self.assertEqual(cfg["projects"], [{"repo": REPO, "plugin": "build-local", "branch": ""},
@@ -568,16 +568,16 @@ class MigrationTests(BuildCase):
         self.assertIsNone(builds.migrate())
         self.assertEqual(len(builds.load_config()["projects"]), 2)
 
-    def test_vt_build_local_url_sets_the_address(self):
+    def test_mt_build_local_url_sets_the_address(self):
         self.write_legacy()
-        cfg = builds.migrate({"VT_BUILD_LOCAL_URL": "http://192.168.125.71:8094/"})
+        cfg = builds.migrate({"MT_BUILD_LOCAL_URL": "http://192.168.125.71:8094/"})
         self.assertEqual(cfg["plugins"]["build-local"]["url"], "http://192.168.125.71:8094")
 
     def test_token_is_handed_to_the_unconfigured_plugin_once(self):
         legacy = self.write_legacy(token=FORGE_TOKEN)
         FakeBuildPlugin.forge = {"forge_kind": "", "forge_url": "", "token": "", "user": "", "viewer_url": ""}
-        with patch.dict(os.environ, {"VT_BUILD_LOCAL_URL": self.plugin_url,
-                                     "VT_PUBLIC_URL": "http://192.168.125.70:8089/"}):
+        with patch.dict(os.environ, {"MT_BUILD_LOCAL_URL": self.plugin_url,
+                                     "MT_PUBLIC_URL": "http://192.168.125.70:8089/"}):
             status, body = self.call("GET", "/api/config/build")  # first load migrates and hands over
         self.assertEqual(status, 200, body)
         posts = [c for c in FakeBuildPlugin.calls if c[:2] == ("POST", "/config")]
@@ -599,12 +599,12 @@ class MigrationTests(BuildCase):
     def test_viewer_url_defaults_to_this_host(self):
         with patch.object(builds, "VIEWER_PORT", 8123):
             self.assertEqual(builds.viewer_url_for("http://127.0.0.1:8094", env={}), "http://127.0.0.1:8123")
-            self.assertEqual(builds.viewer_url_for("http://x", env={"VT_PUBLIC_URL": "http://v:1/"}), "http://v:1")
+            self.assertEqual(builds.viewer_url_for("http://x", env={"MT_PUBLIC_URL": "http://v:1/"}), "http://v:1")
 
     def test_a_refused_token_is_kept_and_retried_later(self):
         legacy = self.write_legacy(token="wrong-token-0000")
         FakeBuildPlugin.forge = {"forge_kind": "", "forge_url": "", "token": "", "user": "", "viewer_url": ""}
-        with patch.dict(os.environ, {"VT_BUILD_LOCAL_URL": self.plugin_url}):
+        with patch.dict(os.environ, {"MT_BUILD_LOCAL_URL": self.plugin_url}):
             self.call("GET", "/api/config/build")
             self.call("GET", "/api/config/build")  # within LEGACY_PUSH_RETRY: not tried again
         self.assertEqual(len([c for c in FakeBuildPlugin.calls if c[:2] == ("POST", "/config")]), 1)
@@ -613,7 +613,7 @@ class MigrationTests(BuildCase):
 
     def test_a_configured_plugin_keeps_its_token_and_the_file_is_retired(self):
         legacy = self.write_legacy()
-        with patch.dict(os.environ, {"VT_BUILD_LOCAL_URL": self.plugin_url}):
+        with patch.dict(os.environ, {"MT_BUILD_LOCAL_URL": self.plugin_url}):
             self.call("GET", "/api/config/build")
         self.assertEqual([c for c in FakeBuildPlugin.calls if c[:2] == ("POST", "/config")], [])
         self.assertEqual(FakeBuildPlugin.forge["token"], FORGE_TOKEN)
@@ -627,16 +627,16 @@ class MigrationTests(BuildCase):
         self.assertEqual([p["repo"] for p in body["projects"]], [REPO, OTHER])
         self.assertEqual(body["plugins"][0]["name"], "build-local")
 
-    def test_vt_build_plugins_is_imported_once(self):
-        env = {"VT_BUILD_PLUGINS": "mac2=http://127.0.0.1:8095/"}
+    def test_mt_build_plugins_is_imported_once(self):
+        env = {"MT_BUILD_PLUGINS": "mac2=http://127.0.0.1:8095/"}
         cfg = builds.migrate(env)
         self.assertEqual(cfg["plugins"], {"mac2": {"url": "http://127.0.0.1:8095", "token": ""}})
-        self.assertIsNone(builds.migrate({"VT_BUILD_PLUGINS": "other=http://h:1"}, log_ignored=True))
+        self.assertIsNone(builds.migrate({"MT_BUILD_PLUGINS": "other=http://h:1"}, log_ignored=True))
         self.assertEqual(list(builds.load_config()["plugins"]), ["mac2"])
 
     def test_nothing_to_import_writes_nothing(self):
         self.assertEqual(builds.load_config(), {"plugins": {}, "projects": []})
-        self.assertIsNone(builds.migrate({"VT_BUILD_PLUGINS": "not a list"}))
+        self.assertIsNone(builds.migrate({"MT_BUILD_PLUGINS": "not a list"}))
         self.assertFalse(self.config_file.exists())
 
 
@@ -695,7 +695,7 @@ class SubmitScriptTests(ServerCase):
         with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/ci/submit.py", timeout=10) as resp:
             self.assertTrue(resp.headers["Content-Type"].startswith("text/x-python"))
             body = resp.read()
-        self.assertEqual(body, (Path(app.__file__).parent / "ci" / "visual-test" / "submit.py").read_bytes())
+        self.assertEqual(body, (Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py").read_bytes())
 
     def test_branch_defaults_from_the_ci(self):
         submit = load_submit()
@@ -756,7 +756,7 @@ class UploadAttachTests(BuildCase):
 
     def submit(self, *extra):
         """Run submit.py's main() against the viewer with a one-case tests dir."""
-        tests = self.root / "visual-tests" / "eula"
+        tests = self.root / "mt-tests" / "eula"
         tests.mkdir(parents=True, exist_ok=True)
         (tests / "INSTRUCTION.txt").write_text("MODE: once\n")
         (tests / "01_a.txt").write_text("VERIFY: x\n")
@@ -767,7 +767,7 @@ class UploadAttachTests(BuildCase):
         with contextlib.redirect_stdout(out), \
                 patch.object(submit, "wait_for_result", side_effect=AssertionError("waited")):
             code = submit.main(["--url", f"http://127.0.0.1:{self.port}", "--android-app", str(apk),
-                                "--tests-dir", str(self.root / "visual-tests"), "--branch", "feat/x",
+                                "--tests-dir", str(self.root / "mt-tests"), "--branch", "feat/x",
                                 "--repo", REPO, "--cases", "eula", "--no-wait", *extra])
         return code, out.getvalue()
 
@@ -794,13 +794,13 @@ class UploadAttachTests(BuildCase):
             return real(cmd, *a, **kw)
         with patch.object(app.subprocess, "Popen", side_effect=spy):
             self.upload({"build_request": b["id"], "repo": "someone/else"})
-        self.assertEqual(captured["env"].get("VT_REPO"), REPO)
+        self.assertEqual(captured["env"].get("MT_REPO"), REPO)
 
 
 class SubmitCaseSelectionTests(unittest.TestCase):
     def test_select_cases(self):
         submit = load_submit()
-        cases = [Path("visual-tests/eula"), Path("visual-tests/ios-eula")]
+        cases = [Path("mt-tests/eula"), Path("mt-tests/ios-eula")]
         self.assertEqual(submit.select_cases(cases, ""), (cases, None))
         self.assertEqual(submit.select_cases(cases, " ios-eula ,"), ([cases[1]], None))
         self.assertEqual(submit.select_cases(cases, "eula,gone")[1], "case(s) not found: gone")
@@ -808,7 +808,7 @@ class SubmitCaseSelectionTests(unittest.TestCase):
 
 class BranchNameTests(unittest.TestCase):
     def test_branch_pattern(self):
-        for ok in ("master", "feat/x", "ci/visual-test-combined", "v1.2"):
+        for ok in ("master", "feat/x", "ci/monkeytester-combined", "v1.2"):
             self.assertTrue(builds.BRANCH_RE.match(ok), ok)
         for bad in ("", "a..b", "/x", "x/", "a b", "a~1", "x.", "a//b"):
             self.assertFalse(builds.BRANCH_RE.match(bad), bad)

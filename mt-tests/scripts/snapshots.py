@@ -340,5 +340,5 @@ def take(name, *, capture_png, platform, scale, snapshot_root, out_dir,
 
 
 def record_mode():
-    return (os.environ.get("VT_RECORD_SNAPSHOTS") or "").strip().lower() not in (
+    return (os.environ.get("MT_RECORD_SNAPSHOTS") or "").strip().lower() not in (
         "", "0", "false", "off", "no")

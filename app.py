@@ -23,7 +23,7 @@ import viewer_auth as auth
 # Build plugin pairing tokens come from Settings (service_tokens.json).
 builds.TOKEN_LOOKUP = auth.plugin_token
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "visual-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "mt-tests" / "scripts"))
 
 TEST_DIR = Path(__file__).parent / "Run"
 CONFIG_FILE = TEST_DIR / "config.json"
@@ -47,15 +47,15 @@ if _LEGACY_COPILOT_FILE.exists():
 
 
 def _native_back():
-    """True when VT_NATIVE_BACK is set — render a back button inside the HTML
+    """True when MT_NATIVE_BACK is set — render a back button inside the HTML
     instead of relying on the browser's own navigation controls."""
-    val = (os.environ.get("VT_NATIVE_BACK") or "").strip()
+    val = (os.environ.get("MT_NATIVE_BACK") or "").strip()
     return val.lower() not in ("", "0", "false", "off")
 
 
 def _web_runs_disabled():
-    """True when VT_DISABLE_WEB_RUNS is set: the nav hides "Build & Test". UI only: the pages and their APIs keep working."""
-    val = (os.environ.get("VT_DISABLE_WEB_RUNS") or "").strip()
+    """True when MT_DISABLE_WEB_RUNS is set: the nav hides "Build & Test". UI only: the pages and their APIs keep working."""
+    val = (os.environ.get("MT_DISABLE_WEB_RUNS") or "").strip()
     return val.lower() not in ("", "0", "false", "off")
 
 
@@ -316,25 +316,25 @@ def managed_ai_plugin(env=None):
     app manages it ("managed mode"), else None.
 
     The Mac launcher picks the AI plugin's port and pairing token fresh on
-    every launch and passes them as VT_MANAGED_AI_PLUGIN_URL and
-    VT_MANAGED_AI_PLUGIN_TOKEN. Both are required: with either one missing
+    every launch and passes them as MT_MANAGED_AI_PLUGIN_URL and
+    MT_MANAGED_AI_PLUGIN_TOKEN. Both are required: with either one missing
     the feature is off and config.json is the only source, as before. In
     managed mode the env values win over config.json (visual_plugin_url,
     visual_api_key) for every plugin call, and nothing writes them to
     config.json."""
     env = os.environ if env is None else env
-    url = (env.get("VT_MANAGED_AI_PLUGIN_URL") or "").strip().rstrip("/")
-    token = (env.get("VT_MANAGED_AI_PLUGIN_TOKEN") or "").strip()
+    url = (env.get("MT_MANAGED_AI_PLUGIN_URL") or "").strip().rstrip("/")
+    token = (env.get("MT_MANAGED_AI_PLUGIN_TOKEN") or "").strip()
     if url and token:
         return url, token
     return None
 
 
 def ai_plugin_url(cfg=None):
-    """The monkeytester-ai plugin's address: VT_MANAGED_AI_PLUGIN_URL in
+    """The monkeytester-ai plugin's address: MT_MANAGED_AI_PLUGIN_URL in
     managed mode (managed_ai_plugin), else Settings → Device Plugins
     (config.json visual_plugin_url), '' when none is set. A monkeytester-ai
-    entry in VT_PLUGINS is imported once at start (import_ai_plugin_address)
+    entry in MT_PLUGINS is imported once at start (import_ai_plugin_address)
     and ignored after that."""
     managed = managed_ai_plugin()
     if managed:
@@ -345,7 +345,7 @@ def ai_plugin_url(cfg=None):
 
 def ai_pairing_token(cfg=None):
     """The pairing token for every call to the monkeytester-ai plugin:
-    VT_MANAGED_AI_PLUGIN_TOKEN in managed mode, else config.json
+    MT_MANAGED_AI_PLUGIN_TOKEN in managed mode, else config.json
     visual_api_key; '' when none is set."""
     managed = managed_ai_plugin()
     if managed:
@@ -354,17 +354,17 @@ def ai_pairing_token(cfg=None):
     return (cfg.get("visual_api_key") or "").strip()
 
 
-_AI_IMPORT_MESSAGE = ("imported monkeytester-ai address from VT_PLUGINS; "
-                      "the VT_PLUGINS entry is ignored from now on")
+_AI_IMPORT_MESSAGE = ("imported monkeytester-ai address from MT_PLUGINS; "
+                      "the MT_PLUGINS entry is ignored from now on")
 
 
 def import_ai_plugin_address(env=None):
-    """One-time move of the monkeytester-ai address from VT_PLUGINS into
+    """One-time move of the monkeytester-ai address from MT_PLUGINS into
     config.json, run when the viewer starts. Only when config.json has no
-    visual_plugin_url yet and VT_PLUGINS has a monkeytester-ai entry: writes
+    visual_plugin_url yet and MT_PLUGINS has a monkeytester-ai entry: writes
     visual_plugin_url (+ visual_plugin) atomically, keeping every other key
     (legacy visual_endpoint included, so a config that still has it keeps
-    working). Afterwards a monkeytester-ai entry in VT_PLUGINS is ignored and
+    working). Afterwards a monkeytester-ai entry in MT_PLUGINS is ignored and
     that is logged once. Returns the imported URL, or ''.
     Does nothing in managed mode (the launcher app supplies the address on every
     launch)."""
@@ -373,9 +373,9 @@ def import_ai_plugin_address(env=None):
         return ""
     pc = _plugin_client()
     try:
-        entries = dict(pc.parse_plugins(env.get("VT_PLUGINS", "")))
+        entries = dict(pc.parse_plugins(env.get("MT_PLUGINS", "")))
     except pc.PluginError as e:
-        print(f"VT_PLUGINS is malformed, monkeytester-ai address not imported: {e.message}",
+        print(f"MT_PLUGINS is malformed, monkeytester-ai address not imported: {e.message}",
               file=sys.stderr, flush=True)
         return ""
     env_url = (entries.get(pc.AI_PLUGIN_NAME) or "").strip().rstrip("/")
@@ -384,7 +384,7 @@ def import_ai_plugin_address(env=None):
     with _CONFIG_LOCK:
         cfg = load_config() if CONFIG_FILE.exists() else {}
         if ai_plugin_url(cfg):
-            print(f"VT_PLUGINS has a {pc.AI_PLUGIN_NAME} entry; it is ignored — the address "
+            print(f"MT_PLUGINS has a {pc.AI_PLUGIN_NAME} entry; it is ignored — the address "
                   "comes from Settings → Device Plugins (config.json visual_plugin_url)",
                   file=sys.stderr, flush=True)
             return ""
@@ -396,28 +396,28 @@ def import_ai_plugin_address(env=None):
 
 
 def import_device_plugins(env=None):
-    """One-time move of the device plugins from VT_PLUGINS into config.json
+    """One-time move of the device plugins from MT_PLUGINS into config.json
     (the `plugins` map {name: url}), run when the viewer starts — the same
     pattern as import_ai_plugin_address: the first start copies every entry,
     afterwards Settings → Device Plugins owns the list and the environment
     variable is ignored (that is logged once). monkeytester-ai is skipped —
-    its own import handles it. Nothing is written when VT_PLUGINS has no
+    its own import handles it. Nothing is written when MT_PLUGINS has no
     device entry, so a later Settings add seeds from the still-live env then.
     Returns the imported map."""
     env = os.environ if env is None else env
     pc = _plugin_client()
     try:
-        entries = {name: url for name, url in pc.parse_plugins(env.get("VT_PLUGINS", ""))
+        entries = {name: url for name, url in pc.parse_plugins(env.get("MT_PLUGINS", ""))
                    if name != pc.AI_PLUGIN_NAME}
     except pc.PluginError as e:
-        print(f"VT_PLUGINS is malformed, device plugins not imported: {e.message}",
+        print(f"MT_PLUGINS is malformed, device plugins not imported: {e.message}",
               file=sys.stderr, flush=True)
         return {}
     with _CONFIG_LOCK:
         cfg = load_config() if CONFIG_FILE.exists() else {}
         if isinstance(cfg.get("plugins"), dict):
             if entries:
-                print("VT_PLUGINS device-plugin entries are ignored — Settings → Device "
+                print("MT_PLUGINS device-plugin entries are ignored — Settings → Device "
                       "Plugins (config.json plugins) owns the list now",
                       file=sys.stderr, flush=True)
             return {}
@@ -425,7 +425,7 @@ def import_device_plugins(env=None):
             return {}
         cfg["plugins"] = entries
         save_config(cfg)
-    print(f"imported {len(entries)} device plugin(s) from VT_PLUGINS into config.json; "
+    print(f"imported {len(entries)} device plugin(s) from MT_PLUGINS into config.json; "
           "Settings → Device Plugins owns the list from now on", file=sys.stderr, flush=True)
     return entries
 
@@ -461,7 +461,7 @@ def import_controller_url(env=None):
 def plugin_base_url(name, env=None):
     """Base URL of a plugin: monkeytester-ai's comes from Settings
     (config.json visual_plugin_url), any other from the plugin list in effect
-    (config.json `plugins` once Settings owns it, else VT_PLUGINS); '' when
+    (config.json `plugins` once Settings owns it, else MT_PLUGINS); '' when
     unset."""
     pc = _plugin_client()
     if name == pc.AI_PLUGIN_NAME:
@@ -473,7 +473,7 @@ def plugin_base_url(name, env=None):
     if owned is not None:
         return owned.get(name, "")
     try:
-        for pname, url in pc.parse_plugins((env if env is not None else os.environ).get("VT_PLUGINS", "")):
+        for pname, url in pc.parse_plugins((env if env is not None else os.environ).get("MT_PLUGINS", "")):
             if pname == name:
                 return url.rstrip("/")
     except pc.PluginError:
@@ -639,9 +639,9 @@ def vision_status():
 
 
 def _plugin_client():
-    """The runner's plugin_client module (visual-tests/scripts), so the viewer reads
-    VT_PLUGINS exactly the way PLUGIN steps do."""
-    scripts = str(Path(__file__).resolve().parent / "visual-tests" / "scripts")
+    """The runner's plugin_client module (mt-tests/scripts), so the viewer reads
+    MT_PLUGINS exactly the way PLUGIN steps do."""
+    scripts = str(Path(__file__).resolve().parent / "mt-tests" / "scripts")
     if scripts not in sys.path:
         sys.path.insert(0, scripts)
     import plugin_client
@@ -650,7 +650,7 @@ def _plugin_client():
 
 def plugins_status():
     """Each device plugin's /health, for /api/status: the plugin list in effect
-    (config.json `plugins` once Settings owns it, else VT_PLUGINS) minus
+    (config.json `plugins` once Settings owns it, else MT_PLUGINS) minus
     monkeytester-ai, plus monkeytester-ai at its Settings address. Plugins are
     optional (only tests with PLUGIN steps need them), so they don't change
     the top-level ok."""
@@ -945,8 +945,8 @@ def resolve_run_targets(fields):
     }, None
 
 
-VISUAL_TESTS_DIR = Path(__file__).parent / "visual-tests"
-RUN_ON_DEVICE_SCRIPT = VISUAL_TESTS_DIR / "scripts" / "run_on_device.py"
+MT_TESTS_DIR = Path(__file__).parent / "mt-tests"
+RUN_ON_DEVICE_SCRIPT = MT_TESTS_DIR / "scripts" / "run_on_device.py"
 UPLOADS_DIR = TEST_DIR / ".uploads"  # staging area, inside the already-gitignored Run/
 MAX_APK_BYTES = 500 * 1024 * 1024
 MAX_TXT_BYTES = 2 * 1024 * 1024
@@ -1316,7 +1316,7 @@ def get_run_result(run):
 # this long has lost its runner (host shutdown, crash, kill -9): nothing will
 # ever finalize it, so the watchdog stamps it "interrupted" and it reports as
 # an error instead of hanging on "Running" forever.
-STALE_RUN_SECS = int(os.environ.get("VT_STALE_RUN_SECS", "3600"))
+STALE_RUN_SECS = int(os.environ.get("MT_STALE_RUN_SECS", "3600"))
 RUN_TERMINAL_STATUSES = ("completed", "completed_with_failures", "failed",
                          "interrupted", "aborted")
 RUN_TERMINAL_PHASES = ("completed", "completed_with_failures", "failed",
@@ -1452,7 +1452,7 @@ def _is_running(name):
 # as `repo`; runs without one (uploads with no repo, and every run from
 # before projects existed) are Unassigned.
 UNASSIGNED_PROJECT = "_unassigned"
-SUBMIT_SCRIPT = Path(__file__).parent / "ci" / "visual-test" / "submit.py"
+SUBMIT_SCRIPT = Path(__file__).parent / "ci" / "mt-submit" / "submit.py"
 
 
 def run_repo(fields):
@@ -2146,7 +2146,7 @@ def _iter_result_files(run_dir):
 
 def build_snapshot_bundle(run):
     """Zip of the candidates in a run (missing, mismatched or recorded
-    snapshots), laid out as visual-tests/<case>/snapshots/... so it unpacks
+    snapshots), laid out as mt-tests/<case>/snapshots/... so it unpacks
     straight into the app repo. Returns (bytes, count), or (None, 0)."""
     run_dir = TEST_DIR / run
     meta = get_run_metadata(run) or {}
@@ -2172,7 +2172,7 @@ def build_snapshot_bundle(run):
                 actual.relative_to(run_dir.resolve())
             except ValueError:
                 continue
-            entries[f"visual-tests/{result_case}/{rel}"] = actual
+            entries[f"mt-tests/{result_case}/{rel}"] = actual
     if not entries:
         return None, 0
     buf = io.BytesIO()
@@ -2497,7 +2497,7 @@ def build_upload_allowed(build):
 
 def import_service_tokens(env=None):
     """One-time: CONTROLLER_TOKEN / IOS_CONTROLLER_TOKEN, PLUGIN_TOKEN /
-    VT_PLUGIN_TOKEN_<NAME>, VT_CI_TOKEN and any build plugin token still kept
+    MT_PLUGIN_TOKEN_<NAME>, MT_CI_TOKEN and any build plugin token still kept
     in config.json move into service_tokens.json (Settings owns them)."""
     with _CONFIG_LOCK:
         config = load_config()
@@ -2523,7 +2523,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
     auth_via = None     # "session", "ci_token", "runner", "build_request", None
 
     def _session_token(self):
-        """The vt_auth cookie's value, or ""."""
+        """The mt_auth cookie's value, or ""."""
         for cookie in (self.headers.get("Cookie") or "").split(";"):
             name, _, value = cookie.strip().partition("=")
             if name == auth.COOKIE_NAME:
@@ -3159,10 +3159,10 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
                 # the seeded default (admin/admin).
                 "default_password": bool(user and user["role"] == "admin"
                                          and user["default_password"]),
-                # True when VT_NATIVE_BACK is set: the frontend shows an
+                # True when MT_NATIVE_BACK is set: the frontend shows an
                 # in-page back button instead of relying on browser chrome.
                 "native_back": _native_back(),
-                # True when VT_DISABLE_WEB_RUNS is set: the nav hides
+                # True when MT_DISABLE_WEB_RUNS is set: the nav hides
                 # "Build & Test".
                 "web_runs_disabled": _web_runs_disabled(),
             }
@@ -3486,15 +3486,15 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         if not self._authorize("POST"):
             return
         parsed = urlparse(self.path)
-        self._vt_body = None
+        self._mt_body = None
         if has_path_traversal(parsed.path):
             self.send_json_status(400, {"error": "invalid path"})
             return
         # Size check before anything is read: uploads have their own cap
-        # (VT_MAX_UPLOAD_MB), every other POST is a small JSON body.
+        # (MT_MAX_UPLOAD_MB), every other POST is a small JSON body.
         limit = sec.max_upload_bytes() if parsed.path == "/api/run-test" else sec.MAX_JSON_BODY_BYTES
         try:
-            self._vt_body_length = sec.body_length(self.headers, limit)
+            self._mt_body_length = sec.body_length(self.headers, limit)
         except sec.BodyError as e:
             self.close_connection = True  # the unread body must not be parsed as a request
             self.send_json_status(e.status, {"error": e.message})
@@ -3624,12 +3624,12 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
     def _body(self):
         """The request body, read once (its length was checked in do_POST)."""
-        if getattr(self, "_vt_body", None) is None:
-            length = getattr(self, "_vt_body_length", None)
+        if getattr(self, "_mt_body", None) is None:
+            length = getattr(self, "_mt_body_length", None)
             if length is None:
                 length = sec.body_length(self.headers, sec.MAX_JSON_BODY_BYTES)
-            self._vt_body = self.rfile.read(length) if length else b""
-        return self._vt_body
+            self._mt_body = self.rfile.read(length) if length else b""
+        return self._mt_body
 
     def _read_json_body(self):
         try:
@@ -3753,7 +3753,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
     def handle_run_test(self):
         """Accept an uploaded APK + test files (INSTRUCTION.txt + .txt test
-        cases) and launch visual-tests/scripts/run_on_device.py as a detached
+        cases) and launch mt-tests/scripts/run_on_device.py as a detached
         background subprocess against a wireless-ADB device."""
         try:
             fields, files = parse_multipart_form(self, max_body_bytes=sec.max_upload_bytes())
@@ -3816,7 +3816,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         build_logs = {}
         if mode in {"android", "ios", "all"}:
             # Platform modes: the run itself picks the devices when its turn
-            # comes, waiting up to VT_DEVICE_CONNECT_WAIT_SECS (5 min) for a
+            # comes, waiting up to MT_DEVICE_CONNECT_WAIT_SECS (5 min) for a
             # missing phone to connect. The upload is accepted either way.
             if mode == "android" and not android_app and not fields.get("build_failed_android"):
                 self.send_json_status(400, {"error": "Android runs need an .apk"})
@@ -3973,10 +3973,10 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         #  - CONTROLLER_URL is inherited from this process.
         #  - The service tokens come from Settings: os.environ mirrors
         #    service_tokens.json (viewer_auth.apply_to_environ).
-        #  - VT_RUNNER_TOKEN lets the runner post press events back; it is
+        #  - MT_RUNNER_TOKEN lets the runner post press events back; it is
         #    made fresh at each viewer start and accepted only there.
         env = auth.apply_to_environ(os.environ.copy())
-        env["VT_RUNNER_TOKEN"] = auth.RUNNER_TOKEN
+        env["MT_RUNNER_TOKEN"] = auth.RUNNER_TOKEN
         # Settings → Plugins → Controller Plugin owns the Mobile Controller's
         # address once config.json has the key; re-export the resolved value
         # so the runner talks to the same controller the viewer proxies.
@@ -3986,16 +3986,16 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             env.setdefault("VIEWER_URL", f"http://127.0.0.1:{port}")
         except Exception:
             pass
-        #  - VT_REPO names the run's project: recorded in run_metadata.json and
+        #  - MT_REPO names the run's project: recorded in run_metadata.json and
         #    used to pick that project's Test Variables. Never inherited, so a
         #    run with no repo is Unassigned.
-        env.pop("VT_REPO", None)
+        env.pop("MT_REPO", None)
         if repo:
-            env["VT_REPO"] = repo
-        #  - VT_COMMIT / VT_COMMIT_MESSAGE: the commit under test (submit.py
+            env["MT_REPO"] = repo
+        #  - MT_COMMIT / MT_COMMIT_MESSAGE: the commit under test (submit.py
         #    reads it from the checkout), recorded in run_metadata.json and
-        #    shown on the run list. Never inherited, like VT_REPO.
-        for key, value in (("VT_COMMIT", commit), ("VT_COMMIT_MESSAGE", commit_message)):
+        #    shown on the run list. Never inherited, like MT_REPO.
+        for key, value in (("MT_COMMIT", commit), ("MT_COMMIT_MESSAGE", commit_message)):
             env.pop(key, None)
             if value:
                 env[key] = value
@@ -4224,7 +4224,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         (token: a string sets the pairing token, null clears it, absent or
         blank keeps the saved one; device-plugin tokens stay env-based).
         {"remove": name} forgets either entry; a build plugin still used by
-        a project refuses. The first write seeds the map from the VT_PLUGINS
+        a project refuses. The first write seeds the map from the MT_PLUGINS
         entries still live then, and afterwards Settings owns the list.
         monkeytester-ai goes through the same Add row: a set op whose
         address's /health names plugin monkeytester-ai (or whose name is
@@ -4256,7 +4256,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         def env_entries():
             try:
                 return {name: url for name, url in
-                        pc.parse_plugins(os.environ.get("VT_PLUGINS", ""))
+                        pc.parse_plugins(os.environ.get("MT_PLUGINS", ""))
                         if name != pc.AI_PLUGIN_NAME}
             except pc.PluginError:
                 return {}
@@ -4264,7 +4264,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         def base_and_save(config) -> dict:
             """The list to write on: config.json `plugins` when it owns the
             list (entries kept as-is: url strings AND build objects), else the
-            still-live VT_PLUGINS entries (first write seeds)."""
+            still-live MT_PLUGINS entries (first write seeds)."""
             raw = config.get("plugins")
             return dict(raw) if isinstance(raw, dict) else env_entries()
 
@@ -4938,17 +4938,17 @@ body:has(#site-nav) { padding-left: var(--nav-width); }
    the nav JS on click and persists across pages until the pointer re-enters
    the Settings block or Settings itself is clicked again). */
 :root[data-submenu-dismissed="true"] .site-nav-settings .site-nav-submenu { display: none; }
-/* In-view back button (VT_NATIVE_BACK pages only): a floating arrow just
+/* In-view back button (MT_NATIVE_BACK pages only): a floating arrow just
    right of the menu column, at the top-left of the page content itself.
    On the home page there is nothing to go back to, so it renders greyed
    out and disabled instead of being hidden. */
-.vt-back-btn { position: fixed; top: 12px; left: calc(var(--nav-width) + 14px); z-index: 101; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); color: var(--text-muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
-.vt-back-btn:hover { background: var(--card); color: var(--text); }
-.vt-back-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.vt-back-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.vt-back-btn[disabled] { opacity: 0.45; cursor: default; box-shadow: none; }
-.vt-back-btn[disabled]:hover { background: var(--surface); color: var(--text-muted); }
-body:has(#vt-back-btn) .site-brand { margin-left: 50px; }
+.mt-back-btn { position: fixed; top: 12px; left: calc(var(--nav-width) + 14px); z-index: 101; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); color: var(--text-muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.mt-back-btn:hover { background: var(--card); color: var(--text); }
+.mt-back-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mt-back-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mt-back-btn[disabled] { opacity: 0.45; cursor: default; box-shadow: none; }
+.mt-back-btn[disabled]:hover { background: var(--surface); color: var(--text-muted); }
+body:has(#mt-back-btn) .site-brand { margin-left: 50px; }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-title { margin-bottom: 16px; font-size: 1.1rem; font-weight: 600; }
 .breadcrumb { font-size: 0.85rem; margin: 0 0 16px; }
@@ -5195,8 +5195,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--acid); }
 .site-nav-link[aria-current="page"], .site-nav-link.has-current { background: var(--acid); color: var(--on-acid); font-weight: 700; }
 .site-nav-link:focus-visible { outline-color: var(--acid); }
 .site-nav-submenu { border: 2px solid var(--border-strong); box-shadow: 6px 6px 0 var(--pop); }
-.vt-back-btn { border: 2px solid var(--border-strong); box-shadow: 3px 3px 0 var(--pop); }
-.vt-back-btn[disabled] { box-shadow: none; }
+.mt-back-btn { border: 2px solid var(--border-strong); box-shadow: 3px 3px 0 var(--pop); }
+.mt-back-btn[disabled] { box-shadow: none; }
 
 /* Surfaces */
 .run-item, .test-case, .run-meta-bar, .stat-item, .summary, .logs-content, .source-view { border-width: 2px; }
@@ -5228,8 +5228,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--acid); }
     .run-item:hover, .btn-run:hover:not(:disabled), .settings-save-btn:hover:not(:disabled),
     .save-btn:hover:not(:disabled), .config-save-all button:hover:not(:disabled) { transform: none; }
 }
-.vt-warning-banner { position: sticky; top: 0; z-index: 200; margin: 0 0 12px; padding: 10px 16px; background: color-mix(in srgb, var(--fail) 15%, var(--surface)); border: 1px solid var(--fail); color: var(--text); font-size: 0.85rem; }
-.vt-warning-banner a { color: var(--fail); font-weight: 600; }
+.mt-warning-banner { position: sticky; top: 0; z-index: 200; margin: 0 0 12px; padding: 10px 16px; background: color-mix(in srgb, var(--fail) 15%, var(--surface)); border: 1px solid var(--fail); color: var(--text); font-size: 0.85rem; }
+.mt-warning-banner a { color: var(--fail); font-weight: 600; }
 """
 
 # Shared by the settings pages (config, plugins, run-status). Each page adds only its own section's CSS on top.
@@ -5289,15 +5289,15 @@ function doLogout() {
 
 // Admins only, while the seeded admin/admin password is still in use.
 function renderDefaultPasswordBanner() {
-    let el = document.getElementById('vt-default-password-banner');
+    let el = document.getElementById('mt-default-password-banner');
     if (!authConfig.default_password) {
         if (el) el.remove();
         return;
     }
     if (el) return;
     el = document.createElement('div');
-    el.id = 'vt-default-password-banner';
-    el.className = 'vt-warning-banner';
+    el.id = 'mt-default-password-banner';
+    el.className = 'mt-warning-banner';
     el.setAttribute('role', 'alert');
     el.innerHTML = 'This admin account still uses the default password <code>admin</code>. ' +
         'Anyone on the network can sign in with it. <a href="/config#accountSection">Change it now</a>.';
@@ -5314,7 +5314,7 @@ function applyTheme(theme) {
 }
 // Apply instantly from localStorage (the head snippet already applied it
 // pre-paint; this keeps it in sync within JS)
-try { applyTheme(localStorage.getItem('vt-theme')); } catch (e) {}
+try { applyTheme(localStorage.getItem('mt-theme')); } catch (e) {}
 // Sync with the server-side setting (authoritative)
 Promise.resolve().then(() => fetchJSON('/api/config')).then(cfg => {
     applyTheme(cfg.theme);
@@ -5322,7 +5322,7 @@ Promise.resolve().then(() => fetchJSON('/api/config')).then(cfg => {
 function setTheme(theme) {
     theme = theme === 'light' ? 'light' : 'dark';
     applyTheme(theme);
-    try { localStorage.setItem('vt-theme', theme); } catch (e) {}
+    try { localStorage.setItem('mt-theme', theme); } catch (e) {}
     fetch('/api/config', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -5372,7 +5372,7 @@ function navLink(link, path) {
 }
 
 function isNavCollapsed() {
-    try { return localStorage.getItem('vt-nav-collapsed') === 'true'; } catch (e) { return false; }
+    try { return localStorage.getItem('mt-nav-collapsed') === 'true'; } catch (e) { return false; }
 }
 function applyNavCollapsed(collapsed) {
     if (collapsed) document.documentElement.setAttribute('data-nav-collapsed', 'true');
@@ -5387,10 +5387,10 @@ applyNavCollapsed(isNavCollapsed());
 // when keyboard focus enters it (focusin + :focus-visible), or when the
 // Settings entry itself is clicked again.
 function isSubmenuDismissed() {
-    try { return localStorage.getItem('vt-submenu-dismissed') === 'true'; } catch (e) { return false; }
+    try { return localStorage.getItem('mt-submenu-dismissed') === 'true'; } catch (e) { return false; }
 }
 function setSubmenuDismissed(dismissed) {
-    try { localStorage.setItem('vt-submenu-dismissed', dismissed ? 'true' : 'false'); } catch (e) {}
+    try { localStorage.setItem('mt-submenu-dismissed', dismissed ? 'true' : 'false'); } catch (e) {}
     if (dismissed) document.documentElement.setAttribute('data-submenu-dismissed', 'true');
     else document.documentElement.removeAttribute('data-submenu-dismissed');
 }
@@ -5399,7 +5399,7 @@ setSubmenuDismissed(isSubmenuDismissed());
 
 function toggleNavCollapsed() {
     const collapsed = !isNavCollapsed();
-    try { localStorage.setItem('vt-nav-collapsed', String(collapsed)); } catch (e) {}
+    try { localStorage.setItem('mt-nav-collapsed', String(collapsed)); } catch (e) {}
     applyNavCollapsed(collapsed);
     renderNav();
 }
@@ -5458,7 +5458,7 @@ function renderNav() {
     if (typeof onNavReady === 'function') onNavReady();
 }
 
-// ── In-view back button (VT_NATIVE_BACK only) ──
+// ── In-view back button (MT_NATIVE_BACK only) ──
 // A floating arrow just right of the menu column, at the top-left of the
 // page content itself — NOT inside the nav. The element is persistent
 // (created once per page, reused by the second renderNav pass once the
@@ -5468,16 +5468,16 @@ function renderNav() {
 function renderBackButton() {
     const path = window.location.pathname;
     if (!authConfig.native_back) {
-        const stale = document.getElementById('vt-back-btn');
+        const stale = document.getElementById('mt-back-btn');
         if (stale) stale.remove();
         return;
     }
     const onHome = path === '/' || path === '/dashboard' || path === '/dashboard.html';
-    let btn = document.getElementById('vt-back-btn');
+    let btn = document.getElementById('mt-back-btn');
     if (!btn) {
         btn = document.createElement('button');
-        btn.id = 'vt-back-btn';
-        btn.className = 'vt-back-btn';
+        btn.id = 'mt-back-btn';
+        btn.className = 'mt-back-btn';
         btn.type = 'button';
         btn.setAttribute('title', 'Back');
         btn.setAttribute('aria-label', 'Back');
@@ -5565,12 +5565,12 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8089
     print(f"Serving MonkeyTester viewer on http://localhost:{port}")
     print(f"Reading from: {TEST_DIR}")
-    # VT_VIEWER_BIND picks the listen address (default every interface).
-    # One-time: move a monkeytester-ai VT_PLUGINS entry into config.json.
+    # MT_VIEWER_BIND picks the listen address (default every interface).
+    # One-time: move a monkeytester-ai MT_PLUGINS entry into config.json.
     import_ai_plugin_address()
     import_device_plugins()
     import_controller_url()
-    # One-time: gitea_config.json / VT_BUILD_PLUGINS -> build_config.json.
+    # One-time: gitea_config.json / MT_BUILD_PLUGINS -> build_config.json.
     builds.VIEWER_PORT = port
     builds.migrate(log_ignored=True)
     # Accounts: seed admin/admin when there are none, migrate the old
@@ -5580,7 +5580,7 @@ if __name__ == "__main__":
     # then the environment mirrors Settings (the runner inherits it).
     import_service_tokens()
     auth.apply_to_environ()
-    # LAN service by design (VT_VIEWER_BIND narrows it); see SECURITY.md.
-    bind = os.environ.get("VT_VIEWER_BIND") or "0.0.0.0"  # nosec B104
+    # LAN service by design (MT_VIEWER_BIND narrows it); see SECURITY.md.
+    bind = os.environ.get("MT_VIEWER_BIND") or "0.0.0.0"  # nosec B104
     server = ThreadingHTTPServer((bind, port), TestViewerHandler)
     server.serve_forever()

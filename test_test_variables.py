@@ -1,5 +1,5 @@
 """Test variables: the runner seeds `${KEY}` values from config.json and
-VT_TEST_VARS (Settings -> Test Variables), with the env map overriding and
+MT_TEST_VARS (Settings -> Test Variables), with the env map overriding and
 bad entries skipped instead of breaking a run."""
 import json
 import os
@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent / "visual-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
 with patch.dict(os.environ, {"VISION_TESTS_DIR": tempfile.mkdtemp()}):
     import test_runner_core as core
 

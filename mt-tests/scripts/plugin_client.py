@@ -10,14 +10,14 @@ boards, ...). Everything a test asks of it is an action run as a job:
     POST /jobs/<id>/cancel                           -> {job}
 
 Environment:
-  VT_PLUGINS                — plugins tests may call: name=url[,name=url...]
+  MT_PLUGINS                — plugins tests may call: name=url[,name=url...]
                               (e.g. esp32=http://127.0.0.1:8091). Once Run/config.json
                               has a `plugins` map {name: url} — Settings → Device
                               Plugins owns the list then and the viewer imports the
                               env entries into it once — this variable is IGNORED:
                               see load_plugins() for the precedence.
   PLUGIN_TOKEN              — sent as X-Plugin-Token to every plugin, if set
-  VT_PLUGIN_TOKEN_<NAME>    — token for one plugin (NAME upper-cased, non-alphanumerics
+  MT_PLUGIN_TOKEN_<NAME>    — token for one plugin (NAME upper-cased, non-alphanumerics
                               as _), overrides PLUGIN_TOKEN
 """
 import json
@@ -309,7 +309,7 @@ def _skip_first(count, on_log):
 
 
 def _token_env_name(name):
-    return "VT_PLUGIN_TOKEN_" + re.sub(r"[^0-9A-Za-z]", "_", name).upper()
+    return "MT_PLUGIN_TOKEN_" + re.sub(r"[^0-9A-Za-z]", "_", name).upper()
 
 
 def parse_plugins(spec):
@@ -323,26 +323,26 @@ def parse_plugins(spec):
         name, sep, url = part.partition("=")
         name, url = name.strip(), url.strip()
         if not sep or not name or not url:
-            raise PluginError(f"VT_PLUGINS entry {part!r} is not name=url", "config")
+            raise PluginError(f"MT_PLUGINS entry {part!r} is not name=url", "config")
         if not re.match(r"^https?://", url):
-            raise PluginError(f"VT_PLUGINS entry {part!r}: url must start with http:// or https://",
+            raise PluginError(f"MT_PLUGINS entry {part!r}: url must start with http:// or https://",
                               "config")
         if name in names:
-            raise PluginError(f"VT_PLUGINS names plugin {name!r} twice", "config")
+            raise PluginError(f"MT_PLUGINS names plugin {name!r} twice", "config")
         names.add(name)
         entries.append((name, url))
     return entries
 
 
 def load_plugins_from_env(env=None):
-    """{name: PluginClient} for the plugins in VT_PLUGINS. Deprecated for the
+    """{name: PluginClient} for the plugins in MT_PLUGINS. Deprecated for the
     viewer's views: once config.json has a `plugins` map the list comes from
     there — use load_plugins(config, env). The runner keeps this one because
-    run_on_device.py re-exports the config.json map into VT_PLUGINS."""
+    run_on_device.py re-exports the config.json map into MT_PLUGINS."""
     env = os.environ if env is None else env
     shared = (env.get("PLUGIN_TOKEN") or "").strip()
     plugins = {}
-    for name, url in parse_plugins(env.get("VT_PLUGINS", "")):
+    for name, url in parse_plugins(env.get("MT_PLUGINS", "")):
         token = (env.get(_token_env_name(name)) or "").strip() or shared
         plugins[name] = PluginClient(name, url, token=token or None)
     return plugins
@@ -353,7 +353,7 @@ PLUGIN_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 def parse_config_plugins(config):
     """The config.json `plugins` map {name: url} -> {name: normalised url}, or
-    None when the key is absent (VT_PLUGINS is still the source of the list).
+    None when the key is absent (MT_PLUGINS is still the source of the list).
     Raises PluginError(code="config") on a malformed entry. monkeytester-ai
     must NOT be listed here — its address is visual_plugin_url and its
     Configure panel owns it."""
@@ -385,14 +385,14 @@ def parse_config_plugins(config):
 
 def load_plugins(config=None, env=None):
     """{name: PluginClient} for the device plugins in effect: the config.json
-    `plugins` map once it exists (Settings owns the list then and VT_PLUGINS
-    is ignored), otherwise the VT_PLUGINS entries. monkeytester-ai never
+    `plugins` map once it exists (Settings owns the list then and MT_PLUGINS
+    is ignored), otherwise the MT_PLUGINS entries. monkeytester-ai never
     joins — the viewer adds it from visual_plugin_url via viewer_plugins().
-    Tokens stay env-based (PLUGIN_TOKEN, VT_PLUGIN_TOKEN_<NAME>)."""
+    Tokens stay env-based (PLUGIN_TOKEN, MT_PLUGIN_TOKEN_<NAME>)."""
     env = os.environ if env is None else env
     entries = parse_config_plugins(config)
     if entries is None:
-        entries = {name: url for name, url in parse_plugins(env.get("VT_PLUGINS", ""))
+        entries = {name: url for name, url in parse_plugins(env.get("MT_PLUGINS", ""))
                    if name != AI_PLUGIN_NAME}
     shared = (env.get("PLUGIN_TOKEN") or "").strip()
     return {name: PluginClient(name, url,
@@ -417,7 +417,7 @@ def _health_entry(client, timeout):
 
 
 def _each_plugin(plugins, check):
-    """check(client) for every plugin at once, results in VT_PLUGINS order, so one
+    """check(client) for every plugin at once, results in MT_PLUGINS order, so one
     slow or dead plugin costs its own timeout rather than adding to the others'."""
     if not plugins:
         return []
@@ -426,15 +426,15 @@ def _each_plugin(plugins, check):
 
 
 # The vision-model plugin. Its address is set in Settings → Device Plugins
-# (config.json visual_plugin_url), not in VT_PLUGINS: the viewer's plugin list
-# is VT_PLUGINS minus this name, plus this plugin at the configured address.
+# (config.json visual_plugin_url), not in MT_PLUGINS: the viewer's plugin list
+# is MT_PLUGINS minus this name, plus this plugin at the configured address.
 AI_PLUGIN_NAME = "monkeytester-ai"
 
 
 def viewer_plugins(env=None, ai_url="", ai_token=None, config=None):
     """{name: PluginClient} for the viewer's views (/api/status, /api/plugins,
     the Device Plugins panel): the device plugins in effect (config.json
-    `plugins` once Settings owns the list, else VT_PLUGINS) without any
+    `plugins` once Settings owns the list, else MT_PLUGINS) without any
     monkeytester-ai entry, plus monkeytester-ai at ai_url when one is
     configured. Raises PluginError(code="config") for a malformed list."""
     env = os.environ if env is None else env
@@ -509,7 +509,7 @@ def plugins_status(env=None, timeout=3, ai_url="", ai_token=None, config=None):
     entries = _each_plugin(plugins, lambda client: _health_entry(client, timeout)[0])
     out = dict(zip(plugins, entries))
     if error:
-        out["VT_PLUGINS"] = {"ok": False, "url": None, "contract_version": None,
+        out["MT_PLUGINS"] = {"ok": False, "url": None, "contract_version": None,
                              "plugin": None, "error": error}
     return out
 
@@ -698,7 +698,7 @@ def plugins_overview(env=None, timeout=3, tokens=None, ai_url="", ai_token=None,
     """{plugins: [{name, url, source, ok, contract_version, plugin, capabilities,
     devices, config, error?}], error?} for the Settings page. The list is the
     device plugins in effect (config.json `plugins` once Settings owns it —
-    source "config" —, else VT_PLUGINS minus monkeytester-ai), plus monkeytester-ai
+    source "config" —, else MT_PLUGINS minus monkeytester-ai), plus monkeytester-ai
     at ai_url (its address from Settings, source "settings"); error is set when
     the active list is malformed. A plugin that does not answer still lists,
     with its error. config is the _visual_config probe: non-null only for
@@ -712,7 +712,7 @@ def plugins_overview(env=None, timeout=3, tokens=None, ai_url="", ai_token=None,
     def check(client):
         entry, body = _health_entry(client, timeout)
         source = ("settings" if client.name == AI_PLUGIN_NAME else
-                  ("config" if isinstance((config or {}).get("plugins"), dict) else "VT_PLUGINS"))
+                  ("config" if isinstance((config or {}).get("plugins"), dict) else "MT_PLUGINS"))
         entry = dict(name=client.name, **entry, source=source, capabilities=[], devices=[],
                      config=None)
         if body is not None:
@@ -728,5 +728,5 @@ def plugins_overview(env=None, timeout=3, tokens=None, ai_url="", ai_token=None,
     if error:
         out["error"] = (f"config.json plugins is invalid: {error}"
                         if isinstance((config or {}).get("plugins"), dict)
-                        else f"VT_PLUGINS is malformed: {error}")
+                        else f"MT_PLUGINS is malformed: {error}")
     return out

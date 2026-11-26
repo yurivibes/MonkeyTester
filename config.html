@@ -137,7 +137,7 @@
 
     <div class="settings-section" id="ciTokenSection" hidden>
         <h3>CI token</h3>
-        <div class="settings-field"><div class="hint">CI jobs that upload apps with <code>ci/visual-test/submit.py</code> send this token (<code>VT_CI_TOKEN</code>, sent as <code>Authorization: Bearer</code>). It only starts runs and reads their results; it opens nothing else. A new token is shown <strong>once</strong>: put it in the app repo's <code>VT_CI_TOKEN</code> secret. Admins only.</div></div>
+        <div class="settings-field"><div class="hint">CI jobs that upload apps with <code>ci/mt-submit/submit.py</code> send this token (<code>MT_CI_TOKEN</code>, sent as <code>Authorization: Bearer</code>). It only starts runs and reads their results; it opens nothing else. A new token is shown <strong>once</strong>: put it in the app repo's <code>MT_CI_TOKEN</code> secret. Admins only.</div></div>
         <div class="settings-field"><div id="ciTokenState" class="hint">…</div></div>
         <div class="settings-field" id="ciTokenNew" hidden>
             <label for="ci_token_value">New CI token (copy it now; it is not shown again)</label>

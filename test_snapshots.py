@@ -19,8 +19,8 @@ from build_fixture import BUILD_ID, add_build
 from test_app_api import ServerCase
 
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "visual-tests" / "scripts"))
-sys.path.insert(0, str(ROOT / "ci" / "visual-test"))
+sys.path.insert(0, str(ROOT / "mt-tests" / "scripts"))
+sys.path.insert(0, str(ROOT / "ci" / "mt-submit"))
 import layout
 import snapshots
 import submit
@@ -257,7 +257,7 @@ class RunnerStepTests(unittest.TestCase):
         snap = detail["snapshot"]
         self.assertEqual((snap["status"], snap["screen_class"]), ("missing", "ios/375x667@2x"))
         self.assertEqual(snap["actual"], "outputs/snapshots/eula.actual.png")
-        with patch.dict(os.environ, {"VT_RECORD_SNAPSHOTS": "1"}):
+        with patch.dict(os.environ, {"MT_RECORD_SNAPSHOTS": "1"}):
             ok, detail = self.step("SNAPSHOT: eula")
         self.assertTrue(ok)
         self.assertEqual(detail["snapshot"]["status"], "recorded")
@@ -284,9 +284,9 @@ class RunnerStepTests(unittest.TestCase):
         self.assertFalse(detail["layout"]["passed"])
 
     def test_run_flags(self):
-        with patch.dict(os.environ, {"VT_RECORD_SNAPSHOTS": "1", "VT_CASE": "eula"}):
+        with patch.dict(os.environ, {"MT_RECORD_SNAPSHOTS": "1", "MT_CASE": "eula"}):
             self.assertEqual(core.run_flags(), {"record_snapshots": True, "case": "eula"})
-        with patch.dict(os.environ, {"VT_RECORD_SNAPSHOTS": "0", "VT_CASE": ""}):
+        with patch.dict(os.environ, {"MT_RECORD_SNAPSHOTS": "0", "MT_CASE": ""}):
             self.assertEqual(core.run_flags(), {})
 
 
@@ -398,8 +398,8 @@ class BundleTests(ServerCase):
         status, body = self.get(f"/api/runs/{run}/snapshots.zip")
         self.assertEqual(status, 200)
         names = sorted(zipfile.ZipFile(io.BytesIO(body)).namelist())
-        self.assertEqual(names, ["visual-tests/eula/snapshots/ios/375x667@2x/eula.png",
-                                 "visual-tests/eula/snapshots/ios/375x667@2x/home.png"])
+        self.assertEqual(names, ["mt-tests/eula/snapshots/ios/375x667@2x/eula.png",
+                                 "mt-tests/eula/snapshots/ios/375x667@2x/home.png"])
         self.assertEqual(json.loads(self.get(f"/api/runs/{run}/snapshots.zip?count=1")[1]),
                          {"count": 2})
         self.assertEqual(self.get("/api/runs/run_1/snapshots.zip")[0], 404)

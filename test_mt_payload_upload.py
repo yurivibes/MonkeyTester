@@ -1,5 +1,5 @@
 """Payload files a case's tests reference with `@file:<rel>` travel with the
-upload: ci/visual-test/submit.py collects and sends them as `payloads` parts,
+upload: ci/mt-submit/submit.py collects and sends them as `payloads` parts,
 app.plan_test_upload validates and places them next to the case's tests, and
 the runner anchors the refs to the staged files."""
 import io
@@ -16,8 +16,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "visual-tests" / "scripts"))
-sys.path.insert(0, str(ROOT / "ci" / "visual-test"))
+sys.path.insert(0, str(ROOT / "mt-tests" / "scripts"))
+sys.path.insert(0, str(ROOT / "ci" / "mt-submit"))
 with patch.dict(os.environ, {"VISION_TESTS_DIR": tempfile.mkdtemp()}):
     import test_runner_core as core
 import app

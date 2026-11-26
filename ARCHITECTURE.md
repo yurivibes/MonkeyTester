@@ -19,7 +19,7 @@
 │   └─ test_runner_core.py             │                    │ HTTP
 │       ├─ controller_client.py ───────┼────────────────────┘
 │       ├─ vision_analyzer.py ─► vision model API
-│       └─ plugin_client.py ───────────┼──┐  HTTP, PLUGIN_API.md (config.json plugins / VT_PLUGINS import)
+│       └─ plugin_client.py ───────────┼──┐  HTTP, PLUGIN_API.md (config.json plugins / MT_PLUGINS import)
 └──────────────────────────────────────┘  │
                                           ▼
                           ┌───────────────────────────────────┐
@@ -49,7 +49,7 @@ Other hardware is reached through **device plugins**: separate services, each ow
 kind of hardware, that implement the contract in `PLUGIN_API.md` (health, devices,
 actions with param schemas, and jobs). MonkeyTester-Plugin-Esp32 (port 8091, Linux or Mac) is the
 first. Tests call them with `PLUGIN:` steps; the plugins to use come from the `plugins`
-map in `Run/config.json` (Settings → Device Plugins; a `VT_PLUGINS` environment variable
+map in `Run/config.json` (Settings → Device Plugins; a `MT_PLUGINS` environment variable
 is imported into that map once at viewer start and ignored after that).
 
 Builds are reached through **build plugins**: separate services that implement
@@ -103,7 +103,7 @@ All HTML pages use `{{CSS}}` and `{{JS}}` placeholders replaced at serve time by
 5. Poll `Run/` for the new run directory (up to 15s) and return `run_id`
 6. Background thread waits for the subprocess and cleans up staging
 
-CI uploads through the same route (see `ci/visual-test/` and "API — CI" in `AGENTS.md`). Runs submitted to the viewer execute one after another in submission order, Android and iOS alike (they share the one ESP32 board): each runner is started with the previous run's process id (`--after-pid`) and waits, in phase `queued`, until that run has finished. Runs also queue per device with a `flock` under `Run/.locks/`.
+CI uploads through the same route (see `ci/mt-submit/` and "API — CI" in `AGENTS.md`). Runs submitted to the viewer execute one after another in submission order, Android and iOS alike (they share the one ESP32 board): each runner is started with the previous run's process id (`--after-pid`) and waits, in phase `queued`, until that run has finished. Runs also queue per device with a `flock` under `Run/.locks/`.
 
 ## Component: Runner
 
@@ -181,12 +181,12 @@ resize switch and optional API key, all stored by the plugin), or forwards to Gi
 (Settings → Device Plugins → monkeytester-ai → Configure). The plugin's own address is set on
 the same page and stored in `Run/config.json` as `visual_plugin_url` — the one source for the
 viewer and the runner — except in managed mode, where a launcher app passes
-`VT_MANAGED_AI_PLUGIN_URL` + `VT_MANAGED_AI_PLUGIN_TOKEN` (both required) and those win in the
+`MT_MANAGED_AI_PLUGIN_URL` + `MT_MANAGED_AI_PLUGIN_TOKEN` (both required) and those win in the
 viewer and the runner (inherited env) without being written to config.json; the panel then shows
 the address read-only and the API refuses address/token edits with 409. A `monkeytester-ai` entry in
-`VT_PLUGINS` is imported once at viewer start (logged, skipped in managed mode) and then ignored; the other device plugins are registered in the **Manage
+`MT_PLUGINS` is imported once at viewer start (logged, skipped in managed mode) and then ignored; the other device plugins are registered in the **Manage
 device plugins** box on that Settings page (the `plugins` map in `Run/config.json`; a
-`VT_PLUGINS` environment variable is imported into that map once at viewer start and
+`MT_PLUGINS` environment variable is imported into that map once at viewer start and
 ignored after that). The plugin keeps the GitHub sign-in; the viewer stores no GitHub token and has no
 Copilot code. A config.json still saying `visual_provider: "copilot"` stops the runner at start.
 
@@ -205,7 +205,7 @@ reason appears as the error next to them.
   name to a file (`/static/`, `/convert-video/`, `/fonts/`, staged uploads) goes through
   `safe_join(root, *parts)` (realpath + commonpath, so symlinks out of the root 404 too).
 - Request limits: POST bodies need a `Content-Length` (chunked → 411); JSON bodies are capped at
-  1 MiB and `/api/run-test` uploads at `VT_MAX_UPLOAD_MB` (default 600 MiB, read into memory) —
+  1 MiB and `/api/run-test` uploads at `MT_MAX_UPLOAD_MB` (default 600 MiB, read into memory) —
   413 when over; malformed or non-object JSON is 400. The handler has a 60 s socket timeout
   (per socket operation, so the SSE streams keep working).
 - Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
@@ -222,7 +222,7 @@ reason appears as the error next to them.
   for the admin until changed); admins create the other accounts on Settings → Users.
 - Accounts: `auth_config.json` (0600) — `users {name: {password_hash, role, created_at}}`
   (scrypt, per-user salt; an old bare SHA-256 hash is accepted once and rehashed; plaintext is
-  never accepted) and `sessions {sha256(token): {user, created}}`. Cookie `vt_auth`,
+  never accepted) and `sessions {sha256(token): {user, created}}`. Cookie `mt_auth`,
   `HttpOnly; SameSite=Strict` (no `Secure`: the viewer serves plain HTTP). Per-IP login
   throttle: after 5 failures each further failure doubles the wait (429 + `Retry-After`).
 - CSRF: a cookie-authenticated POST must carry an `Origin` (else `Referer`) whose host equals
@@ -230,7 +230,7 @@ reason appears as the error next to them.
 - CI token (`Authorization: Bearer`, `hmac.compare_digest`) opens only `POST /api/run-test` and
   `GET /api/runs/<run>/result`. Without it, `/api/run-test` takes an upload only for a viewer
   build that is still waiting for its upload (no run attached yet) — how build-local uploads.
-- The runner proves itself on `POST /api/press-event` with `VT_RUNNER_TOKEN`, a secret made at
+- The runner proves itself on `POST /api/press-event` with `MT_RUNNER_TOKEN`, a secret made at
   each viewer start and passed in the runner's environment.
 - Service tokens (Mobile-Controller, every plugin) live in `service_tokens.json` (0600,
   plaintext at rest); the viewer's environment mirrors that file (old token env vars dropped),
@@ -239,7 +239,7 @@ reason appears as the error next to them.
 ## Testing
 
 ```bash
-python3 -m unittest test_ci_delivery test_controller_client test_platform_targeting test_vision_analyzer test_app_api test_plugin_client test_snapshots test_builds test_build_plugin_client test_platform_steps test_vt_file_payload test_vt_payload_upload test_test_variables test_stale_runs test_projects test_viewer_auth test_security_hardening
+python3 -m unittest test_ci_delivery test_controller_client test_platform_targeting test_vision_analyzer test_app_api test_plugin_client test_snapshots test_builds test_build_plugin_client test_platform_steps test_mt_file_payload test_mt_payload_upload test_test_variables test_stale_runs test_projects test_viewer_auth test_security_hardening
 ```
 
 These use stubs for the controller, the vision model and a build plugin (`fake_build_plugin.py`), and run the real `app.py` server. The

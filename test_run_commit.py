@@ -73,14 +73,14 @@ class UploadCommitTests(ProjectCase):
     def test_commit_fields_become_runner_env(self):
         status, env = self.upload({"commit": SHA, "commit_message": MESSAGE + "\r\n"})
         self.assertEqual(status, 200)
-        self.assertEqual(env.get("VT_COMMIT"), SHA)
-        self.assertEqual(env.get("VT_COMMIT_MESSAGE"), MESSAGE)
+        self.assertEqual(env.get("MT_COMMIT"), SHA)
+        self.assertEqual(env.get("MT_COMMIT_MESSAGE"), MESSAGE)
 
     def test_no_commit_is_not_inherited_from_the_viewer_env(self):
-        status, env = self.upload({}, {"VT_COMMIT": SHA, "VT_COMMIT_MESSAGE": "stale"})
+        status, env = self.upload({}, {"MT_COMMIT": SHA, "MT_COMMIT_MESSAGE": "stale"})
         self.assertEqual(status, 200)
-        self.assertNotIn("VT_COMMIT", env)
-        self.assertNotIn("VT_COMMIT_MESSAGE", env)
+        self.assertNotIn("MT_COMMIT", env)
+        self.assertNotIn("MT_COMMIT_MESSAGE", env)
 
     def test_bad_commit_id_is_refused(self):
         status, _ = self.upload({"commit": "--exec=evil"})
@@ -89,10 +89,10 @@ class UploadCommitTests(ProjectCase):
 
 class RunnerCommitTests(unittest.TestCase):
     def test_run_metadata_records_the_commit(self):
-        with patch.dict(os.environ, {"VT_COMMIT": SHA, "VT_COMMIT_MESSAGE": MESSAGE}):
+        with patch.dict(os.environ, {"MT_COMMIT": SHA, "MT_COMMIT_MESSAGE": MESSAGE}):
             flags = core.run_flags()
         self.assertEqual((flags.get("commit"), flags.get("commit_message")), (SHA, MESSAGE))
-        with patch.dict(os.environ, {"VT_COMMIT": "zzz", "VT_COMMIT_MESSAGE": " "}):
+        with patch.dict(os.environ, {"MT_COMMIT": "zzz", "MT_COMMIT_MESSAGE": " "}):
             flags = core.run_flags()
         self.assertNotIn("commit", flags)
         self.assertNotIn("commit_message", flags)

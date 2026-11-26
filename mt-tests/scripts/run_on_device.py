@@ -52,7 +52,7 @@ if _VISUAL_CONFIG and (_VISUAL_CONFIG.get("visual_provider") or "").strip() == "
 elif _VISUAL_CONFIG:
     # Provider: the monkeytester-ai plugin at the address set in Settings →
     # Device Plugins (config.json visual_plugin_url; the viewer imports a
-    # VT_PLUGINS entry into it once). Its URL is the endpoint (the service
+    # MT_PLUGINS entry into it once). Its URL is the endpoint (the service
     # ignores the model field; the model lives in the plugin, not in
     # config.json), and visual_api_key is the pairing credential the plugin
     # generated. Vision env is still set here, at import time — live reload
@@ -82,8 +82,8 @@ elif _VISUAL_CONFIG:
 # address and pairing token (both required) to the viewer, and the runner
 # inherits them. They win over config.json (visual_plugin_url,
 # visual_api_key) — the same rule as the viewer's managed_ai_plugin().
-_MANAGED_AI_URL = (os.environ.get("VT_MANAGED_AI_PLUGIN_URL") or "").strip().rstrip("/")
-_MANAGED_AI_TOKEN = (os.environ.get("VT_MANAGED_AI_PLUGIN_TOKEN") or "").strip()
+_MANAGED_AI_URL = (os.environ.get("MT_MANAGED_AI_PLUGIN_URL") or "").strip().rstrip("/")
+_MANAGED_AI_TOKEN = (os.environ.get("MT_MANAGED_AI_PLUGIN_TOKEN") or "").strip()
 if _MANAGED_AI_URL and _MANAGED_AI_TOKEN:
     os.environ["VISION_MODEL_API_URL"] = _MANAGED_AI_URL + "/v1/chat/completions"
     os.environ["VISUAL_MODEL_ENDPOINT"] = os.environ["VISION_MODEL_API_URL"]
@@ -91,15 +91,15 @@ if _MANAGED_AI_URL and _MANAGED_AI_TOKEN:
 del _MANAGED_AI_URL, _MANAGED_AI_TOKEN
 
 # Device plugins: once config.json has a `plugins` map (Settings → Device
-# Plugins owns the list; the viewer imports a VT_PLUGINS entry set into it
-# once), the runner must see exactly that list — the environment's VT_PLUGINS
+# Plugins owns the list; the viewer imports a MT_PLUGINS entry set into it
+# once), the runner must see exactly that list — the environment's MT_PLUGINS
 # is stale by then, so re-export it here before test_runner_core imports run.
 if _VISUAL_CONFIG and isinstance(_VISUAL_CONFIG.get("plugins"), dict):
     _PLUGINS_SPEC = ",".join(f"{_name}={_url}"
                              for _name, _url in _VISUAL_CONFIG["plugins"].items()
                              if str(_name).strip() and str(_url).startswith("http"))
     if _PLUGINS_SPEC or _VISUAL_CONFIG["plugins"]:
-        os.environ["VT_PLUGINS"] = _PLUGINS_SPEC
+        os.environ["MT_PLUGINS"] = _PLUGINS_SPEC
 
 del _VISUAL_CONFIG
 try:
@@ -169,10 +169,10 @@ DEFAULT_CONNECT_WAIT_SECS = 300
 def wait_for_platform_devices(platforms, timeout=None, poll_secs=5.0):
     """Wait until the Mobile Controller serves at least one device of every
     platform in `platforms`, then return ({platform: [ids]}, None). Gives up
-    after `timeout` seconds (VT_DEVICE_CONNECT_WAIT_SECS, default 300) and
+    after `timeout` seconds (MT_DEVICE_CONNECT_WAIT_SECS, default 300) and
     returns (None, error). An unreachable controller counts as no devices."""
     if timeout is None:
-        timeout = int(os.environ.get("VT_DEVICE_CONNECT_WAIT_SECS") or DEFAULT_CONNECT_WAIT_SECS)
+        timeout = int(os.environ.get("MT_DEVICE_CONNECT_WAIT_SECS") or DEFAULT_CONNECT_WAIT_SECS)
     names = {"android": "an Android phone", "ios": "an iPhone"}
     deadline = time.monotonic() + timeout
     announced = None
@@ -373,7 +373,7 @@ def main():
     parser.add_argument('--wait-for-platform', action='append', default=[],
                        choices=['android', 'ios'],
                        help='Test every device of this platform the controller serves when '
-                            'the run starts; wait up to VT_DEVICE_CONNECT_WAIT_SECS (300) '
+                            'the run starts; wait up to MT_DEVICE_CONNECT_WAIT_SECS (300) '
                             'for one to connect. Repeat for both platforms.')
     parser.add_argument('--record-snapshots', action='store_true',
                        help='Save every SNAPSHOT as a new baseline candidate without '
@@ -386,7 +386,7 @@ def main():
                         help="Build log of a --build-failed platform, kept with its devices "
                              "and linked from their UNAVAILABLE tests.")
     parser.add_argument('--case', default=None,
-                       help='Name of the test case folder (visual-tests/<case>/), used to '
+                       help='Name of the test case folder (mt-tests/<case>/), used to '
                             'lay out downloaded baselines')
     parser.add_argument('--list-devices', '-l', action='store_true',
                        help='List the devices the Mobile Controller serves and exit')
@@ -429,11 +429,11 @@ def main():
 
     # Snapshot settings, read by test_runner_core (run metadata, SNAPSHOT steps)
     if args.record_snapshots:
-        os.environ["VT_RECORD_SNAPSHOTS"] = "1"
+        os.environ["MT_RECORD_SNAPSHOTS"] = "1"
     else:
-        os.environ.pop("VT_RECORD_SNAPSHOTS", None)
+        os.environ.pop("MT_RECORD_SNAPSHOTS", None)
     if args.case:
-        os.environ["VT_CASE"] = args.case.strip()
+        os.environ["MT_CASE"] = args.case.strip()
 
     # Pass debug flag through to submodules
     if args.debug:
@@ -514,7 +514,7 @@ def main():
             core.RUN_ROOT.parent / ".locks",
             list(args.device) + list(args.ios_device),
             on_wait=_announce_wait,
-            timeout=int(os.environ.get("VT_DEVICE_WAIT_SECS")
+            timeout=int(os.environ.get("MT_DEVICE_WAIT_SECS")
                         or device_lock.DEFAULT_TIMEOUT_SECS),
         )
     except TimeoutError as e:

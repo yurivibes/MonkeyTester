@@ -50,7 +50,7 @@ MIGRATED_PLUGIN = "build-local"
 DEFAULT_BUILD_LOCAL_URL = "http://127.0.0.1:8094"
 LEGACY_PUSH_RETRY = 300  # seconds between attempts to hand the token over
 VIEWER_PORT = 8089       # app.py sets the port it listens on
-CASES_DIR = "visual-tests"
+CASES_DIR = "mt-tests"
 PLATFORMS = ("android", "ios")
 
 # owner/repo; neither part may be only dots (".." is a path, not a repo).
@@ -168,9 +168,9 @@ def _read_legacy_gitea():
 def build_local_url(env=None):
     env = os.environ if env is None else env
     try:
-        return bpc.normalize_url(env.get("VT_BUILD_LOCAL_URL") or DEFAULT_BUILD_LOCAL_URL)
+        return bpc.normalize_url(env.get("MT_BUILD_LOCAL_URL") or DEFAULT_BUILD_LOCAL_URL)
     except bpc.BuildPluginError:
-        print(f"VT_BUILD_LOCAL_URL is not an address, using {DEFAULT_BUILD_LOCAL_URL}",
+        print(f"MT_BUILD_LOCAL_URL is not an address, using {DEFAULT_BUILD_LOCAL_URL}",
               file=sys.stderr, flush=True)
         return DEFAULT_BUILD_LOCAL_URL
 
@@ -180,28 +180,28 @@ def migrate(env=None, log_ignored=False):
     first load: only while build_config.json doesn't exist yet.
 
     - gitea_config.json (the old built-in Gitea client) becomes the plugin
-      build-local at VT_BUILD_LOCAL_URL (default http://127.0.0.1:8094, no
+      build-local at MT_BUILD_LOCAL_URL (default http://127.0.0.1:8094, no
       pairing token) registered in the shared Settings → Plugins registry
       (config.json), and one project per saved repo with its branch pick.
       Its URL + token stay in the file until push_legacy_forge() has handed
       them to that plugin's /config.
-    - VT_BUILD_PLUGINS=name=url[,name=url] is imported the same way
-      VT_PLUGINS is for device plugins: once, into the same registry, then
+    - MT_BUILD_PLUGINS=name=url[,name=url] is imported the same way
+      MT_PLUGINS is for device plugins: once, into the same registry, then
       Settings owns the list.
 
     Nothing is written when there is nothing to import. Returns the new
     config, or None."""
     env = os.environ if env is None else env
     try:
-        entries = bpc.parse_build_plugins(env.get("VT_BUILD_PLUGINS", ""))
+        entries = bpc.parse_build_plugins(env.get("MT_BUILD_PLUGINS", ""))
     except bpc.BuildPluginError as e:
-        print(f"VT_BUILD_PLUGINS is malformed, build plugins not imported: {e.message}",
+        print(f"MT_BUILD_PLUGINS is malformed, build plugins not imported: {e.message}",
               file=sys.stderr, flush=True)
         entries = []
     with _LOCK:
         if Path(CONFIG_FILE).exists():
             if entries and log_ignored:
-                print("VT_BUILD_PLUGINS is ignored — Settings → Plugins owns the build plugin list now",
+                print("MT_BUILD_PLUGINS is ignored — Settings → Plugins owns the build plugin list now",
                       file=sys.stderr, flush=True)
             return None
         legacy = _read_legacy_gitea()
@@ -226,7 +226,7 @@ def migrate(env=None, log_ignored=False):
               f"at {url}, {len(cfg['projects'])} project(s); its Gitea URL and token go to the "
               "plugin's /config the first time it answers unconfigured", file=sys.stderr, flush=True)
     if entries:
-        print(f"imported {len(entries)} build plugin(s) from VT_BUILD_PLUGINS into Settings → Plugins; "
+        print(f"imported {len(entries)} build plugin(s) from MT_BUILD_PLUGINS into Settings → Plugins; "
               "Settings owns the list from now on", file=sys.stderr, flush=True)
     return cfg
 
@@ -235,10 +235,10 @@ _legacy_push = {"at": 0.0}
 
 
 def viewer_url_for(plugin_url, env=None):
-    """The address a plugin should upload to: VT_PUBLIC_URL, else
+    """The address a plugin should upload to: MT_PUBLIC_URL, else
     http://<this host's IP towards the plugin>:<viewer port>."""
     env = os.environ if env is None else env
-    public = (env.get("VT_PUBLIC_URL") or "").strip().rstrip("/")
+    public = (env.get("MT_PUBLIC_URL") or "").strip().rstrip("/")
     if public:
         return public
     host = "127.0.0.1"
@@ -384,7 +384,7 @@ def token_info(token):
 
 def _env_token(name, env=None):
     env = os.environ if env is None else env
-    key = "VT_PLUGIN_TOKEN_" + re.sub(r"[^0-9A-Za-z]", "_", name).upper()
+    key = "MT_PLUGIN_TOKEN_" + re.sub(r"[^0-9A-Za-z]", "_", name).upper()
     return (env.get(key) or "").strip() or (env.get("PLUGIN_TOKEN") or "").strip()
 
 

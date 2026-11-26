@@ -10,7 +10,7 @@ Implementations:
 | Plugin | Repo | Default port |
 |---|---|---|
 | `esp32` | MonkeyTester-Plugin-Esp32 | 8091 |
-| `monkeytester-ai` | MonkeyTester-Plugin-AI | 8091 (on the Mac, e.g. `http://192.168.125.71:8091`); address set in Settings → Device Plugins, not `VT_PLUGINS` |
+| `monkeytester-ai` | MonkeyTester-Plugin-AI | 8091 (on the Mac, e.g. `http://192.168.125.71:8091`); address set in Settings → Device Plugins, not `MT_PLUGINS` |
 
 The Mobile Controller still uses its own API (`API.md` in that repo); moving it onto
 this contract is a later step.
@@ -48,7 +48,7 @@ same page (in the row's **Configure** panel: its **Plugin address** field, check
 and stored as `visual_plugin_url` in
 `Run/config.json`; device plugins are registered in the Settings → Device Plugins
 **Manage device plugins** box (saved as the `plugins` map {name: url} in
-`Run/config.json`; `VT_PLUGINS` entries are imported into that map once at viewer
+`Run/config.json`; `MT_PLUGINS` entries are imported into that map once at viewer
 start and the variable is ignored after that; a `monkeytester-ai` entry there is
 imported once into `visual_plugin_url`, then ignored). The viewer stores only a copy of the
 pairing token (`visual_api_key`) so it can call the service over the LAN, never displays
@@ -192,8 +192,8 @@ state or `wait` passes. Callers loop on this until the job is terminal.
   "finished_ms": 1762180000420,
   "result": {"rules": 1},
   "error": null,
-  "log": ["-> @vt p7 clear", "<- @vt p7 ok {\"rules\":0}",
-          "-> @vt p8 rule GET /temperature.json -> 500", "<- @vt p8 ok {\"rules\":1}"]
+  "log": ["-> @mt p7 clear", "<- @mt p7 ok {\"rules\":0}",
+          "-> @mt p8 rule GET /temperature.json -> 500", "<- @mt p8 ok {\"rules\":1}"]
 }
 ```
 
@@ -249,7 +249,7 @@ an hour.
 MonkeyTester reads the plugins it may call from the `plugins` map {name: url} in
 `Run/config.json` — registered on the Settings → Device Plugins **Manage device plugins**
 box (add / edit address / remove; an address is stored only when its `GET /health`
-speaks this contract). A `VT_PLUGINS=name=url[,name=url…]` environment variable is
+speaks this contract). A `MT_PLUGINS=name=url[,name=url…]` environment variable is
 imported into that map ONCE at viewer start and ignored after that; the monkeytester-ai
 plugin's address is set in Settings → Device Plugins instead. A test step calls an
 action with:
@@ -288,7 +288,7 @@ absolute path, a ref with no path, or one resolving outside the directory (also
 through a symlink) fails the step naming the line. The plugin then reads the file
 itself, on the plugin host; the firmware never sees `@file:`.
 
-The case ships its payload files with the upload. `ci/visual-test/submit.py`
+The case ships its payload files with the upload. `ci/mt-submit/submit.py`
 scans each case's `.txt` files for `@file:` refs and uploads every referenced
 file once as a `payloads` part named `<case>/<path>`; it fails before uploading
 when a ref is absolute, leaves the case directory, is missing, is not a regular
@@ -307,7 +307,7 @@ a block on a step that also has `script=` all fail the step, naming the line.
 
 This is how a test tells a device how to behave without the plugin or MonkeyTester
 knowing the device's language. Example, for an app test against a sensor board
-(the rule language is the firmware's, see `docs/vt-control.md` in
+(the rule language is the firmware's, see `docs/mt-control.md` in
 the sensor firmware):
 
 ```

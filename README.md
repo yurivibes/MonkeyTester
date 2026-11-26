@@ -1,6 +1,6 @@
 # MonkeyTester
 
-AI-driven visual testing: a vision model drives a device through a test
+AI-driven MonkeyTester testing: a vision model drives a device through a test
 suite, with a live viewer that shows what the test is doing — including the
 exact screen position where it is pressing.
 
@@ -34,7 +34,7 @@ never talks to a code host and never holds its token.
 
 ## Install
 
-The viewer (`app.py`) and the test runner (`visual-tests/scripts/`) use only the Python
+The viewer (`app.py`) and the test runner (`mt-tests/scripts/`) use only the Python
 standard library, so there is no `pip install` step. They need:
 
 | Dependency | Why | Required |
@@ -42,7 +42,7 @@ standard library, so there is no `pip install` step. They need:
 | Python 3.10 or newer | viewer, runner, tests | yes |
 | `ffmpeg` with libvpx (VP9) and libopus | converts recordings to WebM for the run page | for videos |
 | `git` | clone the repo | yes |
-| Pillow | only `visual-tests/scripts/generate_placeholders.py` | no |
+| Pillow | only `mt-tests/scripts/generate_placeholders.py` | no |
 
 Phones are driven by MonkeyTester-Plugin-Mobile-Controller
 on a Mac and the vision model by MonkeyTester-Plugin-AI;
@@ -99,7 +99,7 @@ python3 --version          # 3.10 or newer
 ffmpeg -hide_banner -encoders | grep -E 'libvpx-vp9|libopus'   # both listed
 python3 -m unittest test_ci_delivery test_controller_client test_platform_targeting \
   test_vision_analyzer test_app_api test_plugin_client test_snapshots test_builds \
-  test_build_plugin_client test_platform_steps test_vt_file_payload test_vt_payload_upload test_test_variables \
+  test_build_plugin_client test_platform_steps test_mt_file_payload test_mt_payload_upload test_test_variables \
   test_stale_runs test_projects test_security_hardening   # or: nix run .#tests
 ```
 
@@ -117,7 +117,7 @@ CONTROLLER_URL=http://192.168.125.5:8090 python3 app.py 8089
 # optional, only if the controller is started with CONTROLLER_TOKEN:
 # CONTROLLER_TOKEN=<token>
 # optional: cap on one /api/run-test upload in MiB (default 600, read into memory):
-# VT_MAX_UPLOAD_MB=600
+# MT_MAX_UPLOAD_MB=600
 ```
 
 ### Signing in
@@ -136,7 +136,7 @@ tokens** (admins): the Mobile-Controller token (`X-Controller-Token`) and each p
 (`X-Plugin-Token`). Each is checked against the service before it is saved, kept in
 `service_tokens.json` (mode 0600, plaintext at rest) and never shown again. The old
 environment variables `CONTROLLER_TOKEN` / `IOS_CONTROLLER_TOKEN`, `PLUGIN_TOKEN` /
-`VT_PLUGIN_TOKEN_<NAME>` and `VT_CI_TOKEN` are imported once on the first start, then ignored.
+`MT_PLUGIN_TOKEN_<NAME>` and `MT_CI_TOKEN` are imported once on the first start, then ignored.
 See `SECURITY.md` for the threat model and what is not covered (no TLS: use a VPN).
 
 Request limits and hardening (path checks, 1 MiB JSON cap, upload cap → 413, security headers)
@@ -151,17 +151,17 @@ first (`/health` must be the monkeytester-ai plugin and `/config` must accept th
 saves nothing if that fails; the address goes into `Run/config.json` as `visual_plugin_url`
 and can be changed later in the same panel. The plugin's row stays read-only (it shows the
 current address, or "not configured"). A
-`monkeytester-ai=…` entry in `VT_PLUGINS` (the old way) is imported into config.json once
-when the viewer starts and ignored after that, so remove it from `VT_PLUGINS`; the other
+`monkeytester-ai=…` entry in `MT_PLUGINS` (the old way) is imported into config.json once
+when the viewer starts and ignored after that, so remove it from `MT_PLUGINS`; the other
 device plugins now live in Settings too — register them in the **Manage device plugins**
 box (saved as the `plugins` map in `Run/config.json`, the variable imported into it once).
 
-**App-managed plugin (legacy):** when both `VT_MANAGED_AI_PLUGIN_URL` (e.g.
-`http://127.0.0.1:8091`) and `VT_MANAGED_AI_PLUGIN_TOKEN` (the pairing token) are set, the
+**App-managed plugin (legacy):** when both `MT_MANAGED_AI_PLUGIN_URL` (e.g.
+`http://127.0.0.1:8091`) and `MT_MANAGED_AI_PLUGIN_TOKEN` (the pairing token) are set, the
 viewer and the runner use them for the monkeytester-ai plugin, winning over config.json's
 `visual_plugin_url`/`visual_api_key`, and monkeytester-ai is the vision plugin even without
 `visual_plugin` in config.json. Neither value is ever written to config.json, and the
-`VT_PLUGINS` import is skipped. The plugin's row and its Configure panel show the address
+`MT_PLUGINS` import is skipped. The plugin's row and its Configure panel show the address
 read-only with "Managed by the MonkeyTester app" (no address field, Plugin or Token select);
 the Configuration section and Save work as usual, and the API refuses address, token and
 removal changes with 409 `{"error": "managed by the MonkeyTester app"}`. With only one of the two
@@ -217,7 +217,7 @@ plugins** box on the Settings → Device Plugins page — a name and an address 
 for MonkeyTester-Plugin-Esp32 and
 MonkeyTester-Plugin-Server);
 an address is saved (in the `plugins` map of `Run/config.json`) only once its `GET /health`
-answers with the plugin contract, and a `VT_PLUGINS=name=url[,name=url]` environment
+answers with the plugin contract, and a `MT_PLUGINS=name=url[,name=url]` environment
 variable is imported into that map once at viewer start and ignored after that. Call
 them from a test with `PLUGIN: <plugin> <action> [key=value …] [device=<id>] [timeout=<s>]`.
 The Settings page lists the active plugins with their live state, capabilities and
@@ -292,8 +292,8 @@ Setup:
    a missing one and links the plugin's **example script**
    (`/api/config/build/template?plugin=<name>&platform=<platform>`, the plugin's `GET /template`);
    adjust the example for your app. The script runs with
-   `VT_PLATFORM`, `VT_OUTPUT` (where it must write the `.apk` or the signed `.ipa`),
-   `VT_BRANCH`, `VT_CASES`, `VT_REQUEST_ID`, and exits 0 with a file at `VT_OUTPUT` when the
+   `MT_PLATFORM`, `MT_OUTPUT` (where it must write the `.apk` or the signed `.ipa`),
+   `MT_BRANCH`, `MT_CASES`, `MT_REQUEST_ID`, and exits 0 with a file at `MT_OUTPUT` when the
    build worked. Download the scripts from Settings and commit them to the app repo.
 6. Nothing else to set: the plugin uploads the built apps through the viewer's
    `GET /ci/submit.py` with the build's request id, so the run attaches to the build
@@ -301,12 +301,12 @@ Setup:
 
 Settings are kept in `build_config.json` next to `app.py` (mode 0600, git-ignored). A viewer
 upgraded from the built-in Gitea client moves its `gitea_config.json` once: it becomes the
-`build-local` plugin at `VT_BUILD_LOCAL_URL` (default `http://127.0.0.1:8094`) plus one project
+`build-local` plugin at `MT_BUILD_LOCAL_URL` (default `http://127.0.0.1:8094`) plus one project
 per saved repo with its branch pick. The first time that plugin answers `/health` with `forge.configured`
 false, the viewer POSTs the saved Gitea URL and token to its `/config` once (with `forge_kind:
 gitea` and the viewer URL); on success `gitea_config.json` is rewritten without the token and
 renamed `gitea_config.json.migrated`, so the viewer no longer holds a code host token. A
-`VT_BUILD_PLUGINS=name=url[,name=url]` environment variable is imported the same way, once.
+`MT_BUILD_PLUGINS=name=url[,name=url]` environment variable is imported the same way, once.
 
 ## Upload
 
@@ -316,16 +316,16 @@ Build & Test"). Build & Test asks the plugin to build with three inputs — `pla
 and `request_id` — and the plugin sends the built apps back with `build_request` = `request_id`,
 so the run attaches to the build.
 
-The upload is `ci/visual-test/submit.py`, which uses only the Python standard library. The
+The upload is `ci/mt-submit/submit.py`, which uses only the Python standard library. The
 viewer serves it at `GET /ci/submit.py`, so a build plugin can fetch it without a checkout of
 this repo and run it with `python3` from the checkout's root:
 
 ```bash
-curl -fsS "$VT_URL/ci/submit.py" -o vt_submit.py &&
-  python3 vt_submit.py --url "$VT_URL" \
+curl -fsS "$MT_URL/ci/submit.py" -o mt_submit.py &&
+  python3 mt_submit.py --url "$MT_URL" \
     --android-app app/build/outputs/apk/debug/app-debug.apk \
-    --ios-app build/visual-test/app.ipa \
-    --tests-dir visual-tests --branch "$BRANCH" --repo "$REPO" \
+    --ios-app build/monkeytester/app.ipa \
+    --tests-dir mt-tests --branch "$BRANCH" --repo "$REPO" \
     --cases "$CASES" --build-request "$REQUEST_ID" --no-wait
 ```
 
@@ -348,7 +348,7 @@ in the plugin's own config. For GitHub Enterprise Server the code host URL is th
 
 The run is always accepted and queued. When its turn comes, the run uses the
 Android phones and iPhones connected at that moment; if one platform has none,
-it waits up to 5 minutes (`VT_DEVICE_CONNECT_WAIT_SECS` on the viewer) for one
+it waits up to 5 minutes (`MT_DEVICE_CONNECT_WAIT_SECS` on the viewer) for one
 to connect, then fails with "Gave up after 300s waiting for an iPhone to
 connect". Build both apps in one build (on the Mac, which has the Android SDK and
 Xcode) and pass both: the whole build is ONE run, every case on the Android
@@ -356,7 +356,7 @@ phone and the iPhone, with one result page and a device switcher per test. For
 a single platform, pass `--app path/to/app.ipa --platform ios` (or an `.apk`
 with `--platform android`).
 
-Each `visual-tests/<case>/` folder needs an `INSTRUCTION.txt` and at least one
+Each `mt-tests/<case>/` folder needs an `INSTRUCTION.txt` and at least one
 test `.txt`. All cases go into the one run, in folder-name order, each keeping
 its own `INSTRUCTION.txt` (`MODE`, `CLEAR_DATA`) and snapshot baselines. Files a
 test references with `@file:<path>` (plugin payloads, see PLUGIN_API.md) are
@@ -384,7 +384,7 @@ Setup:
 - **Viewer:** nothing to set for build plugins: an upload naming a build the viewer started
   (still waiting for its apps) is accepted once without credentials. Any other CI that
   uploads with `submit.py` needs the CI token: Settings → Configuration → **Generate new CI
-  token** (shown once), stored as the CI's `VT_CI_TOKEN` secret; `submit.py` sends it as
+  token** (shown once), stored as the CI's `MT_CI_TOKEN` secret; `submit.py` sends it as
   `Authorization: Bearer`. It only starts runs and reads their results.
 - **Build plugin:** registered and configured in Settings (see [Build & Test](#build--test)),
   including the viewer URL it uploads to.
@@ -410,18 +410,18 @@ Setup:
 | `build_plugin_client.py` | HTTP client for build plugins (`BUILD_PLUGIN_API.md`) |
 | `BUILD_PLUGIN_API.md` | the build plugin contract |
 | `.monkeytester/build-android.sh` + `.monkeytester/build-ios.sh` (in the **app repo**) | the per-platform build scripts the plugin runs |
-| `ci/visual-test/submit.py` | the upload script build plugins run (served at `GET /ci/submit.py`); `--no-wait` exits once the viewer accepted the upload |
+| `ci/mt-submit/submit.py` | the upload script build plugins run (served at `GET /ci/submit.py`); `--no-wait` exits once the viewer accepted the upload |
 | `test.html` | run detail page: live view + press overlay |
-| `visual-tests/scripts/run_on_device.py` | runner CLI |
-| `visual-tests/scripts/test_runner_core.py` | runner core |
-| `visual-tests/scripts/controller_client.py` | HTTP client for the Mobile Controller |
-| `visual-tests/scripts/vision_analyzer.py` | HTTP client for the vision model |
-| `visual-tests/scripts/plugin_client.py` | HTTP client for device plugins (`PLUGIN_API.md`) |
+| `mt-tests/scripts/run_on_device.py` | runner CLI |
+| `mt-tests/scripts/test_runner_core.py` | runner core |
+| `mt-tests/scripts/controller_client.py` | HTTP client for the Mobile Controller |
+| `mt-tests/scripts/vision_analyzer.py` | HTTP client for the vision model |
+| `mt-tests/scripts/plugin_client.py` | HTTP client for device plugins (`PLUGIN_API.md`) |
 | `PLUGIN_API.md` | the device plugin contract |
-| `visual-tests/scripts/snapshots.py` | `SNAPSHOT`: screen classes, 1x PNG compare, masks (stdlib only) |
-| `visual-tests/scripts/layout.py` | `ASSERT_LAYOUT` checks |
+| `mt-tests/scripts/snapshots.py` | `SNAPSHOT`: screen classes, 1x PNG compare, masks (stdlib only) |
+| `mt-tests/scripts/layout.py` | `ASSERT_LAYOUT` checks |
 | `SNAPSHOTS.md` | snapshot and layout steps, baselines, record mode |
-| `visual-tests/scripts/press_events.py` | fire-and-forget press event emitter |
+| `mt-tests/scripts/press_events.py` | fire-and-forget press event emitter |
 
 ## Notes
 

@@ -1041,7 +1041,7 @@ async function loadRun() {
         const snaps = await fetchJSON('/api/runs/' + encodeURIComponent(run) + '/snapshots.zip?count=1');
         if (snaps && snaps.count > 0) {
             logsBtn = '<a class="btn-secondary snapshot-bundle-btn" href="/api/runs/' + encodeURIComponent(run) +
-                '/snapshots.zip" title="New or changed snapshot captures, laid out as visual-tests/&lt;case&gt;/snapshots/. Commit them in a PR to make them the baselines.">' +
+                '/snapshots.zip" title="New or changed snapshot captures, laid out as mt-tests/&lt;case&gt;/snapshots/. Commit them in a PR to make them the baselines.">' +
                 'New baselines (' + snaps.count + ')</a>' + logsBtn.replace('margin-left:auto;', 'margin-left:8px;');
         }
     } catch(e) {}

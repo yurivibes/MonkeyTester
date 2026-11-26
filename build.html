@@ -88,7 +88,7 @@
             <span class="field-label">Test cases</span>
             <div class="cases-tools"><button type="button" onclick="setAllCases(true)">Select all</button><button type="button" onclick="setAllCases(false)">Select none</button></div>
             <div class="check-grid" id="cases"><span class="field-hint">Pick a branch first.</span></div>
-            <div class="field-hint">Read from <code>visual-tests/</code> on the chosen branch.</div>
+            <div class="field-hint">Read from <code>mt-tests/</code> on the chosen branch.</div>
         </div>
         <div id="recipes-missing" hidden></div>
         <button type="submit" class="btn-run" id="start-btn">Build &amp; Test</button>
@@ -175,7 +175,7 @@ async function loadCases() {
         box.innerHTML = data.cases.length
             ? data.cases.map(c => '<label class="check-option"><input type="checkbox" name="case" value="' +
                 escapeHtml(c) + '" checked> ' + escapeHtml(c) + '</label>').join('')
-            : '<span class="field-hint">This branch has no visual-tests/&lt;case&gt;/INSTRUCTION.txt.</span>';
+            : '<span class="field-hint">This branch has no mt-tests/&lt;case&gt;/INSTRUCTION.txt.</span>';
     } catch (e) {
         box.innerHTML = '<span class="field-hint" style="color:var(--fail)">' + escapeHtml(e.message) + '</span>';
     }

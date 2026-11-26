@@ -146,10 +146,10 @@ class LimitTests(unittest.TestCase):
     def test_upload_cap_from_env(self):
         mib = 1024 * 1024
         self.assertEqual(sec.max_upload_bytes({}), sec.DEFAULT_MAX_UPLOAD_MB * mib)
-        self.assertEqual(sec.max_upload_bytes({"VT_MAX_UPLOAD_MB": "2048"}), 2048 * mib)
-        self.assertEqual(sec.max_upload_bytes({"VT_MAX_UPLOAD_MB": "junk"}),
+        self.assertEqual(sec.max_upload_bytes({"MT_MAX_UPLOAD_MB": "2048"}), 2048 * mib)
+        self.assertEqual(sec.max_upload_bytes({"MT_MAX_UPLOAD_MB": "junk"}),
                          sec.DEFAULT_MAX_UPLOAD_MB * mib)
-        self.assertEqual(sec.max_upload_bytes({"VT_MAX_UPLOAD_MB": "0"}),
+        self.assertEqual(sec.max_upload_bytes({"MT_MAX_UPLOAD_MB": "0"}),
                          sec.DEFAULT_MAX_UPLOAD_MB * mib)
 
 
@@ -252,7 +252,7 @@ class RequestLimitTests(ServerCase):
         self.assertIn(b"too large", body)
 
     def test_oversize_upload_is_413(self):
-        with patch.dict(os.environ, {"VT_MAX_UPLOAD_MB": "1"}):
+        with patch.dict(os.environ, {"MT_MAX_UPLOAD_MB": "1"}):
             status, _, _ = self.post_raw("/api/run-test", {
                 "Content-Type": "multipart/form-data; boundary=x",
                 "Content-Length": str(1024 * 1024 + 1)})
@@ -366,7 +366,7 @@ class RunArgvValidationTests(ServerCase):
         add_build()
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "submit", Path(app.__file__).parent / "ci" / "visual-test" / "submit.py")
+            "submit", Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py")
         submit = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(submit)
         ctype, body = submit.build_multipart(
