@@ -224,7 +224,8 @@ reason appears as the error next to them.
   for the admin until changed); admins create the other accounts on Settings → Users.
 - Accounts: `auth_config.json` (0600) — `users {name: {password_hash, role, created_at}}`
   (scrypt, per-user salt; an old bare SHA-256 hash is accepted once and rehashed; plaintext is
-  never accepted) and `sessions {sha256(token): {user, created}}`. Cookie `mt_auth`,
+  never accepted) and `sessions {sha256(token): {user, created}}`. Cookie `mt_auth_<port>`
+  (old shared `mt_auth` still read),
   `HttpOnly; SameSite=Strict` (no `Secure`: the viewer serves plain HTTP). Per-IP login
   throttle: after 5 failures each further failure doubles the wait (429 + `Retry-After`).
 - CSRF: a cookie-authenticated POST must carry an `Origin` (else `Referer`) whose host equals

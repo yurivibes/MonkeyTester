@@ -38,11 +38,20 @@ import builds
 AUTH_CONFIG_FILE = Path(__file__).parent / "auth_config.json"
 SERVICE_TOKENS_FILE = Path(__file__).parent / "service_tokens.json"
 
-COOKIE_NAME = "mt_auth"
+# Browsers scope cookies by host, not port, so two viewers on one host (the
+# live one and a PR-test instance) sharing one cookie name overwrite each
+# other's login. Each instance therefore names its cookie after its port;
+# the old shared name is still read so an upgrade keeps people signed in.
+LEGACY_COOKIE_NAME = "mt_auth"
 # A login never expires on the server; only Logout, a password change/reset
 # or deleting the user ends it. Browsers cap cookie lifetimes at 400 days, so
 # the cookie is re-sent on every page load (/api/auth/status).
 COOKIE_AGE = 400 * 86400
+
+
+def cookie_name(port):
+    """The session cookie name of the viewer listening on `port`."""
+    return f"{LEGACY_COOKIE_NAME}_{int(port)}"
 
 DEFAULT_USER = "admin"
 DEFAULT_PASSWORD = "admin"
