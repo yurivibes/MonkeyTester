@@ -68,7 +68,8 @@ Same as [PLUGIN_API.md](PLUGIN_API.md):
   (`PLUGIN_NAME_RE`; the string form `"plugin": "build-local"` is accepted too). The viewer
   registers the plugin under it (the Add row takes only the address; a `/health` without
   a valid name is refused with `no_plugin_name`), and Build & Test projects refer to the
-  plugin by it, as tests do with `PLUGIN: <name>`. If the name changes, the next **Save
+  plugin by it, as tests do with `<NAME>: <action>` steps. Build plugins are not step
+  commands, so their names keep this any-case rule (test plugin names are uppercase). If the name changes, the next **Save
   address** on its row renames the row: the pairing token moves and every project on the
   old name is re-pointed. A name already registered at another address is refused
   (`name_taken`).

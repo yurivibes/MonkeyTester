@@ -108,7 +108,7 @@
         <div class="settings-field">
             <label for="test_vars">Variables</label>
             <textarea id="test_vars" placeholder="HUB_PATH=/api&#10;one KEY=value per line" autocomplete="off" style="min-height:64px;"></textarea>
-            <div class="hint">Every test can use these as <code>${KEY}</code> / <code>$KEY</code> in step text and inside <code>PLUGIN</code> blocks — e.g. <code>GET ${HUB_PATH}/devices -&gt; …</code> puts the saved path before the endpoint. Lines are <code>KEY=value</code> (<code>#</code> comments allowed, empty value legal). Read when a run starts: a change applies to the next run. A <code>KEY=value</code> line inside a test overrides the saved value.</div>
+            <div class="hint">Every test can use these as <code>${KEY}</code> / <code>$KEY</code> in step text and inside plugin-step blocks (<code>ESP32-SERVER: expect</code> … <code>END</code>) — e.g. <code>GET ${HUB_PATH}/devices -&gt; …</code> puts the saved path before the endpoint. Lines are <code>KEY=value</code> (<code>#</code> comments allowed, empty value legal). Read when a run starts: a change applies to the next run. A <code>KEY=value</code> line inside a test overrides the saved value.</div>
             <div class="settings-actions">
                 <button class="btn-secondary settings-save-btn" id="testVarsSaveBtn" onclick="saveTestVars()">Save Test Variables</button>
                 <span class="settings-status" id="testVarsStatus"></span>

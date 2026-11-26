@@ -11,7 +11,7 @@ boards, ...). Everything a test asks of it is an action run as a job:
 
 Environment:
   MT_PLUGINS                — plugins tests may call: name=url[,name=url...]
-                              (e.g. esp32=http://127.0.0.1:8091). Once Run/config.json
+                              (e.g. ESP32-SENSOR=http://127.0.0.1:8091). Once Run/config.json
                               has a `plugins` map {name: url} — Settings → Device
                               Plugins owns the list then and the viewer imports the
                               env entries into it once — this variable is IGNORED:
@@ -348,12 +348,61 @@ def load_plugins_from_env(env=None):
     return plugins
 
 
-PLUGIN_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+# A test (device) plugin's name, and the AI's: uppercase only, because a test
+# calls the plugin with a step whose command IS its name (`ESP32-SERVER:
+# expect`), like the built-in CLICK / VERIFY. Build plugins keep their own
+# rule (build_plugin_client.PLUGIN_NAME_RE): they are never step commands.
+PLUGIN_NAME_RE = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,63}")
+
+# The same shape in any case: how names are READ (a /health from an older
+# plugin, a registry key from before uppercase names, a build plugin row in
+# the shared registry). New names are checked with PLUGIN_NAME_RE.
+LOOSE_PLUGIN_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+
+# Names a plugin may not take, because a test step with that command is a
+# built-in: every command test_runner_core.execute_step dispatches (a unit
+# test asserts they are a subset of this set), the retired PLUGIN step, the
+# IF / END block keywords and the INSTRUCTION.txt header keys. The viewer
+# refuses to register or rename a plugin to one (400 reserved_name).
+RESERVED_STEP_NAMES = frozenset({
+    "SCREENSHOT", "SAVE_SCREENSHOT", "START_RECORDING", "STOP_RECORDING", "VERIFY",
+    "CLICK", "INPUT", "SWIPE", "WAIT", "SCRIPT", "UNINSTALL", "INSTALL", "DIAGNOSE",
+    "PLUGIN", "SNAPSHOT", "ASSERT_LAYOUT", "MOTION", "LAUNCH",
+    "IF", "END",
+    "MODE", "CLEAR_DATA", "REINSTALL_APP",
+})
 
 
 def valid_plugin_name(value):
-    """True for a str matching PLUGIN_NAME_RE (the contract's name rule)."""
+    """True for a str matching PLUGIN_NAME_RE (the contract's name rule:
+    uppercase)."""
     return isinstance(value, str) and PLUGIN_NAME_RE.fullmatch(value) is not None
+
+
+def loose_plugin_name(value):
+    """True for a str matching LOOSE_PLUGIN_NAME_RE (any case)."""
+    return isinstance(value, str) and LOOSE_PLUGIN_NAME_RE.fullmatch(value) is not None
+
+
+def reserved_plugin_name(value):
+    """True when `value` (any case) is a built-in step command."""
+    return isinstance(value, str) and value.upper() in RESERVED_STEP_NAMES
+
+
+def plugin_name_problem(value):
+    """(message, code) when `value` can't be a test/AI plugin's new name, else
+    None: not matching PLUGIN_NAME_RE (it must be uppercase) -> bad_request,
+    a built-in step command -> reserved_name."""
+    if not isinstance(value, str) or not LOOSE_PLUGIN_NAME_RE.fullmatch(value):
+        return (f"plugin name {value!r} must match {PLUGIN_NAME_RE.pattern} "
+                "(uppercase letters, digits, _ and -)", "bad_request")
+    if not PLUGIN_NAME_RE.fullmatch(value):
+        return (f"plugin name {value!r} must be uppercase (e.g. {value.upper()!r}): "
+                f"plugin names match {PLUGIN_NAME_RE.pattern}", "bad_request")
+    if value in RESERVED_STEP_NAMES:
+        return (f"{value} is a built-in test step command; a plugin can't be named "
+                "like one (pick another name)", "reserved_name")
+    return None
 
 
 def plugin_names(plugin):
@@ -369,17 +418,23 @@ def plugin_names(plugin):
         name, default, renamable = plugin.get("name"), plugin.get("default_name"), plugin.get("renamable")
     else:
         name, default, renamable = plugin, None, False
-    name = name if valid_plugin_name(name) else None
-    default = default if valid_plugin_name(default) else name
+    # Read in any case: an older plugin may still report a lowercase name.
+    name = name if loose_plugin_name(name) else None
+    default = default if loose_plugin_name(default) else name
     return name, default, renamable is True and name is not None
 
 
 def plugin_identity(plugin):
     """The fixed ID the viewer identifies a plugin by: /health
     `plugin.default_name`, falling back to `plugin.name` (None when neither
-    is usable). Never the current name alone: a renamed monkeytester-ai
-    still has default_name monkeytester-ai."""
-    return plugin_names(plugin)[1]
+    is usable). Never the current name alone: a renamed AI still has
+    default_name AI. The AI is matched in any case, also by its legacy
+    default name (an AI build from before the rename reports
+    monkeytester-ai), and returned as AI_PLUGIN_NAME."""
+    ident = plugin_names(plugin)[1]
+    if is_ai_identity(ident):
+        return AI_PLUGIN_NAME
+    return ident
 
 
 def rename_plugin(client, name, timeout=10):
@@ -389,20 +444,20 @@ def rename_plugin(client, name, timeout=10):
     {name, default_name} from its reply — nothing else of a plugin's config
     is passed on. Raises PluginError (the plugin's 400 bad_request for a
     name it refuses)."""
-    if not valid_plugin_name(name):
-        raise PluginError(f"name {name!r} must match {PLUGIN_NAME_RE.pattern}", "bad_request",
-                          plugin=client.name)
+    problem = plugin_name_problem(name)
+    if problem:
+        raise PluginError(problem[0], problem[1], plugin=client.name)
     body = client._request("POST", "/config", {"name": name}, timeout=timeout)
     config = body.get("config") if isinstance(body.get("config"), dict) else body
-    current = config.get("name") if valid_plugin_name(config.get("name")) else name
+    current = config.get("name") if loose_plugin_name(config.get("name")) else name
     default = config.get("default_name")
-    return {"name": current, "default_name": default if valid_plugin_name(default) else ""}
+    return {"name": current, "default_name": default if loose_plugin_name(default) else ""}
 
 
 def parse_config_plugins(config):
     """The config.json `plugins` map {name: url} -> {name: normalised url}, or
     None when the key is absent (MT_PLUGINS is still the source of the list).
-    Raises PluginError(code="config") on a malformed entry. monkeytester-ai
+    Raises PluginError(code="config") on a malformed entry. The AI plugin
     must NOT be listed here — its address is visual_plugin_url and its
     Configure panel owns it."""
     if not isinstance(config, dict) or "plugins" not in config:
@@ -412,10 +467,12 @@ def parse_config_plugins(config):
         raise PluginError('config.json "plugins" must be a JSON object of name: url', "config")
     out = {}
     for name, url in raw.items():
-        if not isinstance(name, str) or not PLUGIN_NAME_RE.fullmatch(name):
+        # Any case is read: build plugin rows keep their own names, and a
+        # key from before uppercase names is migrated at viewer start.
+        if not loose_plugin_name(name):
             raise PluginError(f"config plugin name {name!r} must match {PLUGIN_NAME_RE.pattern}",
                               "config")
-        if name == AI_PLUGIN_NAME:
+        if is_ai_identity(name):
             raise PluginError(f'config.json "plugins" lists {AI_PLUGIN_NAME!r}; its address '
                               "lives in visual_plugin_url (Settings → Device Plugins)", "config")
         if isinstance(url, dict):
@@ -434,14 +491,14 @@ def parse_config_plugins(config):
 def load_plugins(config=None, env=None):
     """{name: PluginClient} for the device plugins in effect: the config.json
     `plugins` map once it exists (Settings owns the list then and MT_PLUGINS
-    is ignored), otherwise the MT_PLUGINS entries. monkeytester-ai never
+    is ignored), otherwise the MT_PLUGINS entries. The AI plugin never
     joins — the viewer adds it from visual_plugin_url via viewer_plugins().
     Tokens stay env-based (PLUGIN_TOKEN, MT_PLUGIN_TOKEN_<NAME>)."""
     env = os.environ if env is None else env
     entries = parse_config_plugins(config)
     if entries is None:
         entries = {name: url for name, url in parse_plugins(env.get("MT_PLUGINS", ""))
-                   if name != AI_PLUGIN_NAME}
+                   if not is_ai_identity(name)}
     shared = (env.get("PLUGIN_TOKEN") or "").strip()
     return {name: PluginClient(name, url,
                                token=(env.get(_token_env_name(name)) or "").strip()
@@ -476,14 +533,31 @@ def _each_plugin(plugins, check):
 # The vision-model plugin. Its address is set in Settings → Device Plugins
 # (config.json visual_plugin_url), not in MT_PLUGINS: the viewer's plugin list
 # is MT_PLUGINS minus this name, plus this plugin at the configured address.
-AI_PLUGIN_NAME = "monkeytester-ai"
+# Its default name (/health plugin.default_name): tests drive the vision
+# verbs under the AI's CURRENT name (`AI: CLICK Login`); the user may rename
+# it. LEGACY_AI_PLUGIN_NAMES are default names older AI builds report, still
+# recognised as the AI (compared case-insensitively).
+AI_PLUGIN_NAME = "AI"
+LEGACY_AI_PLUGIN_NAMES = ("monkeytester-ai", "MONKEYTESTER-AI")
+
+# The actions that run the runner's vision code paths when they follow the
+# AI's name (`AI: VERIFY <text>`, `AI: CLICK <text>`, `AI: INPUT <args>`);
+# any other action is relayed to the AI plugin like a device plugin's.
+AI_VISION_VERBS = ("VERIFY", "CLICK", "INPUT")
+
+
+def is_ai_identity(name):
+    """True when `name` (any case) is the AI plugin's default name or a
+    legacy one (monkeytester-ai)."""
+    return isinstance(name, str) and name.upper() in (
+        AI_PLUGIN_NAME, *(n.upper() for n in LEGACY_AI_PLUGIN_NAMES))
 
 
 def viewer_plugins(env=None, ai_url="", ai_token=None, config=None):
     """{name: PluginClient} for the viewer's views (/api/status, /api/plugins,
     the Device Plugins panel): the device plugins in effect (config.json
     `plugins` once Settings owns the list, else MT_PLUGINS) without any
-    monkeytester-ai entry, plus monkeytester-ai at ai_url when one is
+    AI plugin entry, plus the AI plugin (AI_PLUGIN_NAME) at ai_url when one is
     configured. Raises PluginError(code="config") for a malformed list."""
     env = os.environ if env is None else env
     plugins = load_plugins(config, env)
@@ -517,8 +591,8 @@ def normalize_plugin_url(url):
 
 
 def ai_validate_address(url, token=None, timeout=5):
-    """Check that `url` is a monkeytester-ai plugin the pairing token opens:
-    GET /health speaks the plugin contract and identifies as monkeytester-ai
+    """Check that `url` is the AI plugin and the pairing token opens:
+    GET /health speaks the plugin contract and identifies as the AI (AI_PLUGIN_NAME or a legacy name)
     (plugin.default_name, or plugin.name for builds without default_name —
     never the current name alone, which the user may have changed), and GET
     /config with the token answers 200. Returns the normalised url; raises
@@ -654,8 +728,8 @@ def public_ai_config(body):
             "service": body.get("service"),
             # A renamable plugin's GET /config carries its current and default
             # name (PLUGIN_API.md); "" for older builds.
-            "name": body["name"] if valid_plugin_name(body.get("name")) else "",
-            "default_name": (body["default_name"] if valid_plugin_name(body.get("default_name"))
+            "name": body["name"] if loose_plugin_name(body.get("name")) else "",
+            "default_name": (body["default_name"] if loose_plugin_name(body.get("default_name"))
                              else "")}
 
 
@@ -753,11 +827,11 @@ def plugins_overview(env=None, timeout=3, tokens=None, ai_url="", ai_token=None,
     """{plugins: [{name, url, source, ok, contract_version, plugin, capabilities,
     devices, config, error?}], error?} for the Settings page. The list is the
     device plugins in effect (config.json `plugins` once Settings owns it —
-    source "config" —, else MT_PLUGINS minus monkeytester-ai), plus monkeytester-ai
+    source "config" —, else MT_PLUGINS minus the AI plugin), plus the AI plugin
     at ai_url (its address from Settings, source "settings"); error is set when
     the active list is malformed. A plugin that does not answer still lists,
     with its error. config is the _visual_config probe: non-null only for
-    plugins whose GET /config carries model info (the monkeytester-ai shape).
+    plugins whose GET /config carries model info (the AI plugin's shape).
     tokens ({name: token}) overrides the env token for some plugins."""
     plugins, error = _viewer_plugins_or_error(env, ai_url, ai_token, config)
     for name, token in (tokens or {}).items():

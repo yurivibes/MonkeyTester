@@ -149,7 +149,7 @@ class UploadRepoTests(ProjectCase):
         ctype, body = load_submit().build_multipart(
             {"device_mode": "android", "build_request": BUILD_ID, **fields},
             [("apk", "app.apk", b"PK"), ("tests", "INSTRUCTION.txt", b"MODE: once\n"),
-             ("tests", "a.txt", b"VERIFY: x\n")])
+             ("tests", "a.txt", b"AI: VERIFY x\n")])
         captured = {}
         real = app.subprocess.Popen
 

@@ -50,7 +50,7 @@ and it knows nothing about tests or vision models.
 Other hardware is reached through **device plugins**: separate services, each owning one
 kind of hardware, that implement the contract in `PLUGIN_API.md` (health, devices,
 actions with param schemas, and jobs). MonkeyTester-Plugin-Esp32 (port 8091, Linux or Mac) is the
-first. Tests call them with `PLUGIN:` steps; the plugins to use come from the `plugins`
+first. Tests call them with steps named after the plugin (`ESP32-SERVER: expect`); the plugins to use come from the `plugins`
 map in `Run/config.json` (Settings → Device Plugins; a `MT_PLUGINS` environment variable
 is imported into that map once at viewer start and ignored after that).
 
@@ -115,13 +115,20 @@ Every device operation is an HTTP call in `controller_client.py`. Coordinates ar
 
 `SCRIPT` and `DIAGNOSE` steps run on this host, not on the Mac.
 
-`PLUGIN` steps go through `plugin_client.py`. On the first use of a plugin in a run it
+Plugin steps (`<NAME>: <action> …`; the name is uppercase and not one of
+`plugin_client.RESERVED_STEP_NAMES`, the built-in commands) go through `plugin_client.py`.
+`parse_steps` keeps `command` = `plugin` = the name; at run time `execute_step` runs
+`<AI name>: VERIFY|CLICK|INPUT <text>` through the vision code paths (the AI's current name
+comes from its `/health` at run start, `resolve_ai_plugin_name`, fallback `AI`) and relays
+every other plugin step — including other AI actions — as a job. The retired `PLUGIN:` step
+and bare `VERIFY:`/`CLICK:`/`INPUT:` lines are parse errors naming the replacement.
+On the first use of a plugin in a run it
 checks `GET /health` (contract `monkeytester-plugin`, version 1) and caches
 `GET /actions`, whose param schemas turn `key=value` strings into int, float, bool or
 JSON. The step posts a job, loops on `GET /jobs/<id>?wait=30` until the job is terminal,
 prints the job's log into the console log, and passes only on `passed`. If the job isn't
 done 15 seconds after its timeout, the runner cancels it and fails the step.
-A `PLUGIN` step may carry an inline block (indented lines up to `END`). The parser
+A plugin step may carry an inline block (indented lines up to `END`). The parser
 (`parse_steps` in `test_runner_core.py`, used for test files and `INSTRUCTION.txt`) keeps
 the block on the step as `block`, so its lines are never parsed as steps; at run time the
 lines get `${VAR}` substitution and are sent joined with `\n` as the `script` param, and
@@ -180,12 +187,12 @@ answer arrives first.
 posts to the plugin's `/v1/chat/completions` with the pairing token, and the plugin answers with
 its local model, forwards to a remote OpenAI-compatible server (Remote server: address, model,
 resize switch and optional API key, all stored by the plugin), or forwards to GitHub Copilot
-(Settings → Device Plugins → monkeytester-ai → Configure). The plugin's own address is set on
+(Settings → Device Plugins → AI → Configure). The plugin's own address is set on
 the same page and stored in `Run/config.json` as `visual_plugin_url` — the one source for the
 viewer and the runner — except in managed mode, where a launcher app passes
 `MT_MANAGED_AI_PLUGIN_URL` + `MT_MANAGED_AI_PLUGIN_TOKEN` (both required) and those win in the
 viewer and the runner (inherited env) without being written to config.json; the panel then shows
-the address read-only and the API refuses address/token edits with 409. A `monkeytester-ai` entry in
+the address read-only and the API refuses address/token edits with 409. An `AI` (or legacy `monkeytester-ai`) entry in
 `MT_PLUGINS` is imported once at viewer start (logged, skipped in managed mode) and then ignored; the other device plugins are registered in the **Manage
 device plugins** box on that Settings page (the `plugins` map in `Run/config.json`; a
 `MT_PLUGINS` environment variable is imported into that map once at viewer start and
@@ -252,7 +259,7 @@ same command is in `flake.nix` (`nix run .#tests`) and `.github/workflows/test.y
 - MonkeyTester-Plugin-Mobile-Controller, on the Mac, for all device access
 - `ffmpeg`, for WebM conversion of saved videos
 - Vision model API (Qwen2.5-VL or similar), called by `vision_analyzer.py`
-- Device plugins such as MonkeyTester-Plugin-Esp32, optional, only for tests with `PLUGIN` steps
+- Device plugins such as MonkeyTester-Plugin-Esp32, optional, only for tests with plugin steps
 - A build plugin (MonkeyTester-Plugin-Build-Local, `build-local`, port 8094), for Build & Test: it fetches the code from Gitea or GitHub and builds it on its own host
 
 ## Nix Flake

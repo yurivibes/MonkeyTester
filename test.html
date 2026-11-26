@@ -865,7 +865,7 @@ function updatePendingBadge(badgeEl, status) {
     badgeEl.textContent = status.toUpperCase();
 }
 
-// A PLUGIN step's inline block (the lines up to END) and any parse error.
+// A plugin step's (`<NAME>: <action>`) inline block (the lines up to END) and any parse error.
 function stepBlockHtml(step) {
     let html = '';
     if (step.block && step.block.length) html += '<pre class="step-block">' + escapeHtml(step.block.join('\n')) + '</pre>';

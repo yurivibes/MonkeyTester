@@ -1224,17 +1224,67 @@ def _resolve_script_file_refs(args, test_dir, line_num):
     return (shlex.join(tokens), None) if changed else (args, None)
 
 
+def _plugin_step_name(token):
+    """The plugin a step calls, when its first token makes it a plugin step,
+    else None. A plugin step is `<NAME>: <action> ...`: the token must end
+    in ':' (so `KEY=VALUE` variable lines and unknown commands stay distinct),
+    and the name, uppercased like built-in commands, must match
+    plugin_client.PLUGIN_NAME_RE and not be a built-in step command
+    (plugin_client.RESERVED_STEP_NAMES)."""
+    if not token.endswith(':'):
+        return None
+    name = token[:-1].upper()
+    if not plugin_client.PLUGIN_NAME_RE.fullmatch(name) or name in plugin_client.RESERVED_STEP_NAMES:
+        return None
+    return name
+
+
+def _removed_vision_step_error(verb, args, line_num):
+    """The parse error for a retired bare `VERIFY:` / `CLICK:` / `INPUT:`
+    line: the vision verbs run under the AI plugin's name now, so it names
+    the line and the replacement (the AI's current name when the run has
+    resolved it, else AI)."""
+    text = args.strip() or "<text>"
+    return (f'{verb}: steps were removed; write "{ai_plugin_name()}: {verb} {text}" '
+            f'(line {line_num})')
+
+
+def _removed_plugin_step_error(args, line_num):
+    """The parse error for a retired `PLUGIN: <name> <action> ...` line,
+    naming the line and the form that replaces it."""
+    parts = args.split(None, 1)
+    if parts:
+        rest = f" {parts[1]}" if len(parts) > 1 else " <action>"
+        example = f"{parts[0].upper()}:{rest}"
+    else:
+        example = "<PLUGIN-NAME>: <action>"
+    return f'PLUGIN: steps were removed; write "{example}" (line {line_num})'
+
+
 def parse_steps(lines, test_dir=None):
     """Turn test-file lines into steps: {line, command, args, raw}.
 
-    Blank and `#` lines are skipped. A PLUGIN step whose next non-blank line is
+    A step whose command is not a built-in but `<NAME>:` (uppercase plugin
+    name, see _plugin_step_name; written in any case and uppercased like
+    built-ins) is a plugin step: `ESP32-SERVER: expect`. It gets
+    step['plugin'] = the name and args = `<action> [key=value ...]`.
+    The step keeps command = the plugin's name (so step lists and results
+    show `ESP32-SERVER` / `AI`, not a generic word). Whether it is the AI's
+    vision verb (`AI: CLICK Login`) or a relayed plugin action is decided at
+    run time (execute_step), against the AI's name resolved at run start.
+    The retired `PLUGIN: <name> <action>` form is a parse error naming the
+    line and the replacement (its inline block is still consumed, so the
+    block lines don't turn into steps); so are bare `VERIFY:` / `CLICK:` /
+    `INPUT:` lines (replacement `AI: CLICK <text>`).
+
+    Blank and `#` lines are skipped. A plugin step whose next non-blank line is
     indented deeper than the step carries an inline block: the lines up to a
     line that is exactly END. Block lines are stripped, blank ones dropped, and
     `#` lines kept; they are stored in step['block'] and never parsed as steps.
     A block without END, or an END outside a block, gives a step with an
     'error' key, which fails when it is executed (see execute_step).
 
-    A step may start with `IF IOS:` or `IF ANDROID:` (e.g. `IF IOS: CLICK: Allow`):
+    A step may start with `IF IOS:` or `IF ANDROID:` (e.g. `IF IOS: AI: CLICK Allow`):
     it runs only on that platform and is skipped on the other one; the
     platform is stored in step['platform'] (see step_skipped_on_platform).
 
@@ -1292,7 +1342,7 @@ def parse_steps(lines, test_dir=None):
             continue
         if line == BLOCK_END:
             steps.append({'line': line_num, 'command': BLOCK_END, 'args': '', 'raw': line,
-                          'error': f"END at line {line_num} does not close a PLUGIN block"})
+                          'error': f"END at line {line_num} does not close a plugin step's block"})
             continue
         platform = None
         prefix = re.match(r'IF\s+(IOS|ANDROID):\s*(\S.*)$', line, re.IGNORECASE)
@@ -1304,19 +1354,27 @@ def parse_steps(lines, test_dir=None):
         cmd = parts[0].rstrip(':').upper()
         args = parts[1] if len(parts) > 1 else ""
         step = {'line': line_num, 'command': cmd, 'args': args, 'raw': line}
+        plugin = _plugin_step_name(parts[0])
+        if plugin:
+            cmd = step['command'] = plugin
+            step['plugin'] = plugin
+        elif cmd == "PLUGIN":
+            step['error'] = _removed_plugin_step_error(args, line_num)
+        elif cmd in plugin_client.AI_VISION_VERBS:
+            step['error'] = _removed_vision_step_error(cmd, args, line_num)
         if block_platform and platform and platform != block_platform:
             step['error'] = (f"Line {line_num} is for {platform.upper()} but sits inside the "
                              f"IF {block_platform.upper()}: block opened at line {block_line}")
         elif platform or block_platform:
             step['platform'] = platform or block_platform
-        if cmd == "PLUGIN" and test_dir and "@file:" in args:
+        if plugin and test_dir and "@file:" in args:
             resolved_args, file_ref_error = _resolve_script_file_refs(args, test_dir, line_num)
             if file_ref_error:
                 step.setdefault('error', file_ref_error)
             else:
                 step['args'] = resolved_args
         steps.append(step)
-        if cmd != "PLUGIN":
+        if not plugin and cmd != "PLUGIN":
             continue
         nxt = i
         while nxt < len(lines) and not lines[nxt].strip():
@@ -1328,17 +1386,17 @@ def parse_steps(lines, test_dir=None):
         block = []
         while i < len(lines) and lines[i].strip() != BLOCK_END:
             if lines[i].strip():
-                block_line = lines[i].strip()
+                text = lines[i].strip()  # not block_line: that is the IF block's
                 if test_dir:
-                    block_line, file_ref_error = _resolve_line_file_refs(block_line, test_dir, i + 1)
+                    text, file_ref_error = _resolve_line_file_refs(text, test_dir, i + 1)
                     if file_ref_error:
                         step.setdefault('error', file_ref_error)
-                block.append(block_line)
+                block.append(text)
             i += 1
         step['block'] = block
         if i >= len(lines):
-            step['error'] = (f"PLUGIN block starting at line {line_num} has no END line "
-                             f"(a line that is exactly END)")
+            step.setdefault('error', f"{step.get('plugin', 'PLUGIN')}: block starting at line "
+                                     f"{line_num} has no END line (a line that is exactly END)")
         else:
             i += 1  # the END line
     if block_platform:
@@ -1374,51 +1432,130 @@ def parse_test_file(test_path):
     return steps
 
 
-# Device plugins from MT_PLUGINS, loaded on the first PLUGIN step so each
+# Device plugins from MT_PLUGINS, loaded on the first plugin step so each
 # plugin's /health and /actions are fetched once per run.
 _plugins = None
 
+# The AI plugin's current name (its /health plugin.name), resolved once at run
+# start by resolve_ai_plugin_name(); None until then (AI_PLUGIN_NAME is used).
+_ai_name = None
+
+
+def _ai_plugin_url():
+    """The AI plugin's base URL for this run: MT_AI_PLUGIN_URL (set by
+    run_on_device.py from config.json visual_plugin_url or managed mode), else
+    the vision endpoint without /v1/chat/completions; '' when neither is set."""
+    url = (os.environ.get("MT_AI_PLUGIN_URL") or "").strip().rstrip("/")
+    if url:
+        return url
+    endpoint = (os.environ.get("VISION_MODEL_API_URL") or "").strip().rstrip("/")
+    suffix = "/v1/chat/completions"
+    return endpoint[:-len(suffix)] if endpoint.endswith(suffix) else ""
+
+
+def _ai_plugin_token():
+    return (os.environ.get("VISUAL_MODEL_API_KEY") or "").strip() or None
+
+
+def ai_plugin_name():
+    """The AI plugin's current name: tests write its vision verbs under it
+    (`AI: CLICK Login`). AI_PLUGIN_NAME until resolve_ai_plugin_name() ran."""
+    return _ai_name or plugin_client.AI_PLUGIN_NAME
+
+
+def resolve_ai_plugin_name():
+    """Read the AI plugin's current name from its /health (once per run, at
+    run start). Falls back to AI_PLUGIN_NAME — and says so in the log — when
+    no AI address is configured or the plugin doesn't answer."""
+    global _ai_name
+    url = _ai_plugin_url()
+    fallback = plugin_client.AI_PLUGIN_NAME
+    if not url:
+        _ai_name = fallback
+        print(f"  [{_ts()}] AI plugin: no address configured; its steps use the name {fallback}")
+        return _ai_name
+    try:
+        health = plugin_client.PluginClient(fallback, url, token=_ai_plugin_token(),
+                                            timeout=5).health(timeout=5)
+        name = plugin_client.plugin_names(health.get("plugin"))[0]
+    except plugin_client.PluginError as e:
+        name, why = None, e.message
+    else:
+        why = "its /health reports no plugin name"
+    if name:
+        _ai_name = name.upper()
+        print(f"  [{_ts()}] AI plugin at {url} is named {_ai_name} (steps: {_ai_name}: CLICK ...)")
+    else:
+        _ai_name = fallback
+        print(f"  [{_ts()}] AI plugin at {url}: could not read its name ({why}); "
+              f"falling back to {fallback}")
+    return _ai_name
+
 
 def _get_plugins():
+    """The plugins plugin steps can call: the device plugins from MT_PLUGINS
+    plus the AI plugin under its current name (actions other than the vision
+    verbs, e.g. `AI: set-model ...`, are relayed to it)."""
     global _plugins
     if _plugins is None:
-        _plugins = plugin_client.load_plugins_from_env()
+        plugins = plugin_client.load_plugins_from_env()
+        url = _ai_plugin_url()
+        if url and _find_plugin(plugins, ai_plugin_name()) is None:
+            plugins[ai_plugin_name()] = plugin_client.PluginClient(
+                ai_plugin_name(), url, token=_ai_plugin_token())
+        _plugins = plugins
     return _plugins
 
 
-def parse_plugin_args(args):
-    """`<plugin> <action> [key=value ...] [device=<id>] [timeout=<seconds>]` ->
-    (plugin, action, params, device, timeout_s). Raises ValueError."""
+def parse_plugin_args(args, plugin="plugin"):
+    """A plugin step's args, `<action> [key=value ...] [device=<id>]
+    [timeout=<seconds>]` (the step's command is the plugin's name: `ESP32-SERVER:
+    expect ...`) -> (action, params, device, timeout_s). `plugin` only names
+    the step in error messages. Raises ValueError."""
     try:
         tokens = shlex.split(args)
     except ValueError as e:
-        raise ValueError(f"cannot parse PLUGIN arguments: {e}")
-    if len(tokens) < 2:
-        raise ValueError("PLUGIN needs <plugin> <action> [key=value ...]")
-    plugin, action = tokens[0], tokens[1]
+        raise ValueError(f"cannot parse {plugin}: arguments: {e}")
+    if not tokens:
+        raise ValueError(f"{plugin}: needs <action> [key=value ...]")
+    action = tokens[0]
     params, device, timeout_s = {}, None, None
-    for token in tokens[2:]:
+    for token in tokens[1:]:
         key, sep, value = token.partition("=")
         if not sep or not key:
-            raise ValueError(f"PLUGIN argument {token!r} is not key=value")
+            raise ValueError(f"{plugin}: argument {token!r} is not key=value")
         if key == "device":
             device = value or None
         elif key == "timeout":
             try:
                 timeout_s = float(value)
             except ValueError:
-                raise ValueError(f"PLUGIN timeout={value!r} is not a number of seconds")
+                raise ValueError(f"{plugin}: timeout={value!r} is not a number of seconds")
             if timeout_s <= 0:
-                raise ValueError("PLUGIN timeout must be more than 0 seconds")
+                raise ValueError(f"{plugin}: timeout must be more than 0 seconds")
         else:
             params[key] = value
-    return plugin, action, params, device, timeout_s
+    return action, params, device, timeout_s
+
+
+def _find_plugin(plugins, name):
+    """The configured plugin `name` names: the exact key, else the one whose
+    key matches in any case (names are uppercase; a list from before that, e.g.
+    a hand-set MT_PLUGINS, still resolves). None when there is none."""
+    if name in plugins:
+        return plugins[name]
+    for key, client in plugins.items():
+        if key.upper() == name.upper():
+            return client
+    return None
 
 
 def _run_plugin_step(step, args):
-    """PLUGIN step: run an action on a device plugin; passes only on `passed`."""
+    """A plugin step (`<NAME>: <action> ...`): run an action on the device
+    plugin step['plugin'] names; passes only on `passed`."""
+    plugin = step.get('plugin') or "PLUGIN"
     try:
-        plugin, action, params, device, timeout_s = parse_plugin_args(args)
+        action, params, device, timeout_s = parse_plugin_args(args, plugin)
     except ValueError as e:
         print(f"  [{_ts()}] -> ERROR: {e}")
         return False
@@ -1427,15 +1564,18 @@ def _run_plugin_step(step, args):
     except plugin_client.PluginError as e:
         print(f"  [{_ts()}] -> ERROR: {e.message}")
         return False
-    client = plugins.get(plugin)
+    client = _find_plugin(plugins, plugin)
     if client is None:
         known = ", ".join(sorted(plugins)) or "none (set MT_PLUGINS=name=url)"
         print(f"  [{_ts()}] -> ERROR: Unknown plugin '{plugin}'. Configured plugins: {known}")
+        if plugin_client.is_ai_identity(plugin) and plugin != ai_plugin_name():
+            print(f"  [{_ts()}] -> The AI plugin is named {ai_plugin_name()} now; write "
+                  f"\"{ai_plugin_name()}: {args.strip()}\"")
         return False
     block = step.get('block')
     if block is not None:
         if "script" in params:
-            print(f"  [{_ts()}] -> ERROR: PLUGIN step at line {step['line']} has both an inline "
+            print(f"  [{_ts()}] -> ERROR: {plugin}: step at line {step['line']} has both an inline "
                   f"block and script= on the step line; use one")
             return False
         try:
@@ -1452,7 +1592,7 @@ def _run_plugin_step(step, args):
         params["script"] = "\n".join(block)
     where = f" on {device}" if device else ""
     shown = {k: v for k, v in params.items() if not (block is not None and k == "script")}
-    print(f"  [{_ts()}] [{step['line']}] PLUGIN {plugin} {action}{where} "
+    print(f"  [{_ts()}] [{step['line']}] {plugin}: {action}{where} "
           f"params={json.dumps(shown)}" + (f" timeout={timeout_s:g}s" if timeout_s else ""))
     if block is not None:
         print(f"  [{_ts()}]   script ({len(block)} line{'s' if len(block) != 1 else ''}):")
@@ -1468,7 +1608,7 @@ def _run_plugin_step(step, args):
         print(f"  [{_ts()}] -> ERROR: {e}")
         return False
     state = job.get("state")
-    print(f"  [{_ts()}] -> PLUGIN job {job.get('id')} {state}")
+    print(f"  [{_ts()}] -> {plugin} job {job.get('id')} {state}")
     if job.get("result") is not None:
         print(f"  [{_ts()}] -> Result: {json.dumps(job['result'])}")
     error = job.get("error")
@@ -1563,6 +1703,17 @@ def execute_step(step):
     else:
         print(f"  [{_ts()}] [{step['line']}] EXECUTING: {cmd}: {args}")
 
+    if step.get('plugin'):
+        # `<NAME>: <action> ...`: under the AI's current name the vision verbs
+        # (`AI: CLICK Login`) run the code paths below with the rest of the
+        # line; every other plugin step (and any other AI action) is relayed.
+        verb = re.match(r'(\S+)\s*(.*)$', args.strip(), re.S)
+        if (verb and step['plugin'].upper() == ai_plugin_name().upper()
+                and verb.group(1).upper() in plugin_client.AI_VISION_VERBS):
+            cmd, args = verb.group(1).upper(), verb.group(2)
+        else:
+            return _run_plugin_step(step, args)
+
     if cmd == "START_RECORDING":
         # Args: optional <remote_path_or_EXTERNAL_CAPTURE>,time_limit (e.g. "EXTERNAL_CAPTURE,30")
         # The first field is accepted but ignored.
@@ -1650,7 +1801,6 @@ def execute_step(step):
             return False
 
     elif cmd == "INPUT":
-        import re
         match = re.search(r'"([^"]*)"', args)
         if match:
             text = match.group(1)
@@ -1821,9 +1971,6 @@ def execute_step(step):
         except Exception as e:
             print(f"     [{_ts()}] ERROR: {e}")
             return True
-
-    elif cmd == "PLUGIN":
-        return _run_plugin_step(step, args)
 
     elif cmd == "SNAPSHOT":
         return _run_snapshot_step(step, args)
@@ -2359,6 +2506,9 @@ def _run_device_tests(test_files, apk_version, apk_package, apk_path, args, pend
         device_id=device_label,
         branch=getattr(args, 'branch', None),
     )
+
+    # The AI plugin's current name: its vision steps are `<name>: CLICK ...`.
+    resolve_ai_plugin_name()
 
     # Build and write pending_tests.json before running any tests
     pending_tests = []

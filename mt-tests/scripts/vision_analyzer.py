@@ -8,7 +8,7 @@ retries and error text are the same everywhere. Standard library only.
 
 The usual endpoint is the MonkeyTester-Plugin-AI plugin's /v1/chat/completions. The
 plugin decides which provider answers (its local Ollama model or GitHub Copilot,
-chosen in Settings → Device Plugins → monkeytester-ai → Configure), so this
+chosen in Settings → Device Plugins → AI → Configure), so this
 module never talks to Copilot itself and holds no GitHub token.
 
 Environment (read on each call, because run_on_device.py sets these from config):
@@ -115,7 +115,7 @@ def chat(content, max_tokens=500, temperature=0.0):
             if e.code == 401:
                 # Not retried: a wrong or missing pairing token stays wrong.
                 problem += (" — check the pairing token (Settings → Device Plugins → "
-                            "monkeytester-ai → Configure)")
+                            "AI → Configure)")
             retryable = e.code in RETRYABLE_STATUS
         except urllib.error.URLError as e:
             problem = str(e.reason)

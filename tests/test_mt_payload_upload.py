@@ -136,10 +136,10 @@ class CollectPayloadTests(unittest.TestCase):
     def test_collects_each_referenced_file_once(self):
         with tempfile.TemporaryDirectory() as tmp:
             case = self.make_case(tmp, {
-                "01.txt": "PLUGIN: esp32 expect\n  GET /a -> 200 @file:payloads/a.json\n"
+                "01.txt": "ESP32: expect\n  GET /a -> 200 @file:payloads/a.json\n"
                           "  GET /b -> 200 @file:payloads/./a.json\nEND\n",
-                "02.txt": 'PLUGIN: esp32 expect script="GET /c -> 200 @file:c.bin"\n'
-                          "PLUGIN: esp32 expect\n  GET /x -> 200 @file:02.txt\nEND\n",
+                "02.txt": 'ESP32: expect script="GET /c -> 200 @file:c.bin"\n'
+                          "ESP32: expect\n  GET /x -> 200 @file:02.txt\nEND\n",
             }, {"payloads/a.json": b'{"a":1}', "c.bin": b"plain", "unused.json": b"{}"})
             payloads, err = submit.collect_payloads(case)
         self.assertIsNone(err)
@@ -239,7 +239,7 @@ class EndToEndTests(unittest.TestCase):
                 (case / "payloads").mkdir(parents=True)
                 (case / "INSTRUCTION.txt").write_text("MODE: once\n")
                 (case / "01_payload.txt").write_text(
-                    "PLUGIN: esp32 expect\n  GET /temperature.json -> 200 @file:payloads/a.json\nEND\n")
+                    "ESP32: expect\n  GET /temperature.json -> 200 @file:payloads/a.json\nEND\n")
                 (case / "payloads" / "a.json").write_bytes(payload)
             case_dirs = sorted(src.iterdir())
             by_case, err = submit.collect_case_payloads(case_dirs)

@@ -125,9 +125,9 @@ class ProxyTests(PluginDocsCase):
 
     def test_ai_plugin_gets_its_pairing_token(self):
         (self.runs / "config.json").write_text(json.dumps({
-            "plugins": {}, "visual_plugin_url": self.docs_url, "visual_plugin": "monkeytester-ai",
+            "plugins": {}, "visual_plugin_url": self.docs_url, "visual_plugin": "AI",
             "visual_api_key": "ai-pairing-9999"}))
-        status, _, _ = self.fetch("/plugins/docs/monkeytester-ai")
+        status, _, _ = self.fetch("/plugins/docs/AI")
         self.assertEqual(status, 200)
         self.assertIn(("/docs", "ai-pairing-9999", None), DocsPlugin.seen)
 

@@ -415,7 +415,7 @@ class CiTokenTests(AuthCase):
         ctype, body = submit.build_multipart(
             {"device_mode": "android", "build_request": BUILD_ID},
             [("apk", "app.apk", b"PK-not-really"),
-             ("tests", "INSTRUCTION.txt", b"MODE: once\n"), ("tests", "a.txt", b"VERIFY: x\n")])
+             ("tests", "INSTRUCTION.txt", b"MODE: once\n"), ("tests", "a.txt", b"AI: VERIFY x\n")])
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/run-test", data=body,
                                      method="POST", headers={"Content-Type": ctype, **headers})
         try:
