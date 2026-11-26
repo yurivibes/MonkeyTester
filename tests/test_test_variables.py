@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mt-tests" / "scripts"))
 with patch.dict(os.environ, {"VISION_TESTS_DIR": tempfile.mkdtemp()}):
     import test_runner_core as core
 

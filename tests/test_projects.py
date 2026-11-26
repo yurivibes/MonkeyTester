@@ -13,8 +13,8 @@ from unittest.mock import patch
 
 import app
 import builds
-from test_app_api import FAKE_RUNNER, ServerCase
-from build_fixture import BUILD_ID, add_build
+from tests.test_app_api import FAKE_RUNNER, ServerCase
+from tests.build_fixture import BUILD_ID, add_build
 
 sys.path.insert(0, str(Path(app.__file__).parent / "mt-tests" / "scripts"))
 import test_runner_core as core  # noqa: E402

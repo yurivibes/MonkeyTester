@@ -241,11 +241,11 @@ reason appears as the error next to them.
 ## Testing
 
 ```bash
-python3 -m unittest test_ci_delivery test_controller_client test_platform_targeting test_vision_analyzer test_app_api test_plugin_client test_snapshots test_builds test_build_plugin_client test_platform_steps test_mt_file_payload test_mt_payload_upload test_test_variables test_stale_runs test_projects test_viewer_auth test_security_hardening
+python3 -m unittest discover -s tests -t .
 ```
 
-These use stubs for the controller, the vision model and a build plugin (`fake_build_plugin.py`), and run the real `app.py` server. The
-same list is in `flake.nix` (`nix run .#tests`) and `.github/workflows/test.yml`.
+These use stubs for the controller, the vision model and a build plugin (`tests/fake_build_plugin.py`), and run the real `app.py` server. The
+same command is in `flake.nix` (`nix run .#tests`) and `.github/workflows/test.yml`.
 
 ## External Dependencies
 - MonkeyTester-Plugin-Mobile-Controller, on the Mac, for all device access

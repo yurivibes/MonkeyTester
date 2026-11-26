@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mt-tests" / "scripts"))
 import screenshot_diff
 import vision_analyzer as vision
 
@@ -142,7 +142,7 @@ class RunnerConfigTests(unittest.TestCase):
         root = Path(tmp.name)
         scripts = root / "mt-tests" / "scripts"
         scripts.mkdir(parents=True)
-        shutil.copy(Path(__file__).parent / "mt-tests" / "scripts" / "run_on_device.py", scripts)
+        shutil.copy(Path(__file__).resolve().parents[1] / "mt-tests" / "scripts" / "run_on_device.py", scripts)
         (root / "Run").mkdir()
         (root / "Run" / "config.json").write_text(json.dumps(config))
         return subprocess.run([sys.executable, str(scripts / "run_on_device.py"), "--help"],
@@ -156,7 +156,7 @@ class RunnerConfigTests(unittest.TestCase):
         root = Path(tmp.name)
         scripts = root / "mt-tests" / "scripts"
         scripts.mkdir(parents=True)
-        shutil.copy(Path(__file__).parent / "mt-tests" / "scripts" / "run_on_device.py", scripts)
+        shutil.copy(Path(__file__).resolve().parents[1] / "mt-tests" / "scripts" / "run_on_device.py", scripts)
         (scripts / "test_runner_core.py").write_text(
             "import json, os, sys\n"
             "print(json.dumps({k: os.environ.get(k, '') for k in "

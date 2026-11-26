@@ -11,4 +11,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
-        run: python3 -m unittest test_ci_delivery test_controller_client test_platform_targeting test_vision_analyzer test_app_api test_plugin_client test_snapshots test_builds test_build_plugin_client test_platform_steps test_mt_file_payload test_mt_payload_upload test_test_variables test_stale_runs test_projects test_viewer_auth test_security_hardening test_run_commit
+        run: python3 -m unittest discover -s tests -t .

@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 import app
 import security_utils as sec
-from build_fixture import BUILD_ID, add_build
-from test_app_api import FAKE_RUNNER, TEST_COOKIE, ServerCase, raw_get
+from tests.build_fixture import BUILD_ID, add_build
+from tests.test_app_api import FAKE_RUNNER, TEST_COOKIE, ServerCase, raw_get
 
 
 def raw_request(port, head, body=b"", auth=True):

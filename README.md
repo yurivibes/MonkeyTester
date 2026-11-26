@@ -99,13 +99,10 @@ Optional, only for `generate_placeholders.py`: `python3 -m pip install --user pi
 ```bash
 python3 --version          # 3.10 or newer
 ffmpeg -hide_banner -encoders | grep -E 'libvpx-vp9|libopus'   # both listed
-python3 -m unittest test_ci_delivery test_controller_client test_platform_targeting \
-  test_vision_analyzer test_app_api test_plugin_client test_snapshots test_builds \
-  test_build_plugin_client test_platform_steps test_mt_file_payload test_mt_payload_upload test_test_variables \
-  test_stale_runs test_projects test_security_hardening   # or: nix run .#tests
+python3 -m unittest discover -s tests -t .   # or: nix run .#tests
 ```
 
-`nix run .#tests` and CI (`.github/workflows/test.yml`) run the same list; the tests need no
+`nix run .#tests` and CI (`.github/workflows/test.yml`) run the same command (every `tests/**/test_*.py`); the tests need no
 devices, controller or vision model. Then start the viewer (next section) and check
 `curl -s localhost:8089/health` answers `{"ok": true, ...}`.
 

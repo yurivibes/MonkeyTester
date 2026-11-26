@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mt-tests" / "scripts"))
 import controller_client as client
 
 PNG = b"\x89PNG" + b"0" * (client.MIN_RENDERED_SCREENSHOT_BYTES + 10)

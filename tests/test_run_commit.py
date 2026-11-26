@@ -8,8 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-from test_projects import FAKE_RUNNER, ProjectCase, core, load_submit
-from build_fixture import BUILD_ID, add_build
+from tests.test_projects import FAKE_RUNNER, ProjectCase, core, load_submit
+from tests.build_fixture import BUILD_ID, add_build
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
 MESSAGE = "Fix the login button\n\nIt was off by one pixel."

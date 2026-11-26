@@ -17,7 +17,7 @@ from unittest.mock import patch
 import app
 import builds
 import viewer_auth as auth
-from build_fixture import BUILD_ID, add_build
+from tests.build_fixture import BUILD_ID, add_build
 
 
 class Peer(BaseHTTPRequestHandler):

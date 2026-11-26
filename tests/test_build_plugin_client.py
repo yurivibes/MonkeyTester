@@ -2,7 +2,7 @@
 import unittest
 
 import build_plugin_client as bpc
-from fake_build_plugin import FORGE_TOKEN, REPO, TEMPLATES, FakeBuildPlugin, start
+from tests.fake_build_plugin import FORGE_TOKEN, REPO, TEMPLATES, FakeBuildPlugin, start
 
 
 class ClientCase(unittest.TestCase):

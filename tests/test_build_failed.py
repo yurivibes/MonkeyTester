@@ -15,16 +15,16 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mt-tests" / "scripts"))
 with patch.dict(os.environ, {"VISION_TESTS_DIR": tempfile.mkdtemp()}):
     import test_runner_core as core
     import run_on_device
 import app
-from test_app_api import ServerCase
-from build_fixture import BUILD_ID, add_build
+from tests.test_app_api import ServerCase
+from tests.build_fixture import BUILD_ID, add_build
 
 _spec = importlib.util.spec_from_file_location(
-    "submit_bf", Path(__file__).parent / "ci" / "mt-submit" / "submit.py")
+    "submit_bf", Path(__file__).resolve().parents[1] / "ci" / "mt-submit" / "submit.py")
 submit = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(submit)
 

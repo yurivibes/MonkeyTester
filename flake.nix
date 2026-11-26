@@ -37,18 +37,14 @@
           '';
         };
 
-        # Same module list as .github/workflows/test.yml.
+        # Same command as .github/workflows/test.yml: every tests/**/test_*.py.
         tests = pkgs.writeShellApplication {
           name = "monkeytester-tests";
           inherit runtimeInputs;
           text = ''
             ${requireCheckout}
             if [ "$#" -eq 0 ]; then
-              set -- test_ci_delivery test_controller_client test_platform_targeting \
-                test_vision_analyzer test_app_api test_plugin_client test_snapshots \
-                test_builds test_build_plugin_client test_platform_steps test_mt_file_payload \
-                test_mt_payload_upload test_test_variables test_stale_runs \
-                test_projects test_viewer_auth test_security_hardening
+              set -- discover -s tests -t .
             fi
             exec python3 -m unittest "$@"
           '';
@@ -59,7 +55,7 @@
         packages.tests = tests;
 
         # nix run              -> viewer on 0.0.0.0:8089 (nix run . -- <port> for another port)
-        # nix run .#tests      -> the CI unit tests (or: nix run .#tests -- <module> ...)
+        # nix run .#tests      -> the CI unit tests (or: nix run .#tests -- tests.test_app_api ...)
         apps.default = { type = "app"; program = "${viewer}/bin/monkeytester-viewer"; };
         apps.tests = { type = "app"; program = "${tests}/bin/monkeytester-tests"; };
 
