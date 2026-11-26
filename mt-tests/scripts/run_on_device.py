@@ -408,7 +408,10 @@ def main():
         print(f"\nTotal: {len(devices)} device(s)\n")
         sys.exit(0)
 
-    if not args.device and not args.ios_placeholder and not args.wait_for_platform:
+    # --build-failed alone is a run too: every platform failed to build, and
+    # the run reports those platforms' devices failed (nothing else to target).
+    if not args.device and not args.ios_placeholder and not args.wait_for_platform \
+            and not args.build_failed:
         print("ERROR: No device(s) specified.")
         print("\nUse --device <id> to target a device, or --list-devices to see them.")
         sys.exit(1)

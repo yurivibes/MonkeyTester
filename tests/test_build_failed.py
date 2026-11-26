@@ -56,6 +56,41 @@ class ParseTests(unittest.TestCase):
                          [("ios_device_1", "iPhone (none connected)")])
 
 
+class BuildFailedOnlyRunTests(unittest.TestCase):
+    """Every platform failed to build: --build-failed is the only target, and the
+    runner must still create the run (it used to exit 'No device(s) specified'
+    before making the run dir, so the viewer answered 'run directory wasn't
+    detected yet' and the Build & Test upload was rejected)."""
+
+    def test_build_failed_alone_creates_a_run_with_the_platform_unavailable(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            case = Path(d) / "tests" / "time-check"
+            case.mkdir(parents=True)
+            (case / "INSTRUCTION.txt").write_text("MODE: once\n")
+            (case / "01_a.txt").write_text("WAIT: 0\n")
+            out = Path(d) / "out"
+            out.mkdir()
+            log = Path(d) / "build_log_android.txt"
+            log.write_text("error: gradle exited 1\n")
+            env = {k: v for k, v in os.environ.items() if "CONTROLLER" not in k}
+            env.update(IOS_CONTROLLER_URL="http://127.0.0.1:9", VISION_TESTS_DIR=d)
+            script = Path(__file__).resolve().parents[1] / "mt-tests" / "scripts" / "run_on_device.py"
+            proc = subprocess.run(
+                [sys.executable, str(script), "--test-dir", str(case.parent), "--output-dir", str(out),
+                 "--build-failed", "android=build script exited with status 1",
+                 "--build-log", f"android={log}"],
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120)
+            self.assertNotIn("No device(s) specified", proc.stdout)
+            runs = [r for r in out.iterdir() if r.name.startswith("run_")]
+            self.assertEqual(len(runs), 1, proc.stdout[-2000:])
+            meta = json.loads((runs[0] / "run_metadata.json").read_text())
+            android = [dev for dev in meta["devices"] if dev["platform"] == "android"]
+            self.assertEqual(len(android), 1)
+            self.assertEqual(android[0]["status"], "unavailable")
+            self.assertIn("didn't build: build script exited with status 1", android[0]["error"])
+
+
 class RecordBuildFailureTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
