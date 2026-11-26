@@ -663,6 +663,14 @@ function renderBuildPanel(cfg) {
         + '<div class="settings-status" id="bpStatus"></div>';
     document.getElementById("bp_forge_kind").value = buildPanelSaved.forge_kind;
     updateBuildPanelSaveBtn();
+    // Re-check on every edit so "Save changes" lights up as soon as a field
+    // differs from the saved config (and greys again when it is put back).
+    ["bp_forge_kind", "bp_forge_url", "bp_token", "bp_viewer_url"].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener("input", updateBuildPanelSaveBtn);
+        el.addEventListener("change", updateBuildPanelSaveBtn);
+    });
     // Buttons act through listeners, never inline onclick handlers.
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
     on("bpSaveBtn", saveBuildPanel);
