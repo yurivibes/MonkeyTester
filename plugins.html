@@ -22,6 +22,9 @@
 .plugin-table-wrap { width: 100%; overflow-x: auto; margin-top: 4px; }
 .plugin-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .plugin-table th, .plugin-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+/* Body cells get an opaque palette fill so the page's 80px grid never shows
+   through the table; headers keep the slightly darker --card. */
+.plugin-table td { background: var(--surface); }
 .plugin-table th { background: var(--card); color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
 /* Same column widths in every section's table, so the three line up. */
 .plugin-table th:nth-child(1) { width: 13%; }
@@ -44,7 +47,7 @@
 .plugin-table .status-ok { color: var(--pass); }
 .plugin-table .status-bad { color: var(--fail); }
 .plugin-table .status-muted { color: var(--text-muted); }
-.plugin-table tr.plugin-row.configuring > td { background: color-mix(in srgb, var(--acid) 8%, transparent); }
+.plugin-table tr.plugin-row.configuring > td { background: color-mix(in srgb, var(--acid) 8%, var(--surface)); }
 .plugin-table tr.plugin-configure-row > td { background: var(--surface); padding: 10px 14px; }
 
 /* Configure panel (monkeytester-ai / config-owning plugins, build plugins):
