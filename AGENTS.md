@@ -483,7 +483,7 @@ mirror. Find the host from the remote you were asked to work against (`git remot
 - `master` changes only through a reviewed PR/MR that a maintainer merges. Never push to `master`
   and never merge your own PR/MR.
 - Work on a feature branch in its own git worktree, based on the remote's `master`.
-- CI is in `.github/workflows/`, which both GitHub Actions and Gitea Actions run. Its test job runs the same command as `nix run .#tests`; on a host without Actions, run that locally before opening the PR/MR. `ci/docs-drift.sh` fails a PR that changes source files without updating this file.
+- CI is in `.github/workflows/`, which both GitHub Actions and Gitea Actions run. Its test job runs the same command as `nix run .#tests`; on a host without Actions, run that locally before opening the PR/MR. `ci/docs-drift.sh` fails a PR that changes source files without updating this file. `.githooks/pre-push` runs the same check before a push (on the branch's changes since its merge-base with `origin/master`), so the drift shows up before the PR is opened. Enable it once per clone with `git config core.hooksPath .githooks`; that covers every worktree of the clone. `git push --no-verify` skips it. The hook passes its file list in `CHANGED_FILES`, which takes precedence over CI's `/tmp/changed_files.txt` (`tests/test_pre_push_hook.py`).
 - In docs, name sibling repos (e.g. MonkeyTester-Plugin-AI) instead of linking a host URL, link
   files in this repo with relative paths, and stick to CommonMark plus GFM tables and code
   fences (no host-only syntax such as `> [!NOTE]` callouts or `#123` autolinks).

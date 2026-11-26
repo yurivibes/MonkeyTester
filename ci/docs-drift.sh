@@ -5,6 +5,7 @@
 # Usage (CI):
 #   1. Write changed files list to /tmp/changed_files.txt (one per line)
 #   2. Run this script
+# Usage (local, .githooks/pre-push): CHANGED_FILES=<list file> bash ci/docs-drift.sh
 #
 # Env (set by .github/workflows/docs-drift.yml from the PR event; any CI or a
 # local run can set them too):
@@ -15,10 +16,16 @@
 set -euo pipefail
 
 # ── Collect changed files ─────────────────────────────────────────────────────
-if [ -f /tmp/changed_files.txt ]; then
-  cp /tmp/changed_files.txt /tmp/docs_drift_input.txt
+# CHANGED_FILES (the pre-push hook) wins, so a stale /tmp/changed_files.txt
+# from another run can't decide a local check.
+INPUT="$(mktemp)"
+trap 'rm -f "$INPUT"' EXIT
+if [ -n "${CHANGED_FILES:-}" ]; then
+  cp "$CHANGED_FILES" "$INPUT"
+elif [ -f /tmp/changed_files.txt ]; then
+  cp /tmp/changed_files.txt "$INPUT"
 else
-  git diff --name-only "${GITHUB_BASE_SHA:-HEAD~1}" "${GITHUB_HEAD_SHA:-HEAD}" > /tmp/docs_drift_input.txt
+  git diff --name-only "${GITHUB_BASE_SHA:-HEAD~1}" "${GITHUB_HEAD_SHA:-HEAD}" > "$INPUT"
 fi
 
 # ── Classification ────────────────────────────────────────────────────────────
@@ -53,10 +60,10 @@ while IFS= read -r file; do
     - $file"
       ;;
   esac
-done < /tmp/docs_drift_input.txt
+done < "$INPUT"
 
 # ── Report ────────────────────────────────────────────────────────────────────
-TOTAL=$(wc -l < /tmp/docs_drift_input.txt)
+TOTAL=$(wc -l < "$INPUT")
 echo "Changed files: $TOTAL"
 echo "AGENTS.md updated: $([ $AGENT_CHANGED -eq 1 ] && echo 'yes' || echo 'no')"
 
