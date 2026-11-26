@@ -221,7 +221,9 @@ Login is always required (`viewer_auth.py`; gate: `TestViewerHandler._authorize`
   logged; an old single-user `{username, password_hash, sessions}` file is migrated (that user
   becomes admin). Passwords: scrypt (N=2^14, r=8, p=1, per-user salt); an old 64-hex SHA-256 hash is
   accepted once and rehashed on that login; plaintext never. New passwords: 8+ chars, not `admin`.
-- Cookie `mt_auth` (256-bit random), `Path=/; Max-Age=400 days; HttpOnly; SameSite=Strict`,
+- Cookie `mt_auth_<port>` (256-bit random; per port because browsers share cookies across ports
+  of one host, so a PR-test instance would otherwise overwrite the live login; the old shared
+  `mt_auth` is still read and moved to the new name by `/api/auth/status`), `Path=/; Max-Age=400 days; HttpOnly; SameSite=Strict`,
   re-sent by `/api/auth/status`. Sessions never expire server-side.
 - CSRF: a cookie-authenticated POST needs `Origin` (else `Referer`) host == `Host`, else 403
   (a missing header is 403 too). Public POSTs (`/api/login`, `/api/logout`, `/api/theme`) are 403 only

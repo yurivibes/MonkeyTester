@@ -49,7 +49,8 @@ variables in the viewer (`MT_MANAGED_AI_PLUGIN_*`) are inert unless both are set
 - Passwords are hashed with `hashlib.scrypt` (N=2^14, r=8, p=1) and a per-user salt. An old bare
   SHA-256 hash (older viewers) is accepted once and rehashed on that login; plaintext is never
   accepted. New passwords need 8+ characters and can't be `admin`.
-- Session cookie `mt_auth`: random 256-bit token, `HttpOnly; SameSite=Strict`, stored server-side
+- Session cookie `mt_auth_<port>` (one name per viewer port, so instances on one host don't
+  overwrite each other's login; the old `mt_auth` name is still accepted): random 256-bit token, `HttpOnly; SameSite=Strict`, stored server-side
   only as its SHA-256. Sessions never expire server-side; Logout ends one browser's session.
   No `Secure` flag, because the viewer serves plain HTTP.
 - Login throttle per client IP: after 5 failures, each further failure doubles the wait

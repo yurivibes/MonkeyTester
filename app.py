@@ -2478,9 +2478,13 @@ PUBLIC_POST = {"/api/login", "/api/logout", "/api/theme"}
 API_PREFIXES = ("/api/", "/static/", "/stream/", "/convert-video/")
 
 
-def _session_cookie(token):
-    return (f"{auth.COOKIE_NAME}={token}; Path=/; Max-Age={auth.COOKIE_AGE}; "
+def _session_cookie(name, token):
+    return (f"{name}={token}; Path=/; Max-Age={auth.COOKIE_AGE}; "
             "HttpOnly; SameSite=Strict")
+
+
+def _expired_cookie(name):
+    return f"{name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"
 
 
 def _is_result_route(path):
@@ -2522,13 +2526,20 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
     auth_user = None    # {"username", "role", "default_password"} of the session
     auth_via = None     # "session", "ci_token", "runner", "build_request", None
 
+    def _cookie_name(self):
+        """This instance's session cookie name (mt_auth_<port>)."""
+        return auth.cookie_name(self.server.server_address[1])
+
     def _session_token(self):
-        """The mt_auth cookie's value, or ""."""
+        """The session cookie's value, or "". The per-port cookie wins; the
+        old shared mt_auth cookie is the fallback (it is checked against this
+        instance's own sessions like any token, and /api/auth/status then
+        moves it to the per-port name)."""
+        cookies = {}
         for cookie in (self.headers.get("Cookie") or "").split(";"):
             name, _, value = cookie.strip().partition("=")
-            if name == auth.COOKIE_NAME:
-                return value
-        return ""
+            cookies.setdefault(name, value)
+        return cookies.get(self._cookie_name()) or cookies.get(auth.LEGACY_COOKIE_NAME, "")
 
     def _origin_ok(self, required):
         """CSRF check: the Origin (else Referer) host must equal Host. With
@@ -2596,12 +2607,14 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         return False
 
     def _send_json_with_cookie(self, cookie_value, data, status=200):
-        """JSON plus a Set-Cookie header (written before the body)."""
+        """JSON plus Set-Cookie header(s) (written before the body).
+        `cookie_value` is one Set-Cookie value or a list of them."""
         payload = json.dumps(data).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Set-Cookie", cookie_value)
+        for value in ([cookie_value] if isinstance(cookie_value, str) else cookie_value):
+            self.send_header("Set-Cookie", value)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(payload)
@@ -2636,13 +2649,14 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             self.send_json_status(401, {"error": "Invalid username or password"})
             return
         auth.THROTTLE.succeeded(ip)
-        self._send_json_with_cookie(_session_cookie(token), {"success": True})
+        self._send_json_with_cookie(_session_cookie(self._cookie_name(), token), {"success": True})
 
     def handle_logout(self):
         """End this browser's session (others stay signed in) and clear its cookie."""
         auth.logout(self._session_token())
         self._send_json_with_cookie(
-            f"{auth.COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict", {"success": True})
+            [_expired_cookie(self._cookie_name()), _expired_cookie(auth.LEGACY_COOKIE_NAME)],
+            {"success": True})
 
     def handle_change_password(self):
         """POST /api/account/password {current_password, new_password}: any
@@ -2658,7 +2672,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         except auth.AuthError as e:
             self.send_json_status(e.status, {"error": e.message})
             return
-        self._send_json_with_cookie(_session_cookie(token), {"success": True})
+        self._send_json_with_cookie(_session_cookie(self._cookie_name(), token), {"success": True})
 
     def handle_users(self):
         """POST /api/users (admin), ONE action per request:
@@ -3169,7 +3183,8 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             if user:
                 # Every page asks for this: re-send the cookie so the
                 # browser's 400-day cap keeps moving and the login never ends.
-                self._send_json_with_cookie(_session_cookie(self._session_token()), status)
+                self._send_json_with_cookie(
+                    _session_cookie(self._cookie_name(), self._session_token()), status)
             else:
                 self.send_json(status)
 

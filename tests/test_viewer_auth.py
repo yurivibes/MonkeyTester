@@ -185,6 +185,55 @@ class LoginTests(AuthCase):
         self.assertIn("Max-Age=34560000", headers.get("Set-Cookie", ""))
 
 
+class PerPortCookieTests(AuthCase):
+    """Cookies ignore the port, so each viewer instance names its cookie
+    after its port: signing in to a PR-test instance on the same host must
+    not sign the user out of the live viewer."""
+
+    def raw_set_cookies(self, method, path, headers):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request(method, path, body=b"{}" if method == "POST" else None,
+                     headers={"Origin": f"http://127.0.0.1:{self.port}",
+                              "Content-Type": "application/json", **headers})
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+        return resp.status, resp.headers.get_all("Set-Cookie") or []
+
+    def test_login_cookie_is_named_after_the_port(self):
+        _, headers, _ = self.login(TEST_USER, TEST_PASSWORD)
+        self.assertTrue(self.cookie_of(headers).startswith(f"mt_auth_{self.port}="))
+
+    def test_another_instances_cookie_does_not_hide_this_one(self):
+        _, headers, _ = self.login(TEST_USER, TEST_PASSWORD)
+        mine = self.cookie_of(headers)
+        # The browser also holds a cookie from a viewer on another port
+        # and the old shared name (e.g. from a PR-test instance).
+        other = f"mt_auth_{self.port + 1}=someone-elses; mt_auth=someone-elses"
+        self.assertEqual(self.as_user(f"{other}; {mine}", "GET", "/api/runs")[0], 200)
+        self.assertEqual(self.as_user(f"{mine}; {other}", "GET", "/api/runs")[0], 200)
+
+    def test_old_shared_cookie_still_works_and_moves_to_the_port_name(self):
+        _, headers, _ = self.login(TEST_USER, TEST_PASSWORD)
+        token = self.cookie_of(headers).split("=", 1)[1]
+        status, cookies = self.raw_set_cookies("GET", "/api/auth/status",
+                                               {"Cookie": f"mt_auth={token}"})
+        self.assertEqual(status, 200)
+        self.assertEqual([c.split(";", 1)[0] for c in cookies], [f"mt_auth_{self.port}={token}"])
+        self.assertIn("Max-Age=34560000", cookies[0])
+
+    def test_logout_clears_both_names(self):
+        _, headers, _ = self.login(TEST_USER, TEST_PASSWORD)
+        mine = self.cookie_of(headers)
+        status, cookies = self.raw_set_cookies("POST", "/api/logout", {"Cookie": mine})
+        self.assertEqual(status, 200)
+        self.assertEqual(sorted(c.split(";", 1)[0] for c in cookies),
+                         sorted([f"mt_auth_{self.port}=", "mt_auth="]))
+        self.assertTrue(all("Max-Age=0" in c for c in cookies))
+        self.assertEqual(self.as_user(mine, "GET", "/api/runs")[0], 401)
+
+
 class CsrfTests(AuthCase):
     def test_cookie_write_needs_a_matching_origin(self):
         body = {"theme": "dark"}

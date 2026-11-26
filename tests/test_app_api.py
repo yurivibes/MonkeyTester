@@ -45,7 +45,8 @@ class Peer(BaseHTTPRequestHandler):
 TEST_USER = "tester"
 TEST_PASSWORD = "tester-password"
 TEST_SESSION = "test-session-token"
-TEST_COOKIE = f"{auth.COOKIE_NAME}={TEST_SESSION}"
+# The old shared cookie name: still accepted, so it works on any port.
+TEST_COOKIE = f"{auth.LEGACY_COOKIE_NAME}={TEST_SESSION}"
 TEST_PASSWORD_HASH = auth.hash_password(TEST_PASSWORD)
 
 
