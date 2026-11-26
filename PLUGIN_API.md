@@ -27,8 +27,10 @@ token as `Authorization: Bearer` or `X-Plugin-Token`):
   provider: "local"|"remote"|"copilot", copilot: {configured, user, last4, saved_at, model,
   models: [{id, name, vendor}], error}, remote: {url, model, models: [{id}], resize,
   key: {configured, last4}, error}, port, ollama_port, max_pixels, api_version: 3,
-  service}`.
-- `POST /config` — the viewer sends one change per call: `{model}` (local model),
+  service}`, plus `name` and `default_name` on renamable builds (see
+  [the rename call](#get-config--post-config-name-renamable-plugins-only)).
+- `POST /config` — the viewer sends one change per call: `{name}` (rename, renamable
+  builds only; sent first), `{model}` (local model),
   `{provider}` (`copilot` while signed out, or `remote` without `remote_url` +
   `remote_model` → 400 `invalid_request`), `{copilot_model}`, the remote keys together
   (`{remote_url?, remote_model?, remote_resize?, remote_api_key?}`; the plugin checks
@@ -112,6 +114,25 @@ takes only the address, and a `/health` without a valid name is refused
 renames the row (the pairing token moves with it); a name already registered at another
 address is refused (`name_taken`).
 
+Two optional fields let a plugin offer a **user-chosen name** (a renamable plugin):
+
+- `plugin.default_name` (string, same regex): the plugin's fixed ID. It never changes,
+  whatever the current name is. Missing → the viewer uses `plugin.name`.
+- `plugin.renamable` (bool, default `false`): `true` means the plugin accepts the rename
+  call below (`POST /config {"name"}`).
+
+```json
+"plugin": {"name": "vision", "default_name": "monkeytester-ai", "renamable": true, "version": "1.0.0"}
+```
+
+`plugin.name` is then the CURRENT name. The plugin owns it: it stores the custom name in
+its own persisted settings, reports it on `/health` right after the rename and after a
+restart; the viewer keeps no alias of its own. The viewer **identifies** a plugin by
+`default_name` (falling back to `name`) — monkeytester-ai is recognised by
+`default_name: "monkeytester-ai"` however the user named it — and **shows** `name` in the
+Plugins page's Name column (monkeytester-ai's row shows `monkeytester-ai` while it can't
+be reached).
+
 `capabilities` lists the optional parts of this contract the plugin supports.
 
 `docs` (optional) is the path of the plugin's documentation page, normally `"/docs"`
@@ -121,6 +142,33 @@ documentation, and the viewer shows no link.
 
 MonkeyTester refuses a plugin whose `contract` differs or whose `contract_version`
 is not one it supports.
+
+### `GET /config` / `POST /config {"name"}` (renamable plugins only)
+
+Only a plugin whose `/health` says `plugin.renamable: true` gets this call; any other
+plugin never receives it (the viewer answers a rename for it with 400 `not_renamable`
+itself). Auth like every non-`/health` route.
+
+- `POST /config {"name": "<new>"}`: a valid name (a string matching `PLUGIN_NAME_RE`) is
+  persisted and the reply is `{"ok": true, "config": {…, "name", "default_name"}}`;
+  `/health` reports the new `plugin.name` at once and after a restart. Not a string, or
+  not matching the regex → 400 `bad_request`. Posting the `default_name` value restores
+  the default name.
+- `GET /config` of a renamable plugin includes `"name": "<current>"` and
+  `"default_name": "<default>"`.
+
+The user renames a plugin in its **Configure** panel on Settings → Plugins (a **Name**
+field, a "Default: <default_name>" hint and **Reset to default**; the panel's Save sends
+it). The viewer relays the call: `POST /api/config/visual-model {name}` for
+monkeytester-ai (no re-key: its row key stays `monkeytester-ai`), `POST
+/api/config/plugins/<row>/config {name}` for a device plugin, whose registry row is then
+re-keyed to the new name like an address-edit rename (pairing token moved, response
+`renamed_from`). Before calling the plugin the viewer refuses a name another registered
+row (device, build or the vision-model plugin) already uses (400 `name_taken`); the
+plugin's current name is a no-op. Both routes are admin-only.
+
+**`PLUGIN: <name>` steps use the current name**, so renaming a device plugin means
+updating the tests that call it.
 
 ### `GET /docs` (optional)
 

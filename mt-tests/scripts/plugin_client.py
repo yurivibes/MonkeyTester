@@ -351,6 +351,54 @@ def load_plugins_from_env(env=None):
 PLUGIN_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 
+def valid_plugin_name(value):
+    """True for a str matching PLUGIN_NAME_RE (the contract's name rule)."""
+    return isinstance(value, str) and PLUGIN_NAME_RE.fullmatch(value) is not None
+
+
+def plugin_names(plugin):
+    """(name, default_name, renamable) from a /health `plugin` field.
+
+    `name` is the CURRENT name the plugin reports (the object's `name`, or the
+    string form `"plugin": "x"`), None when missing or not matching
+    PLUGIN_NAME_RE. `default_name` is the plugin's fixed ID: its optional
+    `default_name` when valid, else `name` (older plugins don't send it).
+    `renamable` is true only when the plugin says `renamable: true` (and
+    reports a valid name): only then does it accept POST /config {"name"}."""
+    if isinstance(plugin, dict):
+        name, default, renamable = plugin.get("name"), plugin.get("default_name"), plugin.get("renamable")
+    else:
+        name, default, renamable = plugin, None, False
+    name = name if valid_plugin_name(name) else None
+    default = default if valid_plugin_name(default) else name
+    return name, default, renamable is True and name is not None
+
+
+def plugin_identity(plugin):
+    """The fixed ID the viewer identifies a plugin by: /health
+    `plugin.default_name`, falling back to `plugin.name` (None when neither
+    is usable). Never the current name alone: a renamed monkeytester-ai
+    still has default_name monkeytester-ai."""
+    return plugin_names(plugin)[1]
+
+
+def rename_plugin(client, name, timeout=10):
+    """POST /config {"name": name} to a renamable plugin (PLUGIN_API.md:
+    only a plugin whose /health says renamable: true gets this call). The
+    plugin persists it and reports it as plugin.name from then on. Returns
+    {name, default_name} from its reply — nothing else of a plugin's config
+    is passed on. Raises PluginError (the plugin's 400 bad_request for a
+    name it refuses)."""
+    if not valid_plugin_name(name):
+        raise PluginError(f"name {name!r} must match {PLUGIN_NAME_RE.pattern}", "bad_request",
+                          plugin=client.name)
+    body = client._request("POST", "/config", {"name": name}, timeout=timeout)
+    config = body.get("config") if isinstance(body.get("config"), dict) else body
+    current = config.get("name") if valid_plugin_name(config.get("name")) else name
+    default = config.get("default_name")
+    return {"name": current, "default_name": default if valid_plugin_name(default) else ""}
+
+
 def parse_config_plugins(config):
     """The config.json `plugins` map {name: url} -> {name: normalised url}, or
     None when the key is absent (MT_PLUGINS is still the source of the list).
@@ -470,15 +518,17 @@ def normalize_plugin_url(url):
 
 def ai_validate_address(url, token=None, timeout=5):
     """Check that `url` is a monkeytester-ai plugin the pairing token opens:
-    GET /health speaks the plugin contract and names plugin monkeytester-ai,
-    and GET /config with the token answers 200. Returns the normalised url;
-    raises PluginError with the reason (nothing is stored by the caller then)."""
+    GET /health speaks the plugin contract and identifies as monkeytester-ai
+    (plugin.default_name, or plugin.name for builds without default_name —
+    never the current name alone, which the user may have changed), and GET
+    /config with the token answers 200. Returns the normalised url; raises
+    PluginError with the reason (nothing is stored by the caller then)."""
     url = normalize_plugin_url(url)
     client = PluginClient(AI_PLUGIN_NAME, url, token=token or None, timeout=timeout)
     body = client.health(timeout=timeout)
     plugin = body.get("plugin")
     name = plugin.get("name") if isinstance(plugin, dict) else plugin
-    if name != AI_PLUGIN_NAME:
+    if plugin_identity(plugin) != AI_PLUGIN_NAME:
         raise PluginError(f"{url} is plugin {name!r}, not {AI_PLUGIN_NAME!r}", "wrong_plugin",
                           plugin=AI_PLUGIN_NAME)
     try:
@@ -601,7 +651,12 @@ def public_ai_config(body):
             "copilot": public_copilot(body.get("copilot")),
             "remote": public_remote(body.get("remote")),
             "api_version": body.get("api_version"),
-            "service": body.get("service")}
+            "service": body.get("service"),
+            # A renamable plugin's GET /config carries its current and default
+            # name (PLUGIN_API.md); "" for older builds.
+            "name": body["name"] if valid_plugin_name(body.get("name")) else "",
+            "default_name": (body["default_name"] if valid_plugin_name(body.get("default_name"))
+                             else "")}
 
 
 def ai_models(client, timeout=None):
@@ -635,7 +690,7 @@ def ai_save_config(client, payload, timeout=10):
     the same request). Returns (public config, new_token or ""). The new
     token is the plugin's one-time reply to a rotation; callers store it and
     never echo it."""
-    allowed = {"model", "provider", "copilot_model", "generate", *REMOTE_KEYS}
+    allowed = {"model", "provider", "copilot_model", "generate", "name", *REMOTE_KEYS}
     unknown = set(payload) - allowed
     if unknown:
         raise PluginError(f"unsupported /config keys: {', '.join(sorted(unknown))}",
