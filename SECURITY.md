@@ -18,18 +18,18 @@ this repo and gives the overview for the whole MonkeyTester family. It does **no
 
 | Service | Host | Port | Bind (default) | Auth |
 |---|---|---|---|---|
-| Viewer `app.py` (this repo) | Linux .70 | 8089 | `0.0.0.0` (`VT_VIEWER_BIND`) | Login always required (accounts, sessions); CI token for CI uploads; runner token for press events |
+| Viewer `app.py` (this repo) | Linux .70 | 8089 | `0.0.0.0` (`MT_VIEWER_BIND`) | Login always required (accounts, sessions); CI token for CI uploads; runner token for press events |
 | ESP32 sensor plugin | Linux | 8091 | `127.0.0.1` (`PLUGIN_BIND`) | `PLUGIN_TOKEN` (`X-Plugin-Token`); mandatory on a non-loopback bind |
 | ESP32 hub plugin | Linux | 8093 | `127.0.0.1` (`PLUGIN_BIND`) | `PLUGIN_TOKEN`; mandatory on a non-loopback bind |
 | ESP32 fake hub | Linux | LAN | LAN on purpose: the real sensor board connects to it over Wi-Fi | see that repo's SECURITY.md |
 | Mobile-Controller | Mac .71 | 8090 | LAN | `CONTROLLER_TOKEN` (`X-Controller-Token`); mandatory on a non-loopback bind |
 | Build-Local plugin | Mac | 8094 | LAN | `PLUGIN_TOKEN` (`X-Plugin-Token`); mandatory on a non-loopback bind |
-| MonkeyTester-Plugin-AI plugin | Mac | 8091 | `--lan` | `VTAI_TOKEN` (pairing token) |
+| MonkeyTester-Plugin-AI plugin | Mac | 8091 | `--lan` | `MTAI_TOKEN` (pairing token) |
 
 Every service compares tokens with `hmac.compare_digest`. `/health` stays unauthenticated on
 each service and only says that the service is up (no config, no secrets). The viewer reaches
 the ESP32 plugins on `127.0.0.1` and the Mac services over the LAN. The legacy managed-mode
-variables in the viewer (`VT_MANAGED_AI_PLUGIN_*`) are inert unless both are set.
+variables in the viewer (`MT_MANAGED_AI_PLUGIN_*`) are inert unless both are set.
 
 ## The viewer (this repo)
 
@@ -49,7 +49,7 @@ variables in the viewer (`VT_MANAGED_AI_PLUGIN_*`) are inert unless both are set
 - Passwords are hashed with `hashlib.scrypt` (N=2^14, r=8, p=1) and a per-user salt. An old bare
   SHA-256 hash (older viewers) is accepted once and rehashed on that login; plaintext is never
   accepted. New passwords need 8+ characters and can't be `admin`.
-- Session cookie `vt_auth`: random 256-bit token, `HttpOnly; SameSite=Strict`, stored server-side
+- Session cookie `mt_auth`: random 256-bit token, `HttpOnly; SameSite=Strict`, stored server-side
   only as its SHA-256. Sessions never expire server-side; Logout ends one browser's session.
   No `Secure` flag, because the viewer serves plain HTTP.
 - Login throttle per client IP: after 5 failures, each further failure doubles the wait
@@ -64,22 +64,22 @@ variables in the viewer (`VT_MANAGED_AI_PLUGIN_*`) are inert unless both are set
 
 - **CI token** (Settings → Configuration → CI token, admins): "Generate new CI token" shows it
   **once**; afterwards only `{configured, last4, saved_at}` is returned. CI sends it as
-  `Authorization: Bearer <token>` (`ci/visual-test/submit.py` reads `VT_CI_TOKEN`). It opens only
+  `Authorization: Bearer <token>` (`ci/mt-submit/submit.py` reads `MT_CI_TOKEN`). It opens only
   `POST /api/run-test` and `GET /api/runs/<run>/result` — no pages, no settings.
 - **Build plugin uploads:** an upload naming a build the viewer started, while that build is
   still waiting for its apps (no run attached), is accepted once without a token. The build id
   (`build_` + 48 random bits) is known only to the viewer and the plugin it sent it to. Other
   uploads need a session or the CI token.
 - **Runner token:** the viewer makes a fresh secret at each start and passes it to the test
-  runners it launches (`VT_RUNNER_TOKEN`); they send it as `X-VT-Runner-Token`, accepted only on
+  runners it launches (`MT_RUNNER_TOKEN`); they send it as `X-MT-Runner-Token`, accepted only on
   `POST /api/press-event`.
 - **Service tokens** (Settings → Configuration → Service tokens, admins): the Mobile-Controller
   token and each plugin's token (device and build plugins). Write-only: a password field, then
   only `{configured, last4, saved_at}`; Replace/Remove. Each is checked against the service's
   authenticated endpoint before it is stored (controller `GET /devices`, device plugin
   `GET /devices`, build plugin `GET /config`).
-- **Old environment variables** (`VT_CI_TOKEN`, `CONTROLLER_TOKEN` / `IOS_CONTROLLER_TOKEN`,
-  `PLUGIN_TOKEN` / `VT_PLUGIN_TOKEN_<NAME>`) are imported into Settings once on the first start
+- **Old environment variables** (`MT_CI_TOKEN`, `CONTROLLER_TOKEN` / `IOS_CONTROLLER_TOKEN`,
+  `PLUGIN_TOKEN` / `MT_PLUGIN_TOKEN_<NAME>`) are imported into Settings once on the first start
   and then ignored: the viewer's environment, and so every runner it starts, mirrors
   `service_tokens.json`.
 
@@ -96,7 +96,7 @@ returned by any GET or written to the logs.
 2. Create accounts for other people on Settings → Users.
 3. Settings → Configuration → Service tokens: enter the Mobile-Controller's `CONTROLLER_TOKEN`
    and each plugin's `PLUGIN_TOKEN`.
-4. Settings → Configuration → CI token: generate one and store it as the `VT_CI_TOKEN` secret of
+4. Settings → Configuration → CI token: generate one and store it as the `MT_CI_TOKEN` secret of
    any CI that uploads with `submit.py`.
 
 ## Not covered
@@ -144,7 +144,7 @@ Shared helpers live in `security_utils.py` and are unit-tested in `test_security
 
 ### Request limits
 - A POST body without a `Content-Length` header (chunked) gets 411. A malformed length gets 400.
-- JSON bodies are capped at 1 MiB. `/api/run-test` uploads are capped at `VT_MAX_UPLOAD_MB`
+- JSON bodies are capped at 1 MiB. `/api/run-test` uploads are capped at `MT_MAX_UPLOAD_MB`
   (default 600 MiB, the old hard-coded cap; real APK/IPA zips are about 35 MB). The body is read
   into memory, so this cap also bounds memory use. Over a cap → 413, before any of the body
   is read.
@@ -186,11 +186,11 @@ Shared helpers live in `security_utils.py` and are unit-tested in `test_security
 - Secrets are plaintext at rest, readable by the viewer's user.
 
 ### Static analysis
-`nix run nixpkgs#python3Packages.bandit -- -r . -x ./visual-tests/tests,./test_*.py` reports
+`nix run nixpkgs#python3Packages.bandit -- -r . -x ./mt-tests/tests,./test_*.py` reports
 no medium or high findings. The suppressed ones carry `# nosec <id>`, with the reason in the
 comment next to them: the by-design `SCRIPT`/`DIAGNOSE` shell (B602), `urlopen` right after the
 http(s) check (B310), and the fixed-argv `ffmpeg`/runner launches (B603/B607). The default
-`0.0.0.0` bind (B104) is intended: the viewer is a LAN service, and `VT_VIEWER_BIND` narrows it.
+`0.0.0.0` bind (B104) is intended: the viewer is a LAN service, and `MT_VIEWER_BIND` narrows it.
 The low findings that remain are `try/except: pass` blocks, `import subprocess`, and
 "hardcoded password" false positives on token field names.
 

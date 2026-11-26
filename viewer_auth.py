@@ -18,8 +18,8 @@ tokens the viewer sends to other services and the CI token it accepts:
      "plugins": {name: {"token", "saved_at"}},
      "imported_env": true}
 Plaintext at rest: a key kept on the same disk would add no protection.
-The old environment variables (VT_CI_TOKEN, CONTROLLER_TOKEN /
-IOS_CONTROLLER_TOKEN, PLUGIN_TOKEN / VT_PLUGIN_TOKEN_<NAME>) are imported
+The old environment variables (MT_CI_TOKEN, CONTROLLER_TOKEN /
+IOS_CONTROLLER_TOKEN, PLUGIN_TOKEN / MT_PLUGIN_TOKEN_<NAME>) are imported
 once, then ignored.
 """
 import hashlib
@@ -38,7 +38,7 @@ import builds
 AUTH_CONFIG_FILE = Path(__file__).parent / "auth_config.json"
 SERVICE_TOKENS_FILE = Path(__file__).parent / "service_tokens.json"
 
-COOKIE_NAME = "vt_auth"
+COOKIE_NAME = "mt_auth"
 # A login never expires on the server; only Logout, a password change/reset
 # or deleting the user ends it. Browsers cap cookie lifetimes at 400 days, so
 # the cookie is re-sent on every page load (/api/auth/status).
@@ -54,11 +54,11 @@ MIN_PASSWORD = 8
 SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1
 
 # The runner subprocesses report press events back with this secret (env
-# VT_RUNNER_TOKEN). Made fresh at every viewer start, never stored.
+# MT_RUNNER_TOKEN). Made fresh at every viewer start, never stored.
 RUNNER_TOKEN = secrets.token_urlsafe(32)
-RUNNER_HEADER = "X-VT-Runner-Token"
+RUNNER_HEADER = "X-MT-Runner-Token"
 
-LEGACY_TOKEN_ENV = ("VT_CI_TOKEN", "CONTROLLER_TOKEN", "IOS_CONTROLLER_TOKEN", "PLUGIN_TOKEN")
+LEGACY_TOKEN_ENV = ("MT_CI_TOKEN", "CONTROLLER_TOKEN", "IOS_CONTROLLER_TOKEN", "PLUGIN_TOKEN")
 
 _LOCK = threading.RLock()
 
@@ -459,7 +459,7 @@ def set_service_token(service, token):
 
 
 def token_env_name(name):
-    return "VT_PLUGIN_TOKEN_" + re.sub(r"[^0-9A-Za-z]", "_", name).upper()
+    return "MT_PLUGIN_TOKEN_" + re.sub(r"[^0-9A-Za-z]", "_", name).upper()
 
 
 def import_env_tokens(plugins, env=None):
@@ -475,7 +475,7 @@ def import_env_tokens(plugins, env=None):
         data = load_tokens()
         if data.get("imported_env"):
             return imported
-        ci = (env.get("VT_CI_TOKEN") or "").strip()
+        ci = (env.get("MT_CI_TOKEN") or "").strip()
         if "ci" not in data and ci:
             data["ci"] = _entry(ci)
             imported.append("ci")
@@ -502,12 +502,12 @@ def import_env_tokens(plugins, env=None):
 
 def apply_to_environ(environ=None):
     """Make the process environment mirror Settings: the old token variables
-    are dropped and CONTROLLER_TOKEN / VT_PLUGIN_TOKEN_<NAME> are set from
+    are dropped and CONTROLLER_TOKEN / MT_PLUGIN_TOKEN_<NAME> are set from
     service_tokens.json, so every client (and the runner, which inherits a
     copy) sends exactly the stored tokens."""
     environ = os.environ if environ is None else environ
     for key in list(environ):
-        if key in LEGACY_TOKEN_ENV or key.startswith("VT_PLUGIN_TOKEN_"):
+        if key in LEGACY_TOKEN_ENV or key.startswith("MT_PLUGIN_TOKEN_"):
             environ.pop(key, None)
     data = load_tokens()
     ctl = (data.get("controller") or {}).get("token") or ""

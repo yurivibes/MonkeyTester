@@ -61,7 +61,7 @@ def run_flags():
     flags = {}
     if snapshots.record_mode():
         flags['record_snapshots'] = True
-    case = (os.environ.get("VT_CASE") or "").strip()
+    case = (os.environ.get("MT_CASE") or "").strip()
     if case:
         flags['case'] = case
     repo = run_repo()
@@ -74,8 +74,8 @@ def run_flags():
 
 
 def run_repo():
-    """The run's project (owner/repo) from VT_REPO, set by the viewer; "" if none."""
-    repo = (os.environ.get("VT_REPO") or "").strip().strip("/")
+    """The run's project (owner/repo) from MT_REPO, set by the viewer; "" if none."""
+    repo = (os.environ.get("MT_REPO") or "").strip().strip("/")
     return repo if re.fullmatch(r"(?!\.+/)[A-Za-z0-9_.-]+/(?!\.+$)[A-Za-z0-9_.-]+", repo) else ""
 
 
@@ -83,14 +83,14 @@ COMMIT_MESSAGE_MAX = 4000
 
 
 def run_commit():
-    """The commit under test from VT_COMMIT / VT_COMMIT_MESSAGE (set by the
+    """The commit under test from MT_COMMIT / MT_COMMIT_MESSAGE (set by the
     viewer from submit.py's fields): {'commit', 'commit_message'}, each only
     when present and well-formed."""
     out = {}
-    sha = (os.environ.get("VT_COMMIT") or "").strip().lower()
+    sha = (os.environ.get("MT_COMMIT") or "").strip().lower()
     if re.fullmatch(r"[0-9a-f]{7,64}", sha):
         out['commit'] = sha
-    message = re.sub(r"[^\S\n]*\r?\n", "\n", os.environ.get("VT_COMMIT_MESSAGE") or "")
+    message = re.sub(r"[^\S\n]*\r?\n", "\n", os.environ.get("MT_COMMIT_MESSAGE") or "")
     message = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", message).strip()[:COMMIT_MESSAGE_MAX]
     if message:
         out['commit_message'] = message
@@ -510,7 +510,7 @@ def configured_variables(config_files=None, env_text=None, repo=None):
     viewer's `Run/config.json` — Settings -> Test Variables saves the
     shared ones there and overrides the defaults — then the run's project
     entry in `project_variables` ({owner/repo: {NAME: value}}, picked by
-    `repo`, default VT_REPO), then the `VT_TEST_VARS` env as the same map
+    `repo`, default MT_REPO), then the `MT_TEST_VARS` env as the same map
     as a JSON string, which overrides all.
     Keys are upper-cased; a bad entry is skipped with a warning so a
     mistyped setting never breaks a run. A test file's own `KEY=VALUE`
@@ -522,7 +522,7 @@ def configured_variables(config_files=None, env_text=None, repo=None):
             Path(__file__).resolve().parents[2] / "Run" / "config.json",
         ]
     if env_text is None:
-        env_text = os.environ.get("VT_TEST_VARS", "")
+        env_text = os.environ.get("MT_TEST_VARS", "")
     if repo is None:
         repo = run_repo()
     loaded = {}
@@ -548,7 +548,7 @@ def configured_variables(config_files=None, env_text=None, repo=None):
             from_env = json.loads(env_text)
         except ValueError:
             shown = env_text if len(env_text) <= 120 else env_text[:120] + "..."
-            print(f"WARNING: ignoring bad VT_TEST_VARS (not JSON): {shown}", file=sys.stderr)
+            print(f"WARNING: ignoring bad MT_TEST_VARS (not JSON): {shown}", file=sys.stderr)
             from_env = None
         if isinstance(from_env, dict):
             loaded.update(from_env)
@@ -1374,7 +1374,7 @@ def parse_test_file(test_path):
     return steps
 
 
-# Device plugins from VT_PLUGINS, loaded on the first PLUGIN step so each
+# Device plugins from MT_PLUGINS, loaded on the first PLUGIN step so each
 # plugin's /health and /actions are fetched once per run.
 _plugins = None
 
@@ -1429,7 +1429,7 @@ def _run_plugin_step(step, args):
         return False
     client = plugins.get(plugin)
     if client is None:
-        known = ", ".join(sorted(plugins)) or "none (set VT_PLUGINS=name=url)"
+        known = ", ".join(sorted(plugins)) or "none (set MT_PLUGINS=name=url)"
         print(f"  [{_ts()}] -> ERROR: Unknown plugin '{plugin}'. Configured plugins: {known}")
         return False
     block = step.get('block')

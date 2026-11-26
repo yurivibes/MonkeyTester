@@ -5,7 +5,7 @@ Build plugins (build-local) run this after building a branch: the viewer
 serves it at GET /ci/submit.py, so the plugin downloads it and runs it with
 python3 from the checkout's root, always with --no-wait and --build-request.
 
-Every visual-tests/<case>/ directory (one INSTRUCTION.txt plus test .txt
+Every mt-tests/<case>/ directory (one INSTRUCTION.txt plus test .txt
 files) goes into ONE run: the viewer runs every case, in name order, on every
 device. Give --android-app and --ios-app together to cover the Android phones
 and the iPhones in that run; --app with --platform submits a single platform.
@@ -19,7 +19,7 @@ the test results itself. Without it the script waits for the verdict and
 exits 0 only if at least one test ran and every test passed: rejected
 uploads, install failures, crashes, timeouts and empty runs all fail.
 
-Standard library only. Credential: the viewer's CI token from the VT_CI_TOKEN
+Standard library only. Credential: the viewer's CI token from the MT_CI_TOKEN
 environment variable (never the command line), sent as `Authorization: Bearer`
 (Settings -> Configuration -> CI token). Without it the viewer accepts only an
 upload for a build it started itself that is still waiting for its apps (the
@@ -172,7 +172,7 @@ def case_parts(case_dirs, payloads_by_case):
     <case>/<rel>."""
     files = []
     if len(case_dirs) > 1:
-        # Run-wide suite order (visual-tests/SETUP.txt): staged at the tests
+        # Run-wide suite order (mt-tests/SETUP.txt): staged at the tests
         # root so the runner can fix the case order. Only for multi-case
         # uploads; a single picked case needs no order.
         setup = case_dirs[0].parent / "SETUP.txt"
@@ -192,7 +192,7 @@ def case_parts(case_dirs, payloads_by_case):
 def request_json(url, data=None, content_type=None, timeout=60):
     """Return (http_status, parsed_json). Raises URLError if unreachable."""
     headers = {"Accept": "application/json"}
-    token = os.environ.get("VT_CI_TOKEN", "").strip()
+    token = os.environ.get("MT_CI_TOKEN", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if content_type:
@@ -372,7 +372,7 @@ def run(args):
         result = wait_for_result(args, run_id)
 
     passed = result.get("status") == "passed"
-    print(f"\nVisual tests ({' + '.join([*apps, *failed])}; {names_list}):")
+    print(f"\nMonkeyTester tests ({' + '.join([*apps, *failed])}; {names_list}):")
     print(f"  {'PASS' if passed else 'FAIL'}  passed={result.get('passed', 0)} "
           f"failed={result.get('failed', 0)} cancelled={result.get('cancelled', 0)} "
           f"unavailable={result.get('unavailable', 0)} "
@@ -432,7 +432,7 @@ def main(argv=None):
                              "every test UNAVAILABLE with this error")
     parser.add_argument("--platform", choices=sorted(PLATFORM_EXTENSIONS),
                         help="platform of --app")
-    parser.add_argument("--tests-dir", default="visual-tests")
+    parser.add_argument("--tests-dir", default="mt-tests")
     parser.add_argument("--branch", default=default_branch(),
                         help="branch label shown in the viewer (default: GITHUB_REF_NAME when set)")
     parser.add_argument("--commit", default=None,

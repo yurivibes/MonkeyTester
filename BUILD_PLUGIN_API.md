@@ -104,7 +104,7 @@ branch, default first.
 ### `GET /repos/<owner>/<repo>/cases?ref=<branch>`
 
 `{"repo": "o/r", "ref": "feat/x", "cases": ["device-setup", "onboarding"], "recipes": {"android": true, "ios": true}}`
-— the `visual-tests/<case>/INSTRUCTION.txt` folders on that branch, sorted, and which
+— the `mt-tests/<case>/INSTRUCTION.txt` folders on that branch, sorted, and which
 build scripts the branch has. Unknown branch → 404.
 
 ### `POST /builds`
@@ -167,13 +167,13 @@ from the root of a clean checkout of the branch, with:
 
 | Variable | Value |
 |---|---|
-| `VT_PLATFORM` | `android` or `ios` |
-| `VT_OUTPUT` | where the script must write the app: a `.apk` (Android) or a signed `.ipa` (iOS) |
-| `VT_BRANCH` | the branch being built |
-| `VT_CASES` | comma-separated case names |
-| `VT_REQUEST_ID` | the viewer's build id |
+| `MT_PLATFORM` | `android` or `ios` |
+| `MT_OUTPUT` | where the script must write the app: a `.apk` (Android) or a signed `.ipa` (iOS) |
+| `MT_BRANCH` | the branch being built |
+| `MT_CASES` | comma-separated case names |
+| `MT_REQUEST_ID` | the viewer's build id |
 
-Exit status `0` with a file at `VT_OUTPUT` is a successful build; anything else is a build
+Exit status `0` with a file at `MT_OUTPUT` is a successful build; anything else is a build
 error, reported with the script's last `error:` lines and its log.
 
 ## Versioning

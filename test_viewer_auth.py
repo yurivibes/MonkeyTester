@@ -30,7 +30,7 @@ def mode(path):
 
 def load_submit():
     spec = importlib.util.spec_from_file_location(
-        "submit", Path(app.__file__).parent / "ci" / "visual-test" / "submit.py")
+        "submit", Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py")
     submit = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(submit)
     return submit
@@ -327,7 +327,7 @@ class AccountAndUsersTests(AuthCase):
                                     {"current_password": "admin", "new_password": "a-real-password"})
         self.assertEqual(status, 200)
         self.assertFalse(self.as_user(self.cookie_of(h), "GET", "/api/auth/status")[2]["default_password"])
-        self.assertIn("vt-default-password-banner", app.SHARED_JS)
+        self.assertIn("mt-default-password-banner", app.SHARED_JS)
 
 
 class CiTokenTests(AuthCase):
@@ -416,7 +416,7 @@ class CiTokenTests(AuthCase):
         def fake_urlopen(req, timeout):
             seen.update(req.headers)
             raise OSError("stop")
-        with patch.dict(os.environ, {"VT_CI_TOKEN": "ci-abc"}), \
+        with patch.dict(os.environ, {"MT_CI_TOKEN": "ci-abc"}), \
                 patch.object(submit.urllib.request, "urlopen", fake_urlopen):
             with self.assertRaises(OSError):
                 submit.request_json("http://127.0.0.1:1/api/runs/run_1/result")
@@ -426,7 +426,7 @@ class CiTokenTests(AuthCase):
         self.runner()
         add_build()
         auth.set_service_token("controller", "ctl-from-settings")
-        with patch.dict(os.environ, {"PLUGIN_TOKEN": "old-shared", "VT_CI_TOKEN": "old-ci",
+        with patch.dict(os.environ, {"PLUGIN_TOKEN": "old-shared", "MT_CI_TOKEN": "old-ci",
                                      "IOS_CONTROLLER_TOKEN": "old-ios"}):
             status, body = self.upload({})
         self.assertEqual(status, 200, body)
@@ -435,9 +435,9 @@ class CiTokenTests(AuthCase):
         while not env_file.exists() and time.time() < deadline:
             time.sleep(0.05)
         env = json.loads(env_file.read_text())
-        self.assertEqual(env.get("VT_RUNNER_TOKEN"), auth.RUNNER_TOKEN)
+        self.assertEqual(env.get("MT_RUNNER_TOKEN"), auth.RUNNER_TOKEN)
         self.assertEqual(env.get("CONTROLLER_TOKEN"), "ctl-from-settings")
-        for old in ("PLUGIN_TOKEN", "VT_CI_TOKEN", "IOS_CONTROLLER_TOKEN"):
+        for old in ("PLUGIN_TOKEN", "MT_CI_TOKEN", "IOS_CONTROLLER_TOKEN"):
             self.assertNotIn(old, env)
 
 
@@ -514,8 +514,8 @@ class ServiceTokenTests(AuthCase):
 
 class EnvImportTests(AuthCase):
     def test_old_env_tokens_are_imported_once_then_ignored(self):
-        env = {"VT_CI_TOKEN": "ci-from-env-1", "IOS_CONTROLLER_TOKEN": "ctl-from-env",
-               "PLUGIN_TOKEN": "shared-env", "VT_PLUGIN_TOKEN_ESP32_HUB": "hub-env"}
+        env = {"MT_CI_TOKEN": "ci-from-env-1", "IOS_CONTROLLER_TOKEN": "ctl-from-env",
+               "PLUGIN_TOKEN": "shared-env", "MT_PLUGIN_TOKEN_ESP32_HUB": "hub-env"}
         plugins = {"esp32-hub": "http://127.0.0.1:8093", "esp32": "http://127.0.0.1:8091",
                    "build-local": {"url": "http://mac:8094", "token": "build-saved"}}
         with patch("sys.stderr"):
@@ -531,17 +531,17 @@ class EnvImportTests(AuthCase):
         # Removed in Settings, then a restart with the env still set: stays removed.
         auth.remove_ci_token()
         with patch("sys.stderr"):
-            self.assertEqual(auth.import_env_tokens(plugins, {"VT_CI_TOKEN": "again"}), [])
+            self.assertEqual(auth.import_env_tokens(plugins, {"MT_CI_TOKEN": "again"}), [])
         self.assertEqual(auth.ci_token_info()["configured"], False)
 
     def test_environ_mirrors_settings(self):
         auth.set_service_token("controller", "ctl-x")
         auth.set_service_token("plugin:esp32", "p-x")
-        environ = {"PLUGIN_TOKEN": "old", "VT_PLUGIN_TOKEN_OTHER": "old", "CONTROLLER_TOKEN": "old",
-                   "VT_CI_TOKEN": "old", "PATH": "/bin"}
+        environ = {"PLUGIN_TOKEN": "old", "MT_PLUGIN_TOKEN_OTHER": "old", "CONTROLLER_TOKEN": "old",
+                   "MT_CI_TOKEN": "old", "PATH": "/bin"}
         auth.apply_to_environ(environ)
         self.assertEqual(environ, {"PATH": "/bin", "CONTROLLER_TOKEN": "ctl-x",
-                                   "VT_PLUGIN_TOKEN_ESP32": "p-x"})
+                                   "MT_PLUGIN_TOKEN_ESP32": "p-x"})
 
     def test_build_plugin_token_moves_out_of_config_json(self):
         app.save_config({"plugins": {"build-local": {"url": "http://mac:8094", "token": "in-config"}}})

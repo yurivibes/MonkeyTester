@@ -14,8 +14,8 @@ from unittest.mock import MagicMock, patch
 import app
 
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "visual-tests" / "scripts"))
-sys.path.insert(0, str(ROOT / "ci" / "visual-test"))
+sys.path.insert(0, str(ROOT / "mt-tests" / "scripts"))
+sys.path.insert(0, str(ROOT / "ci" / "mt-submit"))
 import controller_client
 import apk_manifest
 import device_lock

@@ -7,7 +7,7 @@ Kept apart from app.py so every route uses the same checks:
   symlinks pointing outside). Raises UnsafePath (a ValueError).
 - Allowlist validators for values that end up in a subprocess argv or a path
   (device ids, run names, bundle ids, branch names, test names).
-- Request-body limits: the JSON cap and the upload cap (VT_MAX_UPLOAD_MB).
+- Request-body limits: the JSON cap and the upload cap (MT_MAX_UPLOAD_MB).
 - harden_handler: a class decorator for the BaseHTTPRequestHandler subclass
   that adds security headers to every response, a socket timeout, a 500 JSON
   body (never a traceback) when a route raises, and a 404 when a GET route
@@ -131,10 +131,10 @@ DEFAULT_MAX_UPLOAD_MB = 600         # whole /api/run-test multipart body
 
 
 def max_upload_bytes(env=None):
-    """The /api/run-test body cap from VT_MAX_UPLOAD_MB (MiB, default 600).
+    """The /api/run-test body cap from MT_MAX_UPLOAD_MB (MiB, default 600).
     The body is read into memory, so the cap also bounds memory use."""
     env = os.environ if env is None else env
-    raw = (env.get("VT_MAX_UPLOAD_MB") or "").strip()
+    raw = (env.get("MT_MAX_UPLOAD_MB") or "").strip()
     try:
         mb = int(raw) if raw else DEFAULT_MAX_UPLOAD_MB
     except ValueError:
@@ -230,12 +230,12 @@ def harden_handler(cls):
     orig_end_headers = cls.end_headers
 
     def send_response(self, code, message=None):
-        self._vt_response_started = True
+        self._mt_response_started = True
         orig_send_response(self, code, message)
 
     def end_headers(self):
-        if not getattr(self, "_vt_security_headers_sent", False):
-            self._vt_security_headers_sent = True
+        if not getattr(self, "_mt_security_headers_sent", False):
+            self._mt_security_headers_sent = True
             for name, value in SECURITY_HEADERS:
                 self.send_header(name, value)
         orig_end_headers(self)
@@ -246,8 +246,8 @@ def harden_handler(cls):
     def guard(method, not_found_if_silent):
         @functools.wraps(method)
         def wrapper(self, *args, **kwargs):
-            self._vt_response_started = False
-            self._vt_security_headers_sent = False
+            self._mt_response_started = False
+            self._mt_security_headers_sent = False
             try:
                 method(self, *args, **kwargs)
             except _CLIENT_GONE:
@@ -257,10 +257,10 @@ def harden_handler(cls):
                 print(f"Unhandled error in {self.command} {self.path.split('?', 1)[0]}:\n"
                       f"{traceback.format_exc()}", file=sys.stderr, flush=True)
                 self.close_connection = True
-                if not self._vt_response_started:
+                if not self._mt_response_started:
                     _send_plain_json(self, 500, {"error": "internal server error"})
                 return
-            if not_found_if_silent and not self._vt_response_started:
+            if not_found_if_silent and not self._mt_response_started:
                 _send_plain_json(self, 404, {"error": "not found"})
         return wrapper
 

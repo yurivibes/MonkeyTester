@@ -363,7 +363,7 @@ def restart_app(package_name, clear_data=True):
         _action("clear-data", bundle_id=package_name)
     time.sleep(2)
     _action("unlock", timeout=30)
-    tmp = os.path.join(tempfile.gettempdir(), f"vt_render_{os.getpid()}.png")
+    tmp = os.path.join(tempfile.gettempdir(), f"mt_render_{os.getpid()}.png")
     for attempt in range(3):
         if not _action("launch", bundle_id=package_name, timeout=180):
             print(f"  [{_ts()}] -> LAUNCH FAILED")

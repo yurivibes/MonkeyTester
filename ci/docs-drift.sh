@@ -48,7 +48,7 @@ while IFS= read -r file; do
       SOURCE_CHANGED="${SOURCE_CHANGED}
     - $file"
       ;;
-    visual-tests/scripts/*)
+    mt-tests/scripts/*)
       SOURCE_CHANGED="${SOURCE_CHANGED}
     - $file"
       ;;

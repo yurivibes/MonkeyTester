@@ -60,7 +60,7 @@ function applyTheme(theme) {
 themeToggle.addEventListener("click", function() {
     const theme = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
     applyTheme(theme);
-    try { localStorage.setItem("vt-theme", theme); } catch (e) {}
+    try { localStorage.setItem("mt-theme", theme); } catch (e) {}
     fetch("/api/theme", { method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ theme: theme }) }).catch(() => {});
 });

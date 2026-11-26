@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
-sys.path.insert(0, str(Path(__file__).parent / "visual-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
 import plugin_client
 from plugin_client import PluginClient, PluginError
 
@@ -182,7 +182,7 @@ class HealthTests(StubCase):
         self.assertIn("scenario", self.client.actions())
 
     def test_status_reports_each_plugin(self):
-        env = {"VT_PLUGINS": f"esp32={self.url},gone=http://127.0.0.1:9"}
+        env = {"MT_PLUGINS": f"esp32={self.url},gone=http://127.0.0.1:9"}
         status = plugin_client.plugins_status(env, timeout=2)
         self.assertEqual(status["esp32"], {"ok": True, "url": self.url, "contract_version": 1,
                                            "plugin": {"name": "esp32", "version": "0.1.0"}})
@@ -276,8 +276,8 @@ class CoercionTests(StubCase):
 class EnvTests(unittest.TestCase):
     def test_parses_names_urls_and_tokens(self):
         plugins = plugin_client.load_plugins_from_env({
-            "VT_PLUGINS": " esp32=http://127.0.0.1:8091/ , my-cam=https://cam:9000 ,",
-            "PLUGIN_TOKEN": "shared", "VT_PLUGIN_TOKEN_MY_CAM": "own"})
+            "MT_PLUGINS": " esp32=http://127.0.0.1:8091/ , my-cam=https://cam:9000 ,",
+            "PLUGIN_TOKEN": "shared", "MT_PLUGIN_TOKEN_MY_CAM": "own"})
         self.assertEqual(list(plugins), ["esp32", "my-cam"])
         self.assertEqual(plugins["esp32"].url, "http://127.0.0.1:8091")
         self.assertEqual((plugins["esp32"].token, plugins["my-cam"].token), ("shared", "own"))
@@ -285,12 +285,12 @@ class EnvTests(unittest.TestCase):
     def test_empty_means_no_plugins(self):
         self.assertEqual(plugin_client.load_plugins_from_env({}), {})
         self.assertIsNone(plugin_client.load_plugins_from_env(
-            {"VT_PLUGINS": "a=http://x"})["a"].token)
+            {"MT_PLUGINS": "a=http://x"})["a"].token)
 
     def test_malformed_entries_are_config_errors(self):
         for spec in ("esp32", "=http://x", "esp32=", "esp32=ftp://x", "a=http://x,a=http://y"):
             with self.assertRaises(PluginError) as caught:
-                plugin_client.load_plugins_from_env({"VT_PLUGINS": spec})
+                plugin_client.load_plugins_from_env({"MT_PLUGINS": spec})
             self.assertEqual(caught.exception.code, "config", spec)
 
 
@@ -299,7 +299,7 @@ class PluginStepTests(StubCase):
         super().setUp()
         core._plugins = None
         self.addCleanup(setattr, core, "_plugins", None)
-        env = patch.dict(os.environ, {"VT_PLUGINS": f"esp32={self.url}", "PLUGIN_TOKEN": ""})
+        env = patch.dict(os.environ, {"MT_PLUGINS": f"esp32={self.url}", "PLUGIN_TOKEN": ""})
         env.start()
         self.addCleanup(env.stop)
 
@@ -353,10 +353,10 @@ class PluginStepTests(StubCase):
         self.assertFalse(self.step("esp32")[0])
         self.assertFalse(self.step("esp32 typed count=many")[0])
         core._plugins = None
-        with patch.dict(os.environ, {"VT_PLUGINS": "broken"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "broken"}):
             ok, out = self.step("esp32 scenario")
         self.assertFalse(ok)
-        self.assertIn("VT_PLUGINS", out)
+        self.assertIn("MT_PLUGINS", out)
 
 
 class BlockParseTests(unittest.TestCase):
@@ -438,7 +438,7 @@ class PluginBlockStepTests(StubCase):
         super().setUp()
         core._plugins = None
         self.addCleanup(setattr, core, "_plugins", None)
-        env = patch.dict(os.environ, {"VT_PLUGINS": f"esp32={self.url}", "PLUGIN_TOKEN": ""})
+        env = patch.dict(os.environ, {"MT_PLUGINS": f"esp32={self.url}", "PLUGIN_TOKEN": ""})
         env.start()
         self.addCleanup(env.stop)
 
@@ -596,11 +596,11 @@ class RemoteProviderShapeTests(unittest.TestCase):
 
 
 class ViewerPluginListTests(StubCase):
-    """The viewer's plugin list: VT_PLUGINS minus monkeytester-ai, plus
+    """The viewer's plugin list: MT_PLUGINS minus monkeytester-ai, plus
     monkeytester-ai at its Settings address."""
 
     def test_env_entry_for_the_ai_plugin_is_replaced_by_the_address(self):
-        env = {"VT_PLUGINS": "esp32-sensor=http://127.0.0.1:8091,monkeytester-ai=http://old:8091",
+        env = {"MT_PLUGINS": "esp32-sensor=http://127.0.0.1:8091,monkeytester-ai=http://old:8091",
                "PLUGIN_TOKEN": "shared"}
         plugins = plugin_client.viewer_plugins(env, "http://new:8091", "pair-1234")
         self.assertEqual({n: (c.url, c.token) for n, c in plugins.items()},
@@ -609,14 +609,14 @@ class ViewerPluginListTests(StubCase):
         self.assertNotIn("monkeytester-ai", plugin_client.viewer_plugins(env, ""))
 
     def test_malformed_env_still_lists_the_ai_plugin(self):
-        out = plugin_client.plugins_overview({"VT_PLUGINS": "broken"}, timeout=1,
+        out = plugin_client.plugins_overview({"MT_PLUGINS": "broken"}, timeout=1,
                                              ai_url="http://127.0.0.1:9")
-        self.assertIn("VT_PLUGINS is malformed", out["error"])
+        self.assertIn("MT_PLUGINS is malformed", out["error"])
         self.assertEqual([(p["name"], p["source"]) for p in out["plugins"]],
                          [("monkeytester-ai", "settings")])
-        status = plugin_client.plugins_status({"VT_PLUGINS": "broken"}, timeout=1,
+        status = plugin_client.plugins_status({"MT_PLUGINS": "broken"}, timeout=1,
                                               ai_url="http://127.0.0.1:9")
-        self.assertEqual(sorted(status), ["VT_PLUGINS", "monkeytester-ai"])
+        self.assertEqual(sorted(status), ["MT_PLUGINS", "monkeytester-ai"])
 
     def test_validate_address_checks_contract_name_and_config(self):
         # The stub speaks the contract but is not monkeytester-ai.
@@ -653,7 +653,7 @@ class ViewerPluginListTests(StubCase):
 
 class PluginConfigListTests(StubCase):
     """The config.json-owned plugin list: Settings → Device Plugins owns the
-    list once `plugins` exists, VT_PLUGINS is the import-before that."""
+    list once `plugins` exists, MT_PLUGINS is the import-before that."""
 
     def test_parse_config_map_normalises_and_validates(self):
         pc = plugin_client
@@ -674,7 +674,7 @@ class PluginConfigListTests(StubCase):
 
     def test_load_plugins_config_owns_the_list(self):
         pc = plugin_client
-        env = dict(os.environ, VT_PLUGINS="envone=http://127.0.0.1:9")
+        env = dict(os.environ, MT_PLUGINS="envone=http://127.0.0.1:9")
         plugins = pc.load_plugins({"plugins": {"cfgone": self.url}}, env)
         self.assertEqual({n: c.url for n, c in plugins.items()}, {"cfgone": self.url})
         plugins = pc.load_plugins({"plugins": {"cfgone": self.url}},
@@ -683,7 +683,7 @@ class PluginConfigListTests(StubCase):
 
     def test_load_plugins_without_the_map_still_uses_env(self):
         pc = plugin_client
-        env = dict(os.environ, VT_PLUGINS="esp32=http://127.0.0.1:9,monkeytester-ai=http://ai:1")
+        env = dict(os.environ, MT_PLUGINS="esp32=http://127.0.0.1:9,monkeytester-ai=http://ai:1")
         plugins = pc.load_plugins({"video_size": "100%"}, env)
         self.assertEqual({n: c.url for n, c in plugins.items()},
                          {"esp32": "http://127.0.0.1:9"})  # the AI entry never joins
@@ -704,7 +704,7 @@ class PluginConfigListTests(StubCase):
 
     def test_viewer_plugins_prefer_the_saved_map(self):
         pc = plugin_client
-        env = dict(os.environ, VT_PLUGINS="stale=http://127.0.0.1:9")
+        env = dict(os.environ, MT_PLUGINS="stale=http://127.0.0.1:9")
         plugins = pc.viewer_plugins(env, ai_url=self.url,
                                     config={"plugins": {"saved": self.url}})
         self.assertEqual({n: c.url for n, c in plugins.items()},

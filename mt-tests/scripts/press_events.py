@@ -24,7 +24,7 @@ Environment:
   PRESS_RUN         — run name (e.g. run_20261022_150000 or run_1). Set by the
                       runner entrypoints after the run dir is configured.
   PRESS_DEVICE      — device label for the event (serial / UDID / ios:<udid>).
-  VT_RUNNER_TOKEN   — sent as X-VT-Runner-Token; the viewer makes it at start
+  MT_RUNNER_TOKEN   — sent as X-MT-Runner-Token; the viewer makes it at start
                       and passes it to the runners it launches.
 """
 import json
@@ -45,9 +45,9 @@ def _post(url, payload, timeout):
     headers = {"Content-Type": "application/json"}
     # The viewer requires a login; the runner it starts proves itself with
     # the per-start secret the viewer passes in the environment.
-    runner_token = os.environ.get("VT_RUNNER_TOKEN", "").strip()
+    runner_token = os.environ.get("MT_RUNNER_TOKEN", "").strip()
     if runner_token:
-        headers["X-VT-Runner-Token"] = runner_token
+        headers["X-MT-Runner-Token"] = runner_token
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     if req.type not in ("http", "https"):
         raise urllib.error.URLError("only http(s) URLs are allowed")

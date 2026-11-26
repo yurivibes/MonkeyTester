@@ -16,7 +16,7 @@ import builds
 from test_app_api import FAKE_RUNNER, ServerCase
 from build_fixture import BUILD_ID, add_build
 
-sys.path.insert(0, str(Path(app.__file__).parent / "visual-tests" / "scripts"))
+sys.path.insert(0, str(Path(app.__file__).parent / "mt-tests" / "scripts"))
 import test_runner_core as core  # noqa: E402
 
 REPO = "blackjackfruit/TemperatureSensor-App"
@@ -25,7 +25,7 @@ OTHER = "blackjackfruit/Other-App"
 
 def load_submit():
     spec = importlib.util.spec_from_file_location(
-        "submit", Path(app.__file__).parent / "ci" / "visual-test" / "submit.py")
+        "submit", Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py")
     submit = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(submit)
     return submit
@@ -132,7 +132,7 @@ class ProjectVariablesConfigTests(ProjectCase):
 
 
 class UploadRepoTests(ProjectCase):
-    """The run-test upload passes the run's project to the runner as VT_REPO."""
+    """The run-test upload passes the run's project to the runner as MT_REPO."""
 
     def setUp(self):
         super().setUp()
@@ -164,12 +164,12 @@ class UploadRepoTests(ProjectCase):
                 self.assertTrue(json.loads(resp.read())["run_id"])
         return captured["env"]
 
-    def test_repo_field_becomes_vt_repo(self):
-        self.assertEqual(self.runner_env({"repo": REPO}).get("VT_REPO"), REPO)
+    def test_repo_field_becomes_mt_repo(self):
+        self.assertEqual(self.runner_env({"repo": REPO}).get("MT_REPO"), REPO)
 
     def test_no_or_bad_repo_is_unassigned_even_if_the_viewer_env_has_one(self):
-        self.assertNotIn("VT_REPO", self.runner_env({}, {"VT_REPO": OTHER}))
-        self.assertNotIn("VT_REPO", self.runner_env({"repo": "../etc"}))
+        self.assertNotIn("MT_REPO", self.runner_env({}, {"MT_REPO": OTHER}))
+        self.assertNotIn("MT_REPO", self.runner_env({"repo": "../etc"}))
 
 
 class RunnerTests(unittest.TestCase):
@@ -185,16 +185,16 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(got, {"HOST": "shared", "PATH_A": "/a"})
             got = core.configured_variables(config_files=[cfg], env_text='{"HOST": "env"}', repo=REPO)
             self.assertEqual(got["HOST"], "env")
-            with patch.dict(os.environ, {"VT_REPO": OTHER}):
+            with patch.dict(os.environ, {"MT_REPO": OTHER}):
                 self.assertEqual(core.configured_variables(config_files=[cfg], env_text="")["HOST"], "other")
 
     def test_run_metadata_records_the_repo(self):
-        with patch.dict(os.environ, {"VT_REPO": REPO}):
+        with patch.dict(os.environ, {"MT_REPO": REPO}):
             self.assertEqual(core.run_flags().get("repo"), REPO)
-        with patch.dict(os.environ, {"VT_REPO": "bad repo"}):
+        with patch.dict(os.environ, {"MT_REPO": "bad repo"}):
             self.assertNotIn("repo", core.run_flags())
         env = dict(os.environ)
-        env.pop("VT_REPO", None)
+        env.pop("MT_REPO", None)
         with patch.dict(os.environ, env, clear=True):
             self.assertNotIn("repo", core.run_flags())
 

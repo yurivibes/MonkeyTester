@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import app
 
-sys.path.insert(0, str(Path(__file__).parent / "visual-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
 import test_runner_core as core
 
 

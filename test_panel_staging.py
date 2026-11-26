@@ -30,7 +30,7 @@ let input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
 let staged = stagePanelFields(input.saved, input.current);
 console.log(JSON.stringify({staged: staged, steps: planSavePayload(staged)}));
 """
-    fd, js = tempfile.mkstemp(suffix=".js", prefix="vt_staging_")
+    fd, js = tempfile.mkstemp(suffix=".js", prefix="mt_staging_")
     try:
         with open(fd, "w") as fh:
             fh.write(harness)

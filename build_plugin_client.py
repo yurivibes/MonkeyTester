@@ -12,14 +12,14 @@ cases, start, follow and cancel a build.
     GET  /config  / POST /config          -> code host kind + URL, write-only token, viewer URL
     GET  /repos/<owner>/<repo>?branch=    -> the Settings check for one project (+ recipes)
     GET  /repos/<owner>/<repo>/branches   -> every branch, default first
-    GET  /repos/<owner>/<repo>/cases?ref= -> visual-tests/<case>/ on that branch (+ recipes)
+    GET  /repos/<owner>/<repo>/cases?ref= -> mt-tests/<case>/ on that branch (+ recipes)
     POST /builds                          -> 201 {build_ref, url}
     GET  /builds/<build_ref>              -> {state, conclusion, url, jobs}
     GET  /builds/<build_ref>/log?offset=  -> text/plain, X-Log-Size, X-Log-Complete (capability logs)
     POST /builds/<build_ref>/cancel       -> the build's state (capability cancel)
     GET  /template?platform=              -> an example build script (text/plain)
 
-Same style as visual-tests/scripts/plugin_client.py (the device plugin client).
+Same style as mt-tests/scripts/plugin_client.py (the device plugin client).
 Standard library only.
 """
 import json
@@ -344,7 +344,7 @@ def validate(name, url, token=None, timeout=5):
 
 
 def parse_build_plugins(spec):
-    """'name=url[,name=url...]' (VT_BUILD_PLUGINS) -> [(name, url)].
+    """'name=url[,name=url...]' (MT_BUILD_PLUGINS) -> [(name, url)].
     Raises BuildPluginError(code="config")."""
     entries, names = [], set()
     for part in (spec or "").split(","):
@@ -354,16 +354,16 @@ def parse_build_plugins(spec):
         name, sep, url = part.partition("=")
         name, url = name.strip(), url.strip()
         if not sep or not name or not url:
-            raise BuildPluginError(f"VT_BUILD_PLUGINS entry {part!r} is not name=url", "config")
+            raise BuildPluginError(f"MT_BUILD_PLUGINS entry {part!r} is not name=url", "config")
         if not PLUGIN_NAME_RE.fullmatch(name):
-            raise BuildPluginError(f"VT_BUILD_PLUGINS name {name!r} must match "
+            raise BuildPluginError(f"MT_BUILD_PLUGINS name {name!r} must match "
                                    f"{PLUGIN_NAME_RE.pattern}", "config")
         try:
             url = normalize_url(url)
         except BuildPluginError as e:
-            raise BuildPluginError(f"VT_BUILD_PLUGINS entry {part!r}: {e.message}", "config") from None
+            raise BuildPluginError(f"MT_BUILD_PLUGINS entry {part!r}: {e.message}", "config") from None
         if name in names:
-            raise BuildPluginError(f"VT_BUILD_PLUGINS names plugin {name!r} twice", "config")
+            raise BuildPluginError(f"MT_BUILD_PLUGINS names plugin {name!r} twice", "config")
         names.add(name)
         entries.append((name, url))
     return entries

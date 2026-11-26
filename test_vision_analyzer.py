@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent / "visual-tests" / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent / "mt-tests" / "scripts"))
 import screenshot_diff
 import vision_analyzer as vision
 
@@ -140,23 +140,23 @@ class RunnerConfigTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        scripts = root / "visual-tests" / "scripts"
+        scripts = root / "mt-tests" / "scripts"
         scripts.mkdir(parents=True)
-        shutil.copy(Path(__file__).parent / "visual-tests" / "scripts" / "run_on_device.py", scripts)
+        shutil.copy(Path(__file__).parent / "mt-tests" / "scripts" / "run_on_device.py", scripts)
         (root / "Run").mkdir()
         (root / "Run" / "config.json").write_text(json.dumps(config))
         return subprocess.run([sys.executable, str(scripts / "run_on_device.py"), "--help"],
                               capture_output=True, text=True, timeout=30)
 
-    def resolved_endpoint(self, config, vt_plugins=""):
+    def resolved_endpoint(self, config, mt_plugins=""):
         """VISION_MODEL_API_URL/VISUAL_MODEL_API_KEY as run_on_device.py sets
         them at import, read by a stub test_runner_core that exits at once."""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        scripts = root / "visual-tests" / "scripts"
+        scripts = root / "mt-tests" / "scripts"
         scripts.mkdir(parents=True)
-        shutil.copy(Path(__file__).parent / "visual-tests" / "scripts" / "run_on_device.py", scripts)
+        shutil.copy(Path(__file__).parent / "mt-tests" / "scripts" / "run_on_device.py", scripts)
         (scripts / "test_runner_core.py").write_text(
             "import json, os, sys\n"
             "print(json.dumps({k: os.environ.get(k, '') for k in "
@@ -167,7 +167,7 @@ class RunnerConfigTests(unittest.TestCase):
         env = {k: v for k, v in os.environ.items()
                if k not in ("VISION_MODEL_API_URL", "VISUAL_MODEL_ENDPOINT", "VISUAL_MODEL_API_KEY",
                             "VISION_MODEL_NAME", "VISUAL_MODEL_NAME")}
-        env["VT_PLUGINS"] = vt_plugins
+        env["MT_PLUGINS"] = mt_plugins
         result = subprocess.run([sys.executable, str(scripts / "run_on_device.py"), "--help"],
                                 capture_output=True, text=True, timeout=30, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -175,12 +175,12 @@ class RunnerConfigTests(unittest.TestCase):
 
     def test_endpoint_comes_from_visual_plugin_url(self):
         # The live config after the one-time import: the legacy keys are still
-        # there, and VT_PLUGINS still names another monkeytester-ai address.
+        # there, and MT_PLUGINS still names another monkeytester-ai address.
         out, _ = self.resolved_endpoint(
             {"visual_endpoint": "http://192.168.125.71:8091/v1/chat/completions",
              "visual_model": "qwen2.5vl:7b", "visual_api_key": "pair-tok-4242",
              "visual_plugin": "monkeytester-ai", "visual_plugin_url": "http://10.0.0.5:8091/"},
-            vt_plugins="monkeytester-ai=http://192.168.125.71:8091")
+            mt_plugins="monkeytester-ai=http://192.168.125.71:8091")
         self.assertEqual(out, {"VISION_MODEL_API_URL": "http://10.0.0.5:8091/v1/chat/completions",
                                "VISUAL_MODEL_API_KEY": "pair-tok-4242", "VISION_MODEL_NAME": ""})
 
@@ -188,14 +188,14 @@ class RunnerConfigTests(unittest.TestCase):
         out, _ = self.resolved_endpoint(
             {"visual_endpoint": "http://192.168.125.71:8091/v1/chat/completions",
              "visual_model": "qwen2.5vl:7b", "visual_api_key": "pair-tok-4242"},
-            vt_plugins="monkeytester-ai=http://192.168.125.71:8091")
+            mt_plugins="monkeytester-ai=http://192.168.125.71:8091")
         self.assertEqual(out["VISION_MODEL_API_URL"], "http://192.168.125.71:8091/v1/chat/completions")
         self.assertEqual(out["VISION_MODEL_NAME"], "qwen2.5vl:7b")
 
     def test_visual_plugin_without_address_falls_back_to_legacy_endpoint(self):
         out, err = self.resolved_endpoint(
             {"visual_plugin": "monkeytester-ai", "visual_endpoint": "http://old:1/v1/chat/completions"},
-            vt_plugins="monkeytester-ai=http://ignored:8091")
+            mt_plugins="monkeytester-ai=http://ignored:8091")
         self.assertEqual(out["VISION_MODEL_API_URL"], "http://old:1/v1/chat/completions")
         self.assertIn("Settings → Device Plugins", err)
 

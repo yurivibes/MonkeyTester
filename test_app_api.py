@@ -117,10 +117,10 @@ class ServerCase(unittest.TestCase):
                         patch.object(builds, "VIEWER_CONFIG_FILE", self.runs / "config.json"),
                         patch.object(builds, "LEGACY_GITEA_FILE", self.root / "gitea_config.json"),
                         patch.dict(os.environ, {"CONTROLLER_URL": "", "VISION_MODEL_API_URL": "",
-                                                "VT_BUILD_PLUGINS": "",
+                                                "MT_BUILD_PLUGINS": "",
                                                 "VISUAL_MODEL_ENDPOINT": "", "VISUAL_MODEL_API_KEY": "",
-                                                "VT_MANAGED_AI_PLUGIN_URL": "",
-                                                "VT_MANAGED_AI_PLUGIN_TOKEN": ""}),
+                                                "MT_MANAGED_AI_PLUGIN_URL": "",
+                                                "MT_MANAGED_AI_PLUGIN_TOKEN": ""}),
                         patch.object(auth, "AUTH_CONFIG_FILE", self.root / "auth_config.json"),
                         patch.object(auth, "SERVICE_TOKENS_FILE", self.root / "service_tokens.json")):
             patcher.start()
@@ -190,7 +190,7 @@ class StatusTests(ServerCase):
     def test_plugins_are_reported_without_changing_ok(self):
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
                        "plugin": {"name": "esp32", "version": "0.1.0"}}
-        status = self.status_of(VT_PLUGINS=f"esp32={self.peer_url},gone=http://127.0.0.1:9")
+        status = self.status_of(MT_PLUGINS=f"esp32={self.peer_url},gone=http://127.0.0.1:9")
         self.assertEqual(status["plugins"]["esp32"],
                          {"ok": True, "url": self.peer_url, "contract_version": 1,
                           "plugin": {"name": "esp32", "version": "0.1.0"}})
@@ -242,7 +242,7 @@ class PluginSettingsTests(ServerCase):
         self.assertIn("plugins", self.get_json("/api/plugins"))
 
     def test_nothing_configured_lists_only_the_ai_row(self):
-        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+        with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             out = self.get_json("/api/plugins")
         entry = out["plugins"][0]  # the always-listed monkeytester-ai row
         self.assertEqual((entry["name"], entry["source"], entry["url"], entry["ok"],
@@ -259,12 +259,12 @@ class PluginSettingsTests(ServerCase):
                        "plugin": {"name": "esp32", "version": "0.1.0"},
                        "capabilities": ["flash"],
                        "devices": [{"id": "ab:cd", "model": "C3", "state": "ready"}]}
-        with patch.dict(os.environ, {"VT_PLUGINS": f"esp32={self.peer_url}"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": f"esp32={self.peer_url}"}):
             out = self.get_json("/api/plugins")
         by_name = {p["name"]: p for p in out["plugins"]}
         self.assertEqual(sorted(by_name), ["esp32", "monkeytester-ai"])
         self.assertEqual(by_name["esp32"], {"name": "esp32", "url": self.peer_url, "ok": True,
-                                           "source": "VT_PLUGINS",
+                                           "source": "MT_PLUGINS",
                                            "contract_version": 1,
                                            "plugin": {"name": "esp32", "version": "0.1.0"},
                                            "capabilities": ["flash"],
@@ -275,7 +275,7 @@ class PluginSettingsTests(ServerCase):
         self.assertEqual(by_name["monkeytester-ai"]["source"], "settings")
 
     def test_dead_plugin_still_lists_with_its_error(self):
-        with patch.dict(os.environ, {"VT_PLUGINS": "gone=http://127.0.0.1:9"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "gone=http://127.0.0.1:9"}):
             out = self.get_json("/api/plugins")
         by_name = {p["name"]: p for p in out["plugins"]}
         self.assertEqual(sorted(by_name), ["gone", "monkeytester-ai"])
@@ -283,9 +283,9 @@ class PluginSettingsTests(ServerCase):
         self.assertIn("error", by_name["gone"])
 
     def test_malformed_spec_says_so(self):
-        with patch.dict(os.environ, {"VT_PLUGINS": "broken"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "broken"}):
             out = self.get_json("/api/plugins")
-        self.assertIn("VT_PLUGINS", out["error"])
+        self.assertIn("MT_PLUGINS", out["error"])
         self.assertEqual([p["name"] for p in out["plugins"]], ["monkeytester-ai"])
 
     def test_plugins_are_checked_at_the_same_time(self):
@@ -299,12 +299,12 @@ class PluginSettingsTests(ServerCase):
         spec = ",".join(f"p{i}=http://127.0.0.1:9" for i in range(3))
         with patch.object(plugin_client.PluginClient, "health", slow_health), \
                 patch.object(plugin_client.PluginClient, "devices", lambda c, timeout=None: []), \
-                patch.dict(os.environ, {"VT_PLUGINS": spec}):
+                patch.dict(os.environ, {"MT_PLUGINS": spec}):
             started = time.monotonic()
             out = self.get_json("/api/plugins")
             elapsed = time.monotonic() - started
         self.assertEqual([p["name"] for p in out["plugins"]], ["p0", "p1", "p2", "monkeytester-ai"])
-        self.assertTrue(all(p["ok"] for p in out["plugins"] if p["source"] == "VT_PLUGINS"))
+        self.assertTrue(all(p["ok"] for p in out["plugins"] if p["source"] == "MT_PLUGINS"))
         self.assertLess(elapsed, 1.5)  # one after another would take 1.8 s
 
 
@@ -341,7 +341,7 @@ class PluginManageTests(ServerCase):
 
     def test_set_seeds_the_map_from_live_env_entries(self):
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
-        with patch.dict(os.environ, {"VT_PLUGINS": "seed=http://127.0.0.1:9"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "seed=http://127.0.0.1:9"}):
             out = self.post("/api/config/plugins", {"set": {"name": "new", "url": self.peer_url}})
         self.assertEqual(out["plugins"], {"seed": "http://127.0.0.1:9",
                                           "new": self.peer_url})
@@ -349,7 +349,7 @@ class PluginManageTests(ServerCase):
     def test_env_ignored_once_the_map_exists(self):
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
         self.post("/api/config/plugins", {"set": {"name": "saved", "url": self.peer_url}})
-        with patch.dict(os.environ, {"VT_PLUGINS": "stale=http://127.0.0.1:9"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "stale=http://127.0.0.1:9"}):
             names = [p["name"] for p in self.get_json("/api/plugins")["plugins"]]
         self.assertEqual(sorted(names), ["monkeytester-ai", "saved"])
         with self.assertRaises(urllib.error.HTTPError) as caught:
@@ -429,7 +429,7 @@ def request(port, method, path, body=None, headers=None, auth=True):
 
 class LoginRequiredTests(ServerCase):
     """Login is always required (no off switch, no localhost exemption).
-    Leftover VT_APP_TOKEN values from an old launcher app open
+    Leftover MT_APP_TOKEN values from an old launcher app open
     nothing. More auth tests: test_viewer_auth.py."""
 
     def test_signed_in_every_page_and_api_answers(self):
@@ -471,9 +471,9 @@ class LoginRequiredTests(ServerCase):
                                  auth=False)[0], 200)
 
     def test_a_wrong_bearer_or_cookie_opens_nothing(self):
-        with patch.dict(os.environ, {"VT_APP_TOKEN": "s3cret"}):
-            for headers in ({"Authorization": "Bearer s3cret"}, {"Cookie": "vt_app=s3cret"},
-                            {"Cookie": "vt_auth=wrong"}):
+        with patch.dict(os.environ, {"MT_APP_TOKEN": "s3cret"}):
+            for headers in ({"Authorization": "Bearer s3cret"}, {"Cookie": "mt_app=s3cret"},
+                            {"Cookie": "mt_auth=wrong"}):
                 self.assertEqual(request(self.port, "GET", "/config", headers=headers,
                                          auth=False)[0], 302, headers)
 
@@ -488,7 +488,7 @@ class LoginRequiredTests(ServerCase):
     def test_runner_press_events_send_the_runner_token(self):
         import importlib
         import sys as _sys
-        _sys.path.insert(0, str(Path(app.__file__).parent / "visual-tests/scripts"))
+        _sys.path.insert(0, str(Path(app.__file__).parent / "mt-tests/scripts"))
         self.addCleanup(_sys.path.pop, 0)
         press_events = importlib.import_module("press_events")
         sent = {}
@@ -507,10 +507,10 @@ class LoginRequiredTests(ServerCase):
             sent.update(req.headers)
             return Resp()
         with patch.object(press_events.urllib.request, "urlopen", fake_urlopen), \
-                patch.dict(os.environ, {"VT_RUNNER_TOKEN": "rt-123"}):
+                patch.dict(os.environ, {"MT_RUNNER_TOKEN": "rt-123"}):
             press_events._post("http://127.0.0.1:1/api/press-event", {}, 1)
         self.assertNotIn("Cookie", sent)
-        self.assertEqual(sent.get("X-vt-runner-token"), "rt-123")
+        self.assertEqual(sent.get("X-mt-runner-token"), "rt-123")
 
 
 class ThemeFirstPaintTests(ServerCase):
@@ -861,13 +861,13 @@ class VisualModelPluginTests(ServerCase):
 
     def plugin_env(self, url):
         """The monkeytester-ai address lives in config.json (set in Settings);
-        a VT_PLUGINS entry for it is ignored. Merges visual_plugin_url into
+        a MT_PLUGINS entry for it is ignored. Merges visual_plugin_url into
         whatever config.json the test already wrote."""
         path = self.runs / "config.json"
         cfg = json.loads(path.read_text()) if path.exists() else {}
         cfg["visual_plugin_url"] = url
         path.write_text(json.dumps(cfg))
-        return patch.dict(os.environ, {"VT_PLUGINS": ""})
+        return patch.dict(os.environ, {"MT_PLUGINS": ""})
 
     def config(self):
         return json.loads((self.runs / "config.json").read_text())
@@ -889,7 +889,7 @@ class VisualModelPluginTests(ServerCase):
         "monkeytester-ai"} clears it like plugin_url: ""."""
         url = self.serve_plugin()
         AiPlugin.state["require_token"] = True
-        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+        with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             # Any typed name: the /health plugin name decides.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
                                       {"set": {"name": "vision", "url": url + "/",
@@ -936,7 +936,7 @@ class VisualModelPluginTests(ServerCase):
     def test_plugins_endpoint_ai_set_stores_nothing_when_the_token_is_rejected(self):
         url = self.serve_plugin()
         AiPlugin.state["require_token"] = True
-        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+        with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             status, _, body = request(self.port, "POST", "/api/config/plugins",
                                       {"set": {"name": "vision", "url": url, "token": "wrong"}})
         self.assertNotEqual(status, 200, body)
@@ -1029,7 +1029,7 @@ class VisualModelPluginTests(ServerCase):
         self.assertEqual(AiPlugin.state["selected"], "qwen-vl")
 
     def test_save_without_a_configured_plugin_fails(self):
-        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+        with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             status, _, body = request(self.port, "POST", "/api/config/visual-model",
                                       {"provider": "local", "model": "llava"})
         self.assertEqual((status, body["code"]), (400, "not_configured"))
@@ -1202,7 +1202,7 @@ class VisualModelPluginTests(ServerCase):
         self.assertTrue(AiPlugin.posts)  # reached the plugin, no gate in front
 
     def test_copilot_routes_without_a_plugin_say_so(self):
-        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+        with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             status, _, body = request(self.port, "POST",
                                       "/api/visual-model/plugin/copilot/device/start", {})
         self.assertEqual((status, body["code"]), (400, "not_configured"))
@@ -1269,7 +1269,7 @@ class VisualModelPluginTests(ServerCase):
         url = self.serve_plugin()
         AiPlugin.state["require_token"] = True
         (self.runs / "config.json").write_text(json.dumps({"theme": "dark", "video_size": "75%"}))
-        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+        with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             status, _, body = request(self.port, "POST", "/api/config/visual-model",
                                       {"plugin_url": url + "/", "api_key": "secret-tok-9876"})
         self.assertEqual(status, 200, body)
@@ -1353,7 +1353,7 @@ class VisualModelPluginTests(ServerCase):
         status, _, body = request(self.port, "POST", "/api/config/visual-model", {"plugin_url": ""})
         self.assertEqual((status, body["plugin_url"]), (200, ""))
         self.assertEqual(self.config(), {"visual_api_key": "tok-1234", "theme": "dark"})
-        with patch.dict(os.environ, {"VT_PLUGINS": "monkeytester-ai=http://ignored:8091"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "monkeytester-ai=http://ignored:8091"}):
             out = self.get_json("/api/plugins")
         # The row is still listed ("not configured"), so the panel stays reachable;
         # the env entry does not come back.
@@ -1373,14 +1373,14 @@ class VisualModelPluginTests(ServerCase):
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
                        "plugin": {"name": "esp32-sensor"}}
         env = f"esp32-sensor={self.peer_url},monkeytester-ai=http://127.0.0.1:9"
-        with self.plugin_env(url), patch.dict(os.environ, {"VT_PLUGINS": env}):
+        with self.plugin_env(url), patch.dict(os.environ, {"MT_PLUGINS": env}):
             out = self.get_json("/api/plugins")
             status = self.get_json("/api/status")
         by_name = {p["name"]: p for p in out["plugins"]}
         self.assertEqual(sorted(by_name), ["esp32-sensor", "monkeytester-ai"])
         self.assertEqual(by_name["monkeytester-ai"]["url"], url)  # not the env's :9
         self.assertEqual(by_name["monkeytester-ai"]["source"], "settings")
-        self.assertEqual(by_name["esp32-sensor"]["source"], "VT_PLUGINS")
+        self.assertEqual(by_name["esp32-sensor"]["source"], "MT_PLUGINS")
         self.assertTrue(by_name["monkeytester-ai"]["ok"])
         self.assertEqual(out["ai_plugin"]["url"], url)
         self.assertEqual(status["plugins"]["monkeytester-ai"]["url"], url)
@@ -1505,16 +1505,16 @@ class VisualModelPluginTests(ServerCase):
 
 
 class DisableWebRunsTests(ServerCase):
-    """VT_DISABLE_WEB_RUNS hides the run-starting links in the nav. UI only:
+    """MT_DISABLE_WEB_RUNS hides the run-starting links in the nav. UI only:
     the pages still open by URL."""
 
     def test_flag_is_reported_to_the_nav(self):
         for value, expected in (("", False), ("0", False), ("off", False), ("1", True), ("true", True)):
-            with patch.dict(os.environ, {"VT_DISABLE_WEB_RUNS": value}):
+            with patch.dict(os.environ, {"MT_DISABLE_WEB_RUNS": value}):
                 self.assertIs(self.get_json("/api/auth/status")["web_runs_disabled"], expected, value)
 
     def test_pages_still_open_by_url(self):
-        with patch.dict(os.environ, {"VT_DISABLE_WEB_RUNS": "1"}):
+        with patch.dict(os.environ, {"MT_DISABLE_WEB_RUNS": "1"}):
             # The manual upload page is gone: the viewer no longer answers it.
             try:
                 status = request(self.port, "GET", "/new-test.html")[0]
@@ -1764,7 +1764,7 @@ class RunOrderTests(ServerCase):
         add_build()
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "submit", Path(app.__file__).parent / "ci" / "visual-test" / "submit.py")
+            "submit", Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py")
         submit = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(submit)
         ctype, body = submit.build_multipart(
@@ -1838,7 +1838,7 @@ class CombinedRunTests(ServerCase):
         add_build()
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "submit", Path(app.__file__).parent / "ci" / "visual-test" / "submit.py")
+            "submit", Path(app.__file__).parent / "ci" / "mt-submit" / "submit.py")
         submit = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(submit)
         ctype, body = submit.build_multipart(
@@ -1916,23 +1916,23 @@ class SettingsSubmenuDismissTests(ServerCase):
         for path in ("/", "/logs.html"):
             body = raw_get(self.port, path)[1]
             for marker in (b':root[data-submenu-dismissed="true"] .site-nav-settings .site-nav-submenu',
-                           b"vt-submenu-dismissed",
+                           b"mt-submenu-dismissed",
                            b"addEventListener('mouseenter'",
                            b"addEventListener('focusin'"):
                 self.assertIn(marker, body, f"{path} missing {marker!r}")
 
 
 class InViewBackButtonTests(ServerCase):
-    """Native-back windows (VT_NATIVE_BACK) get a floating back arrow inside
+    """Native-back windows (MT_NATIVE_BACK) get a floating back arrow inside
     the page content, never a Back entry in the sidebar nav. The home page
     ships the arrow greyed out (disabled) instead of hiding it."""
 
     def test_back_button_code_ships_on_every_page(self):
         for path in ("/", "/logs.html"):
             body = raw_get(self.port, path)[1]
-            for marker in (b"vt-back-btn", b"function renderBackButton()",
-                           b".vt-back-btn[disabled]",
-                           b"body:has(#vt-back-btn)"):
+            for marker in (b"mt-back-btn", b"function renderBackButton()",
+                           b".mt-back-btn[disabled]",
+                           b"body:has(#mt-back-btn)"):
                 self.assertIn(marker, body, f"{path} missing {marker!r}")
 
     def test_nav_no_longer_carries_a_back_link(self):
@@ -1943,12 +1943,12 @@ class InViewBackButtonTests(ServerCase):
 LIVE_CONFIG = {"theme": "dark", "video_size": "100%",
                "visual_endpoint": "http://192.168.125.71:8091/v1/chat/completions",
                "visual_model": "qwen2.5vl:7b", "visual_api_key": "live-pair-tok-4242"}
-LIVE_VT_PLUGINS = ("esp32-sensor=http://127.0.0.1:8091,esp32-server=http://127.0.0.1:8093,"
+LIVE_MT_PLUGINS = ("esp32-sensor=http://127.0.0.1:8091,esp32-server=http://127.0.0.1:8093,"
                    "monkeytester-ai=http://192.168.125.71:8091")
 
 
 class AiAddressImportTests(unittest.TestCase):
-    """At viewer start a monkeytester-ai VT_PLUGINS entry is moved once into
+    """At viewer start a monkeytester-ai MT_PLUGINS entry is moved once into
     config.json (visual_plugin_url); after that the entry is ignored."""
 
     def setUp(self):
@@ -1970,12 +1970,12 @@ class AiAddressImportTests(unittest.TestCase):
 
     def test_live_config_and_env_import_once(self):
         """Exactly the live Run/config.json (legacy visual_endpoint, no
-        visual_plugin) and the live VT_PLUGINS."""
+        visual_plugin) and the live MT_PLUGINS."""
         self.cfg_file.write_text(json.dumps(LIVE_CONFIG))
-        env = {"VT_PLUGINS": LIVE_VT_PLUGINS}
+        env = {"MT_PLUGINS": LIVE_MT_PLUGINS}
         url, log = self.run_import(env)
         self.assertEqual(url, "http://192.168.125.71:8091")
-        self.assertIn("imported monkeytester-ai address from VT_PLUGINS; the VT_PLUGINS "
+        self.assertIn("imported monkeytester-ai address from MT_PLUGINS; the MT_PLUGINS "
                       "entry is ignored from now on", log)
         cfg = json.loads(self.cfg_file.read_text())
         self.assertEqual(cfg, {**LIVE_CONFIG, "visual_plugin_url": "http://192.168.125.71:8091",
@@ -1988,8 +1988,8 @@ class AiAddressImportTests(unittest.TestCase):
         self.assertIn("is ignored", log)
         self.assertEqual(self.cfg_file.stat().st_mtime_ns, mtime)
         # A changed env entry is ignored from now on; the other plugins still
-        # come from VT_PLUGINS.
-        env = {"VT_PLUGINS": LIVE_VT_PLUGINS.replace("192.168.125.71", "10.9.9.9")}
+        # come from MT_PLUGINS.
+        env = {"MT_PLUGINS": LIVE_MT_PLUGINS.replace("192.168.125.71", "10.9.9.9")}
         self.assertEqual(self.run_import(env)[0], "")
         self.assertEqual(app.ai_plugin_url(), "http://192.168.125.71:8091")
         pc = app._plugin_client()
@@ -2001,12 +2001,12 @@ class AiAddressImportTests(unittest.TestCase):
         self.assertEqual(plugins["monkeytester-ai"].token, "live-pair-tok-4242")
 
     def test_import_without_env_entry_or_config_does_nothing_harmful(self):
-        self.assertEqual(self.run_import({"VT_PLUGINS": "esp32-sensor=http://127.0.0.1:8091"})[0], "")
+        self.assertEqual(self.run_import({"MT_PLUGINS": "esp32-sensor=http://127.0.0.1:8091"})[0], "")
         self.assertFalse(self.cfg_file.exists())
-        self.assertEqual(self.run_import({"VT_PLUGINS": "broken"})[0], "")
+        self.assertEqual(self.run_import({"MT_PLUGINS": "broken"})[0], "")
         self.assertFalse(self.cfg_file.exists())
         # No config.json at all yet: the import creates one with just the address.
-        url, _ = self.run_import({"VT_PLUGINS": "monkeytester-ai=http://m:8091/"})
+        url, _ = self.run_import({"MT_PLUGINS": "monkeytester-ai=http://m:8091/"})
         self.assertEqual(url, "http://m:8091")
         self.assertEqual(json.loads(self.cfg_file.read_text()),
                          {"visual_plugin_url": "http://m:8091", "visual_plugin": "monkeytester-ai"})
@@ -2016,7 +2016,7 @@ class AiAddressImportTests(unittest.TestCase):
         # makes it 0600, even when an older version left it group-readable.
         self.cfg_file.write_text(json.dumps(LIVE_CONFIG))
         os.chmod(self.cfg_file, 0o640)
-        self.run_import({"VT_PLUGINS": LIVE_VT_PLUGINS})
+        self.run_import({"MT_PLUGINS": LIVE_MT_PLUGINS})
         self.assertEqual(self.cfg_file.stat().st_mode & 0o777, 0o600)
         self.assertEqual([p.name for p in self.cfg_file.parent.iterdir()], ["config.json"])
         with patch("json.dump", side_effect=RuntimeError("disk full")):
@@ -2028,9 +2028,9 @@ class AiAddressImportTests(unittest.TestCase):
 
 
 class ManagedAiPluginTests(ServerCase):
-    """Managed mode: a launcher app passes VT_MANAGED_AI_PLUGIN_URL
-    and VT_MANAGED_AI_PLUGIN_TOKEN (both required). They win over config.json
-    for every plugin call, are never written to config.json, the VT_PLUGINS
+    """Managed mode: a launcher app passes MT_MANAGED_AI_PLUGIN_URL
+    and MT_MANAGED_AI_PLUGIN_TOKEN (both required). They win over config.json
+    for every plugin call, are never written to config.json, the MT_PLUGINS
     import is skipped, and address/token/removal edits are refused (409)."""
 
     STALE = {"visual_plugin_url": "http://127.0.0.1:9", "visual_api_key": "stale-tok-0000",
@@ -2051,9 +2051,9 @@ class ManagedAiPluginTests(ServerCase):
         self.cfg_path = self.runs / "config.json"
 
     def managed(self, url=None, token="secret-tok-9876"):
-        return patch.dict(os.environ, {"VT_MANAGED_AI_PLUGIN_URL": self.url + "/" if url is None else url,
-                                       "VT_MANAGED_AI_PLUGIN_TOKEN": token,
-                                       "VT_PLUGINS": ""})
+        return patch.dict(os.environ, {"MT_MANAGED_AI_PLUGIN_URL": self.url + "/" if url is None else url,
+                                       "MT_MANAGED_AI_PLUGIN_TOKEN": token,
+                                       "MT_PLUGINS": ""})
 
     def write_stale(self):
         self.cfg_path.write_text(json.dumps(self.STALE))
@@ -2141,9 +2141,9 @@ class ManagedAiPluginTests(ServerCase):
         import io
         err = io.StringIO()
         with self.managed(), contextlib.redirect_stderr(err):
-            url = app.import_ai_plugin_address({"VT_PLUGINS": "monkeytester-ai=http://m:8091",
-                                                "VT_MANAGED_AI_PLUGIN_URL": self.url,
-                                                "VT_MANAGED_AI_PLUGIN_TOKEN": "t"})
+            url = app.import_ai_plugin_address({"MT_PLUGINS": "monkeytester-ai=http://m:8091",
+                                                "MT_MANAGED_AI_PLUGIN_URL": self.url,
+                                                "MT_MANAGED_AI_PLUGIN_TOKEN": "t"})
         self.assertEqual(url, "")
         self.assertEqual(err.getvalue(), "")
         self.assertFalse(self.cfg_path.exists())
@@ -2163,10 +2163,10 @@ class ManagedAiPluginTests(ServerCase):
                                           {"clear_token": True})
                 self.assertNotEqual(status, 409, body)
                 self.cfg_path.write_bytes(before)
-        with patch.dict(os.environ, {"VT_PLUGINS": "monkeytester-ai=http://m:8091"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "monkeytester-ai=http://m:8091"}):
             self.cfg_path.unlink()
-            self.assertEqual(app.import_ai_plugin_address({"VT_PLUGINS": "monkeytester-ai=http://m:8091",
-                                                           "VT_MANAGED_AI_PLUGIN_URL": self.url}),
+            self.assertEqual(app.import_ai_plugin_address({"MT_PLUGINS": "monkeytester-ai=http://m:8091",
+                                                           "MT_MANAGED_AI_PLUGIN_URL": self.url}),
                              "http://m:8091")
 
     def test_runner_applies_the_same_rule(self):
@@ -2174,7 +2174,7 @@ class ManagedAiPluginTests(ServerCase):
         managed env wins over config.json, and is off with one var missing."""
         import subprocess
         import sys
-        scripts = Path(app.__file__).resolve().parent / "visual-tests" / "scripts"
+        scripts = Path(app.__file__).resolve().parent / "mt-tests" / "scripts"
         probe = ("import os, sys; sys.argv=['x']\n"
                  "try:\n    import run_on_device\nexcept SystemExit:\n    pass\n"
                  "print(os.environ.get('VISION_MODEL_API_URL', ''), os.environ.get('VISUAL_MODEL_API_KEY', ''))")
@@ -2183,16 +2183,16 @@ class ManagedAiPluginTests(ServerCase):
 
         def resolve(**extra):
             env = {k: v for k, v in os.environ.items()
-                   if not k.startswith(("VT_MANAGED_", "VISION_MODEL", "VISUAL_MODEL"))}
+                   if not k.startswith(("MT_MANAGED_", "VISION_MODEL", "VISUAL_MODEL"))}
             env.update(extra)
             res = subprocess.run([sys.executable, "-c", probe], cwd=scripts, env=env,
                                  capture_output=True, text=True, timeout=60)
             return res.stdout.strip().splitlines()[-1] if res.stdout.strip() else res.stderr[-500:]
 
-        self.assertEqual(resolve(VT_MANAGED_AI_PLUGIN_URL=self.url + "/",
-                                 VT_MANAGED_AI_PLUGIN_TOKEN="secret-tok-9876"),
+        self.assertEqual(resolve(MT_MANAGED_AI_PLUGIN_URL=self.url + "/",
+                                 MT_MANAGED_AI_PLUGIN_TOKEN="secret-tok-9876"),
                          f"{self.url}/v1/chat/completions secret-tok-9876")
-        self.assertNotIn(self.url, resolve(VT_MANAGED_AI_PLUGIN_URL=self.url))
+        self.assertNotIn(self.url, resolve(MT_MANAGED_AI_PLUGIN_URL=self.url))
 
 
 class ControllerPluginManageTests(ServerCase):

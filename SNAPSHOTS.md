@@ -19,7 +19,7 @@ SNAPSHOT: <name> [mask=<mask>[,<mask>...]] [tolerance=<percent>]
 Baselines live in the case folder, one per screen class:
 
 ```
-visual-tests/<case>/
+mt-tests/<case>/
   INSTRUCTION.txt
   eula_fresh_install.txt
   snapshots/
@@ -63,7 +63,7 @@ baseline, diff}`. `test.html` shows the three images under the step.
 A new screen, a new device class or an intended change all fail first. Then:
 
 1. On the run page, **New baselines (N)** downloads a zip of every `missing`, `mismatch` and
-   `recorded` capture, laid out as `visual-tests/<case>/snapshots/<platform>/<class>/<name>.png`.
+   `recorded` capture, laid out as `mt-tests/<case>/snapshots/<platform>/<class>/<name>.png`.
    `<case>` comes from the upload's `case` field (CI sends the folder name). Without it the zip
    uses `CASE`.
 2. Unzip it into the app repo on a branch, check the images, commit and open a PR. The viewer
@@ -81,7 +81,7 @@ re-baseline.
 
 ### Uploads
 
-`ci/visual-test/submit.py` sends every `snapshots/*/*/*.png` of a case as a `snapshots` part
+`ci/mt-submit/submit.py` sends every `snapshots/*/*/*.png` of a case as a `snapshots` part
 whose filename is the path relative to the case (`snapshots/ios/375x667@2x/eula.png`), plus
 `case=<folder name>`. The viewer accepts only paths that match
 `snapshots/<android|ios>/<W>x<H>@<scale>x/<name>.png`, PNG content and at most 8 MB per file

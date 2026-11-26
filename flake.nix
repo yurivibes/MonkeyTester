@@ -1,5 +1,5 @@
 {
-  description = "MonkeyTester: web viewer + test runner for AI-driven visual tests";
+  description = "MonkeyTester: web viewer + test runner for AI-driven MonkeyTester tests";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
@@ -12,7 +12,7 @@
         pkgs = import nixpkgs { inherit system; };
 
         # The viewer and runner are stdlib-only. pillow is only for the optional
-        # visual-tests/scripts/generate_placeholders.py helper.
+        # mt-tests/scripts/generate_placeholders.py helper.
         python = pkgs.python3.withPackages (ps: [ ps.pillow ]);
 
         # app.py converts recordings to WebM (libvpx-vp9 + libopus).
@@ -22,7 +22,7 @@
         # so it runs from the checkout, never from the
         # read-only Nix store. Run these from the repo root.
         requireCheckout = ''
-          if [ ! -f app.py ] || [ ! -d visual-tests/scripts ]; then
+          if [ ! -f app.py ] || [ ! -d mt-tests/scripts ]; then
             echo "Run this from the MonkeyTester checkout (the directory with app.py)." >&2
             exit 1
           fi
@@ -46,8 +46,8 @@
             if [ "$#" -eq 0 ]; then
               set -- test_ci_delivery test_controller_client test_platform_targeting \
                 test_vision_analyzer test_app_api test_plugin_client test_snapshots \
-                test_builds test_build_plugin_client test_platform_steps test_vt_file_payload \
-                test_vt_payload_upload test_test_variables test_stale_runs \
+                test_builds test_build_plugin_client test_platform_steps test_mt_file_payload \
+                test_mt_payload_upload test_test_variables test_stale_runs \
                 test_projects test_viewer_auth test_security_hardening
             fi
             exec python3 -m unittest "$@"
