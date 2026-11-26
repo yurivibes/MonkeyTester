@@ -576,7 +576,8 @@ class SettingsPagesTests(ServerCase):
     on /plugins."""
     PAGES = {
         "/config": [b'id="buildSection"', b'id="light_mode"'],
-        "/plugins": [b'id="pluginsList"', b"config-device-list"],
+        "/plugins": [b'id="pluginsTable"', b'id="buildPluginsTable"', b'id="controllerTable"',
+                     b"config-device-list"],
         "/run-status": [b'id="runStatusPanel"'],
     }
 
@@ -880,6 +881,70 @@ class VisualModelPluginTests(ServerCase):
         self.assertEqual(info["installed"], ["qwen-vl", "llava"])
         self.assertEqual(info["token"], {"configured": True, "last4": "9876"})
         self.assertNotIn("secret-tok-9876", json.dumps(info))
+
+    def test_plugins_endpoint_routes_the_ai_plugin_the_ai_way(self):
+        """Settings → Plugins Add row: a set op whose address's /health names
+        plugin monkeytester-ai is stored as visual_plugin_url + visual_plugin
+        (token -> visual_api_key), never in the `plugins` map; {"remove":
+        "monkeytester-ai"} clears it like plugin_url: ""."""
+        url = self.serve_plugin()
+        AiPlugin.state["require_token"] = True
+        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+            # Any typed name: the /health plugin name decides.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"name": "vision", "url": url + "/",
+                                               "token": "secret-tok-9876"}})
+            self.assertEqual(status, 200, body)
+            self.assertTrue(body["ai"])
+            self.assertEqual(body["plugin"]["name"], "monkeytester-ai")
+            self.assertEqual(body["plugin"]["url"], url)
+            self.assertEqual(body["plugin"]["token"]["last4"], "9876")
+            cfg = self.config()
+            self.assertEqual((cfg["visual_plugin_url"], cfg["visual_plugin"], cfg["visual_api_key"]),
+                             (url, "monkeytester-ai", "secret-tok-9876"))
+            self.assertNotIn("vision", cfg.get("plugins") or {})
+            self.assertNotIn("monkeytester-ai", cfg.get("plugins") or {})
+            self.assertIn("secret-tok-9876", AiPlugin.auth)  # /config validated with it
+            out = self.get_json("/api/plugins")
+            self.assertEqual(out["ai_plugin"]["url"], url)
+            self.assertTrue(out["ai_plugin"]["configured"])
+            # Save address on the AI row: same set op, name monkeytester-ai,
+            # no token -> the stored pairing token is used.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"name": "monkeytester-ai", "url": url}})
+            self.assertEqual(status, 200, body)
+            self.assertEqual(self.config()["visual_api_key"], "secret-tok-9876")
+            # Remove clears the AI keys; the legacy endpoint keeps working too.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"remove": "monkeytester-ai"})
+            self.assertEqual(status, 200, body)
+            self.assertEqual(body["removed"], "monkeytester-ai")
+            cfg = self.config()
+            self.assertNotIn("visual_plugin_url", cfg)
+            self.assertNotIn("visual_plugin", cfg)
+            self.assertFalse(self.get_json("/api/plugins")["ai_plugin"]["configured"])
+            # Removing again: nothing to remove.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"remove": "monkeytester-ai"})
+            self.assertEqual(status, 400)
+            self.assertEqual(body["code"], "nothing_to_remove")
+            status, _, body = request(self.port, "POST", "/api/config/visual-model",
+                                      {"plugin_url": url})
+            self.assertEqual(status, 200, body)
+            self.assertEqual(self.config()["visual_plugin_url"], url)
+
+    def test_plugins_endpoint_ai_set_stores_nothing_when_the_token_is_rejected(self):
+        url = self.serve_plugin()
+        AiPlugin.state["require_token"] = True
+        with patch.dict(os.environ, {"VT_PLUGINS": ""}):
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"name": "vision", "url": url, "token": "wrong"}})
+        self.assertNotEqual(status, 200, body)
+        self.assertEqual(body["code"], "unauthorized")
+        path = self.runs / "config.json"
+        cfg = json.loads(path.read_text()) if path.exists() else {}
+        self.assertNotIn("visual_plugin_url", cfg)
+        self.assertNotIn("vision", cfg.get("plugins") or {})
 
     def test_plugins_overview_flags_the_visual_plugin(self):
         # The Device Plugins panel gates its Configure button on this: GET
@@ -1381,9 +1446,9 @@ class VisualModelPluginTests(ServerCase):
     def test_plugins_page_has_the_panel_address_and_no_row_controls(self):
         _, body = raw_get(self.port, "/plugins")
         for marker in (b'id="pluginProviderRemote"', b'id="pluginRemoteUrl"',
-                       b'id="pluginRemoteResize"', b"pluginAddressInput",
+                       b'id="pluginRemoteResize"',
                        b'id="pluginSaveAll"', b'id="pluginTokenChoice"',
-                       b'id="pluginAddressChoice"', b'id="pluginCopilotChoice"',
+                       b'id="pluginCopilotChoice"',
                        b"pluginTokenSetInput", b"pluginRemoteKeyInput",
                        b"planSavePayload", b"plugin_url"):
             self.assertIn(marker, body)
@@ -1396,7 +1461,10 @@ class VisualModelPluginTests(ServerCase):
         i_save = body.index(b'id="pluginSaveAll"')
         self.assertLess(i_plugin, i_config)
         self.assertLess(i_config, i_save)
-        self.assertLess(body.index(b'for="pluginAddressInput"'), i_config)
+        # The plugin address field and the keep/remove-plugin select moved
+        # out of the panel: the table row owns address and removal now.
+        self.assertNotIn(b'id="pluginAddressInput"', body)
+        self.assertNotIn(b'id="pluginAddressChoice"', body)
         self.assertLess(body.index(b'id="pluginTokenChoice"'), i_config)
         # One Save button for the panel; every old per-section save control AND
         # the old standalone action buttons (Replace token, Remove plugin,
@@ -1990,6 +2058,17 @@ class ManagedAiPluginTests(ServerCase):
     def write_stale(self):
         self.cfg_path.write_text(json.dumps(self.STALE))
         return self.cfg_path.read_bytes()
+
+    def test_plugins_endpoint_refuses_ai_set_and_remove_when_managed(self):
+        before = self.write_stale()
+        with self.managed():
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"name": "monkeytester-ai", "url": self.url}})
+            self.assertEqual(status, 409, body)
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"remove": "monkeytester-ai"})
+            self.assertEqual(status, 409, body)
+        self.assertEqual(self.cfg_path.read_bytes(), before)
 
     def test_managed_url_and_token_win_over_config(self):
         before = self.write_stale()
