@@ -2163,6 +2163,18 @@ def get_snapshot_mismatches(artifact_dir, test_order=None):
     return found
 
 
+def platform_from_serial(serial):
+    """'ios' for an iPhone UDID (hex + dashes), 'android' for anything else.
+
+    Mirrors the runner's `_device_platform` classifier, so the viewer can
+    resolve a device's platform for legacy single-device runs whose
+    metadata never recorded one."""
+    s = str(serial or "")
+    if re.fullmatch(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}|[0-9A-Fa-f-]{36,40}", s):
+        return "ios"
+    return "android"
+
+
 def get_device_summary(run):
     """Return per-device run summaries, including a legacy single-device view."""
     metadata = get_run_metadata(run)
@@ -2183,6 +2195,7 @@ def get_device_summary(run):
             "id": "legacy",
             "name": _friendly_device_name(device) or serial,
             "serial": serial,
+            "platform": platform_from_serial(device.get("serial") or device.get("model") or ""),
             "status": metadata.get("status", "unknown"),
             "passed": metadata.get("passed", 0),
             "failed": metadata.get("failed", 0),
@@ -2677,7 +2690,7 @@ def get_test_device_videos(run, test_name):
         devices.append({
             "id": "legacy",
             "name": _friendly_device_name(legacy_entry) or "Test device",
-            "platform": "android",
+            "platform": platform_from_serial(device.get("serial", "")),
             "serial": device.get("serial", ""),
             "device_status": metadata.get("status", "unknown"),
             "test_status": test_status,

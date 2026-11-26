@@ -719,7 +719,7 @@ function selectTestDevice(run, testName, deviceId, silent) {
                 badgeEl.textContent = (data.status || '--').toUpperCase();
             }
             if (contentEl) {
-                contentEl.innerHTML = buildTestDetailHtml(data, run) ||
+                contentEl.innerHTML = buildTestDetailHtml(data, run, devicePlatformOf(deviceId)) ||
                     '<div class="loading" style="padding:0">No data</div>';
             }
             const videoUrl = data.video && data.video.name
@@ -913,6 +913,15 @@ function devicePlatformOf(deviceId) {
     return (d && d.platform) ? String(d.platform).toLowerCase() : null;
 }
 
+// The platform of the device a RESULT panel belongs to: the row's selected
+// device, else the run's only device (legacy single-device runs have no
+// selection yet).
+function resultDevicePlatformOf(deviceId) {
+    if (deviceId) return devicePlatformOf(deviceId);
+    if (deviceSummaries.length === 1) return devicePlatformOf(deviceSummaries[0].id);
+    return null;
+}
+
 function renderProgress(progress) {
     if (!progress) return '';
     const terminal = progress.phase === 'completed' || progress.phase === 'completed_with_failures' || progress.phase === 'failed';
@@ -993,8 +1002,11 @@ async function loadRun() {
         const summary = await fetchJSON('/api/device-summary/' + encodeURIComponent(run));
         const devices = summary.devices || [];
         deviceSummaryVariant = forceDeviceSummary || devices.length > 1;
+        // Keep the summaries even for single-device runs: test.html uses them
+        // to resolve a device's PLATFORM (struck-out other-platform steps),
+        // even where no device switcher renders.
+        deviceSummaries = devices;
         if (deviceSummaryVariant) {
-            deviceSummaries = devices;
             const selectedExists = deviceSummaries.some(function(device) {
                 return device.id === selectedDeviceId;
             });
@@ -1383,7 +1395,7 @@ async function loadTestCase(run, testName, fileInfo, pendingData, deviceId) {
     // filled here from the selected device's data, and selecting a device
     // chip on the right loads that device's result.
     const contentEl = document.getElementById('content-' + testName);
-    const detailHtml = buildTestDetailHtml(resultData, run);
+    const detailHtml = buildTestDetailHtml(resultData, run, resultDevicePlatformOf(deviceId));
     if (contentEl) {
         contentEl.innerHTML = detailHtml || '<div class="loading" style="padding:0">No data</div>';
     } else {
@@ -1434,7 +1446,7 @@ function snapshotHtml(snap) {
     return html + '</div>';
 }
 
-function buildTestDetailHtml(resultData, run) {
+function buildTestDetailHtml(resultData, run, devicePlatform) {
     let html = '';
     if ((resultData.status || '').toUpperCase() === 'UNAVAILABLE') {
         // Setup failed on this device (app didn't build, locked, install
@@ -1454,7 +1466,11 @@ function buildTestDetailHtml(resultData, run) {
         for (const step of steps) {
             const stepStatus = (step.status || '').toLowerCase();
             const s = step.step || step;
-            html += '<div class="step-row">';
+            // A step gated for the OTHER platform (`IF IOS:` on an Android
+            // device, etc.) never ran here: empty box, struck-out text.
+            const gated = stepPlatformOf(s);
+            const otherPlatform = gated && devicePlatform && gated !== devicePlatform;
+            html += '<div class="step-row' + (otherPlatform ? ' other-platform-step' : '') + '">';
             html += '<span class="step-status ' + stepStatus + '"></span>';
             html += '<div class="step-content">';
             if (s.command) html += '<div class="step-command">' + escapeHtml(s.command) + '</div>';

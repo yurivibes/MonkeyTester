@@ -1940,6 +1940,25 @@ class ConfiguredDeviceNameTests(ServerCase):
         self.assertEqual(self.get_json("/api/metadata/run_4")["device"]["display_name"], "Pixel 8")
 
 
+class LegacyRunDevicePlatformTests(ServerCase):
+    """The device summary and the per-test device list carry a platform for
+    legacy single-device runs, derived from the serial (UDID = iOS)."""
+
+    def write_meta(self, name, meta):
+        (self.runs / name).mkdir(exist_ok=True)
+        (self.runs / name / "run_metadata.json").write_text(json.dumps(meta))
+
+    def test_adb_serial_legacy_run_is_android(self):
+        self.write_meta("run_5", {"device": {"serial": "ZA2235GDS8", "name": "moto g power - 2025"}})
+        self.assertEqual(self.get_json("/api/device-summary/run_5")["devices"][0]["platform"], "android")
+        self.assertEqual(self.get_json("/api/test-devices/run_5/t")["devices"][0]["platform"], "android")
+
+    def test_udid_legacy_run_is_ios(self):
+        self.write_meta("run_6", {"device": {"serial": "00008030-000C50D42EE3802E", "name": "iPhone SE"}})
+        self.assertEqual(self.get_json("/api/device-summary/run_6")["devices"][0]["platform"], "ios")
+        self.assertEqual(self.get_json("/api/test-devices/run_6/t")["devices"][0]["platform"], "ios")
+
+
 class RunOrderTests(ServerCase):
     """Runs execute one after another, in submission order: Android and iOS
     runs share the one ESP32 board."""
