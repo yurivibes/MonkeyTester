@@ -83,7 +83,7 @@ class BuildCase(ServerCase):
 class PluginSettingsTests(BuildCase):
     def add(self, **op):
         return self.call("POST", "/api/config/plugins",
-                         {"set": {"name": "build-local", "url": self.plugin_url, **op}})
+                         {"set": {"url": self.plugin_url, **op}})
 
     def test_add_checks_health_and_saves_privately(self):
         status, body = self.add()
@@ -105,16 +105,17 @@ class PluginSettingsTests(BuildCase):
         # A device contract registers the address in the SAME registry as a
         # plain url string (a Test Plugin), not as a build entry; dead and
         # malformed requests save nothing.
-        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
+        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
+                       "plugin": {"name": "x"}}
         status, body = self.call("POST", "/api/config/plugins",
-                                 {"set": {"name": "x", "url": self.peer_url}})
+                                 {"set": {"url": self.peer_url}})
         self.assertEqual(status, 200, body)
         self.assertEqual(self.registry()["x"], self.peer_url)  # string, not {url, token}
         status, body = self.call("POST", "/api/config/plugins",
-                                 {"set": {"name": "dead", "url": "http://127.0.0.1:9"}})
+                                 {"set": {"url": "http://127.0.0.1:9"}})
         self.assertEqual((status, body["code"]), (400, "unreachable"))
-        for bad in ({"set": {"name": "bad name", "url": self.plugin_url}}, {"set": {"name": "x"}},
-                    {"remove": "x", "set": {}}, {"set": {"name": "x", "url": "u", "extra": 1}}):
+        for bad in ({"set": {"name": "build-local", "url": self.plugin_url}}, {"set": {}},
+                    {"remove": "x", "set": {}}, {"set": {"url": "u", "extra": 1}}):
             self.assertEqual(self.call("POST", "/api/config/plugins", bad)[0], 400, bad)
         self.assertFalse(self.config_file.exists())
 
@@ -137,6 +138,53 @@ class PluginSettingsTests(BuildCase):
         self.assertEqual(self.add(token=None)[0], 200)
         self.assertEqual(self.registry()["build-local"]["token"], "")
         self.assertEqual(app.auth.plugin_token("build-local"), "")
+
+    def test_add_without_a_name_uses_the_health_name(self):
+        FakeBuildPlugin.name = "build-mac"
+        status, body = self.add()
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["plugin"]["name"], "build-mac")
+        self.assertEqual(self.registry(), {"build-mac": {"url": self.plugin_url, "token": ""}})
+
+    def test_build_plugin_health_without_a_name_is_refused(self):
+        FakeBuildPlugin.name = ""
+        status, body = self.add()
+        self.assertEqual((status, body["code"]), (400, "no_plugin_name"))
+        self.assertFalse((self.runs / "config.json").exists())
+
+    def test_taken_build_name_at_another_address_is_refused(self):
+        builds.merge_registry({"build-local": {"url": "http://127.0.0.1:9", "token": ""}})
+        status, body = self.add()
+        self.assertEqual((status, body["code"]), (400, "name_taken"))
+        self.assertEqual(self.registry(), {"build-local": {"url": "http://127.0.0.1:9", "token": ""}})
+
+    def test_address_edit_renames_the_plugin_and_repoints_projects(self):
+        FakeBuildPlugin.pairing = "pair-token-1234"
+        self.register(projects=(REPO, OTHER))
+        builds.save_config({"projects": [{"repo": REPO, "plugin": "build-local", "branch": ""},
+                                         {"repo": OTHER, "plugin": "elsewhere", "branch": ""}]})
+        app.auth.set_service_token("plugin:build-local", "pair-token-1234")
+        FakeBuildPlugin.name = "build-mac"  # the plugin now names itself differently
+        status, body = self.call("POST", "/api/config/plugins",
+                                 {"set": {"url": self.plugin_url}, "row": "build-local"})
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["renamed_from"], body["plugin"]["name"]), ("build-local", "build-mac"))
+        self.assertEqual(body["plugin"]["token"]["last4"], "1234")
+        self.assertEqual(self.registry(), {"build-mac": {"url": self.plugin_url, "token": ""}})
+        self.assertEqual({p["repo"]: p["plugin"] for p in self.stored()["projects"]},
+                         {REPO: "build-mac", OTHER: "elsewhere"})
+        self.assertEqual(app.auth.plugin_token("build-mac"), "pair-token-1234")
+        self.assertEqual(app.auth.plugin_token("build-local"), "")
+
+    def test_rename_onto_another_build_row_is_name_taken(self):
+        self.register()
+        builds.merge_registry({"build-mac": {"url": "http://127.0.0.1:9", "token": ""}})
+        FakeBuildPlugin.name = "build-mac"
+        status, body = self.call("POST", "/api/config/plugins",
+                                 {"set": {"url": self.plugin_url}, "row": "build-local"})
+        self.assertEqual((status, body["code"]), (400, "name_taken"))
+        self.assertIn("build-local", self.registry())
+        self.assertEqual(self.stored()["projects"][0]["plugin"], "build-local")
 
     def test_remove_refuses_a_plugin_projects_use(self):
         self.register()

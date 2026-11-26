@@ -104,6 +104,14 @@ Readiness. Never blocks on hardware.
 }
 ```
 
+`plugin.name` is **required** and must match `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`
+(`PLUGIN_NAME_RE`; the string form `"plugin": "esp32"` is accepted too). It is the name
+tests use (`PLUGIN: <name> …`): the viewer registers the plugin under it — the Add row
+takes only the address, and a `/health` without a valid name is refused
+(`no_plugin_name`). If the name changes, the next **Save address** on the plugin's row
+renames the row (the pairing token moves with it); a name already registered at another
+address is refused (`name_taken`).
+
 `capabilities` lists the optional parts of this contract the plugin supports.
 
 `docs` (optional) is the path of the plugin's documentation page, normally `"/docs"`
@@ -280,9 +288,9 @@ an hour.
 ## Using plugins from tests
 
 MonkeyTester reads the plugins it may call from the `plugins` map {name: url} in
-`Run/config.json` — registered on the Settings → Device Plugins **Manage device plugins**
-box (add / edit address / remove; an address is stored only when its `GET /health`
-speaks this contract). A `MT_PLUGINS=name=url[,name=url…]` environment variable is
+`Run/config.json` — registered on the Plugins page's **Test Plugins** Add row
+(add / edit address / remove; an address is stored only when its `GET /health`
+speaks this contract, under the `plugin.name` that `/health` reports). A `MT_PLUGINS=name=url[,name=url…]` environment variable is
 imported into that map ONCE at viewer start and ignored after that; the monkeytester-ai
 plugin's address is set in Settings → Device Plugins instead. A test step calls an
 action with:
@@ -290,6 +298,9 @@ action with:
 ```
 PLUGIN: <plugin> <action> [key=value …] [device=<id>] [timeout=<seconds>]
 ```
+
+`<plugin>` is the name the plugin reports in `/health` `plugin.name` (shown in the
+Name column on the Plugins page).
 
 Values may be quoted (`pattern="WiFi connected"`). The step starts a job, waits for
 it, prints the job's `log` into the run's console log, and passes only if the job

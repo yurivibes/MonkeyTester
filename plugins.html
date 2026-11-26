@@ -136,10 +136,9 @@
 
     <div class="settings-section" id="pluginsTestSection">
         <div class="plugins-section-title">Test Plugins<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="testPluginsHelp" title="What is this?" aria-label="What is a test plugin?">?</button></div>
-        <div class="config-info" id="testPluginsHelp" hidden>A <strong>test plugin</strong> gives tests something the phones can't: a device plugin drives extra hardware a test talks to, and the vision-model plugin reads the screenshots. Add a plugin with the row below; a plugin with its own settings, such as the vision-model plugin, has a <strong>Configure</strong> button on its row. Tests call a plugin by its registered name.</div>
+        <div class="config-info" id="testPluginsHelp" hidden>A <strong>test plugin</strong> gives tests something the phones can't: a device plugin drives extra hardware a test talks to, and the vision-model plugin reads the screenshots. Add a plugin with the row below; a plugin with its own settings, such as the vision-model plugin, has a <strong>Configure</strong> button on its row. You add only its address: each plugin reports its own name. Tests call a plugin by the name it reports (shown in the Name column).</div>
         <div class="plugin-add-row" id="pluginAddRow"><span class="pm-add-hint">Add a Test Plugin:</span>
-            <input type="text" id="pluginAddName" placeholder="name, e.g. esp32-sensor" autocomplete="off" aria-label="Plugin name">
-            <input type="url" id="pluginAddUrl" placeholder="http://host:port" autocomplete="off" aria-label="Plugin address">
+            <input type="url" id="pluginAddUrl" placeholder="http://host:port (names itself)" title="Only the address: the plugin reports its own name, shown in the Name column" autocomplete="off" aria-label="Plugin address (the plugin reports its own name)">
             <input type="password" id="pluginAddToken" autocomplete="new-password" placeholder="pairing token (optional)" aria-label="Pairing token (optional)">
             <button class="btn-secondary" id="pluginAddBtn" type="button">Add</button></div>
         <div class="settings-status" id="pluginManageStatus" hidden></div>
@@ -154,10 +153,9 @@
 
     <div class="settings-section" id="pluginsBuildSection">
         <div class="plugins-section-title">Build Plugin<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="buildPluginHelp" title="What is this?" aria-label="What is a build plugin?">?</button></div>
-        <div class="config-info" id="buildPluginHelp" hidden>A <strong>build plugin</strong> builds a branch of your app on its own host and uploads the apps to the viewer, which then tests them on the devices. Add its address with the row below, and use <strong>Configure</strong> on its row for the code host settings. Projects pick a build plugin on <a href="/config">Settings &rarr; Build &amp; Test</a>.</div>
+        <div class="config-info" id="buildPluginHelp" hidden>A <strong>build plugin</strong> builds a branch of your app on its own host and uploads the apps to the viewer, which then tests them on the devices. Add its address with the row below (the build plugin reports its own name, shown in the Name column; projects use that name), and use <strong>Configure</strong> on its row for the code host settings. Projects pick a build plugin on <a href="/config">Settings &rarr; Build &amp; Test</a>.</div>
         <div class="plugin-add-row" id="buildAddRow"><span class="pm-add-hint">Add a Build Plugin:</span>
-            <input type="text" id="buildAddName" placeholder="name, e.g. build-local" autocomplete="off" aria-label="Build plugin name">
-            <input type="url" id="buildAddUrl" placeholder="http://host:port" autocomplete="off" aria-label="Build plugin address">
+            <input type="url" id="buildAddUrl" placeholder="http://host:port (names itself)" title="Only the address: the plugin reports its own name, shown in the Name column" autocomplete="off" aria-label="Build plugin address (the plugin reports its own name)">
             <input type="password" id="buildAddToken" autocomplete="new-password" placeholder="pairing token (optional)" aria-label="Pairing token (optional)">
             <button class="btn-secondary" id="buildAddBtn" type="button">Add</button></div>
         <div class="settings-status" id="buildManageStatus" hidden></div>
@@ -492,17 +490,33 @@ function renderTestTable() {
     }), "No Test Plugins added yet \u2014 add one above.", closePluginConfigure);
 }
 
+// okMsg: a string, or a function of the response (the plugin's name comes
+// from its own /health, so the message is only known afterwards). Returns the
+// response, or null when nothing was saved.
 async function managePost(payload, okMsg) {
     setSectionStatus("pluginManageStatus", "Checking the plugin\u2026", "");
+    let out;
     try {
-        await postConfig("/api/config/plugins", payload);
+        out = await postConfig("/api/config/plugins", payload);
     } catch (e) {
         setSectionStatus("pluginManageStatus", "Not saved: " + e.message, "error");
-        return false;
+        return null;
     }
-    setSectionStatus("pluginManageStatus", okMsg, "saved", 6000);
+    setSectionStatus("pluginManageStatus", typeof okMsg === "function" ? okMsg(out) : okMsg, "saved", 6000);
     await loadPlugins();  // re-render the table from the saved state
-    return true;
+    return out;
+}
+
+// The status line after a row's Save address: a new /health name renames it.
+function savedAddressMsg(out, name) {
+    if (out && out.renamed_from) {
+        return "Saved address; plugin renamed " + out.renamed_from + " \u2192 " + out.plugin.name + ".";
+    }
+    return "Saved address for " + name + ".";
+}
+
+function addedName(out, fallback) {
+    return (out && out.plugin && out.plugin.name) || fallback;
 }
 
 wireTable("pluginsTbody", async (act, name, url, btn) => {
@@ -516,7 +530,12 @@ wireTable("pluginsTbody", async (act, name, url, btn) => {
         btn.disabled = true;
         // monkeytester-ai's row goes through the same set op: the viewer sees
         // its /health name and stores it the AI way (visual_plugin_url).
-        if (await managePost({ set: { name, url } }, "Saved address for " + name + ".")) {
+        // `row` says which row is edited; the name comes from /health, and a
+        // different one renames the row (the reload drops the old row).
+        const out = await managePost({ set: { url }, row: name }, o => savedAddressMsg(o, name));
+        if (out && out.renamed_from) {
+            if (configureFor === out.renamed_from) closePluginConfigure();
+        } else if (out) {
             const tr = rowFor(document.getElementById("pluginsTbody"), name);
             const inp = tr && tr.querySelector("input.pt-addr");
             if (inp) { inp.value = normAddr(url); }
@@ -526,18 +545,19 @@ wireTable("pluginsTbody", async (act, name, url, btn) => {
     }
 });
 
-wireAddRow({ btn: "pluginAddBtn", inputs: ["pluginAddName", "pluginAddUrl", "pluginAddToken"] }, async () => {
-    const an = document.getElementById("pluginAddName"), au = document.getElementById("pluginAddUrl");
+// The plugin names itself: the Add row sends only the address (and token).
+wireAddRow({ btn: "pluginAddBtn", inputs: ["pluginAddUrl", "pluginAddToken"] }, async () => {
+    const au = document.getElementById("pluginAddUrl");
     const at = document.getElementById("pluginAddToken");
-    const name = an.value.trim(), url = au.value.trim(), token = at.value.trim();
-    if (!name || !url) {
-        setSectionStatus("pluginManageStatus", "Type both a name and an address first.", "error");
+    const url = au.value.trim(), token = at.value.trim();
+    if (!url) {
+        setSectionStatus("pluginManageStatus", "Type the plugin's address first.", "error");
         return;
     }
-    const op = { name, url };
+    const op = { url };
     if (token) op.token = token;
-    if (await managePost({ set: op }, "Added plugin " + name + ".")) {
-        an.value = ""; au.value = ""; at.value = "";
+    if (await managePost({ set: op }, o => "Added plugin " + addedName(o, url) + ".")) {
+        au.value = ""; at.value = "";
     }
 });
 
@@ -567,15 +587,16 @@ function renderBuildTable() {
 
 async function buildManagePost(payload, okMsg) {
     setSectionStatus("buildManageStatus", "Checking the plugin\u2026", "");
+    let out;
     try {
-        await postConfig("/api/config/plugins", payload);
+        out = await postConfig("/api/config/plugins", payload);
     } catch (e) {
         setSectionStatus("buildManageStatus", "Not saved: " + e.message, "error");
-        return false;
+        return null;
     }
-    setSectionStatus("buildManageStatus", okMsg, "saved", 6000);
+    setSectionStatus("buildManageStatus", typeof okMsg === "function" ? okMsg(out) : okMsg, "saved", 6000);
     await loadPlugins();
-    return true;
+    return out;
 }
 
 wireTable("buildTbody", async (act, name, url, btn) => {
@@ -587,24 +608,25 @@ wireTable("buildTbody", async (act, name, url, btn) => {
     } else if (act === "save") {
         if (!url) { setSectionStatus("buildManageStatus", "Type the new address first.", "error"); return; }
         btn.disabled = true;
-        await buildManagePost({ set: { name, url } }, "Saved address for " + name + ".");
+        const out = await buildManagePost({ set: { url }, row: name }, o => savedAddressMsg(o, name));
+        if (out && out.renamed_from && buildPanelPlugin === out.renamed_from) closeBuildPanel();
         const tr = rowFor(document.getElementById("buildTbody"), name);
         if (tr) updateRowDirty(tr);
     }
 });
 
-wireAddRow({ btn: "buildAddBtn", inputs: ["buildAddName", "buildAddUrl", "buildAddToken"] }, async () => {
-    const an = document.getElementById("buildAddName"), au = document.getElementById("buildAddUrl");
+wireAddRow({ btn: "buildAddBtn", inputs: ["buildAddUrl", "buildAddToken"] }, async () => {
+    const au = document.getElementById("buildAddUrl");
     const at = document.getElementById("buildAddToken");
-    const name = an.value.trim(), url = au.value.trim(), token = at.value.trim();
-    if (!name || !url) {
-        setSectionStatus("buildManageStatus", "Type both a name and an address first.", "error");
+    const url = au.value.trim(), token = at.value.trim();
+    if (!url) {
+        setSectionStatus("buildManageStatus", "Type the build plugin's address first.", "error");
         return;
     }
-    const op = { name, url };
+    const op = { url };
     if (token) op.token = token;
-    if (await buildManagePost({ set: op }, "Added build plugin " + name + ".")) {
-        an.value = ""; au.value = ""; at.value = "";
+    if (await buildManagePost({ set: op }, o => "Added build plugin " + addedName(o, url) + ".")) {
+        au.value = ""; at.value = "";
     }
 });
 
