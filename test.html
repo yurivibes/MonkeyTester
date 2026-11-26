@@ -8,7 +8,7 @@
 {{CSS}}
 
 /* Pending-specific styles */
-.badge.pending { background: var(--warn); color: var(--on-status); border: 1px solid var(--warn); }
+.badge.pending { background: transparent; color: var(--warn); border: 1px solid var(--warn); }
 .badge.running { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
 .live-progress { background: var(--surface); border: 2px solid var(--border); border-left: 4px solid var(--acid); padding: 12px 16px; margin-bottom: 12px; }
 .live-progress-title { color: var(--accent); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -17,8 +17,8 @@
 .snapshot-mismatches { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
 .snapshot-mismatch-line { display: flex; align-items: baseline; gap: 8px; font-size: 0.85rem; }
 .snapshot-mismatch-pct { color: var(--fail); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4.5em; }
-.step-row.pending-step .step-status { background: var(--text-muted); }
-.step-row.pending-step .step-command { color: var(--text-muted); }
+.step-row.pending-step .step-status { background: transparent; border: 1px solid var(--warn); }
+.step-row.pending-step .step-command { color: var(--warn); }
 .step-row.running-step .step-status { background: var(--accent); animation: pulse 1.5s infinite; }
 .step-row.running-step .step-command { color: var(--accent); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
