@@ -23,9 +23,14 @@
 .plugin-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .plugin-table th, .plugin-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
 .plugin-table th { background: var(--card); color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+/* Same column widths in every section's table, so the three line up. */
+.plugin-table th:nth-child(1) { width: 13%; }
+.plugin-table th:nth-child(2) { width: 9%; }
+.plugin-table th:nth-child(3) { width: 26%; }
+.plugin-table th:nth-child(5) { width: 18%; }
 .plugin-table td.pt-name { font-weight: 600; white-space: nowrap; }
 .plugin-table td.pt-status { white-space: nowrap; }
-.plugin-table td.pt-address { width: 30%; min-width: 220px; }
+.plugin-table td.pt-address { min-width: 220px; }
 .plugin-table td.pt-address input { width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; font-family: monospace; font-size: 0.8rem; }
 .plugin-table td.pt-address code { font-family: monospace; font-size: 0.8rem; color: var(--text); word-break: break-all; }
 .plugin-table td.pt-details { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; }
@@ -643,7 +648,7 @@ function renderBuildPanel(cfg) {
           + (t.saved_at ? " \u00b7 saved " + escapeHtml(String(t.saved_at).slice(0, 10)) : "")
         : "No code host token saved.";
     panel.innerHTML = head
-        + '<div class="hint">' + escapeHtml(savedLine) + "</div>"
+        + '<div class="hint">' + savedLine + "</div>"  // parts escaped above
         + '<div class="inline-row"><select class="plugin-configure" id="bp_forge_kind" aria-label="Code host">'
         + '<option value="gitea">Gitea</option><option value="github">GitHub</option></select>'
         + '<input type="text" id="bp_forge_url" autocomplete="off" aria-label="Code host URL" '
