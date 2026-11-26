@@ -1,7 +1,7 @@
 # Security
 
 MonkeyTester is a home-lab tool: one person (or a small team) testing their own apps on
-their own phones, on a home LAN (here `192.168.125.0/24`). This file covers the viewer in
+their own phones, on a home LAN (for example `192.168.1.0/24`; an example subnet, not a required one). This file covers the viewer in
 this repo and gives the overview for the whole MonkeyTester family. It does **not** claim
 "zero vulnerabilities"; it lists what is protected, how, and what is not covered.
 

@@ -1392,7 +1392,7 @@ class VisualModelPluginTests(ServerCase):
         url = self.serve_plugin()
         with self.plugin_env(url):
             status, _, body = request(self.port, "POST", "/api/config/visual-model",
-                                      {"remote_url": "http://192.168.125.70:8080",
+                                      {"remote_url": "http://192.168.1.10:8080",
                                        "remote_api_key": "sk-remote-secret-5678"})
             self.assertEqual(status, 200, body)
             self.assertEqual([m["id"] for m in body["config"]["remote"]["models"]], REMOTE_MODELS)
@@ -1405,7 +1405,7 @@ class VisualModelPluginTests(ServerCase):
             overview = self.get_json("/api/plugins")
         # The remote keys go in one POST (url + key together), provider last.
         self.assertEqual(AiPlugin.posts, [
-            ("/config", {"remote_url": "http://192.168.125.70:8080",
+            ("/config", {"remote_url": "http://192.168.1.10:8080",
                          "remote_api_key": "sk-remote-secret-5678"}),
             ("/config", {"remote_model": "video-model", "remote_resize": False}),
             ("/config", {"provider": "remote"})])
@@ -1414,7 +1414,7 @@ class VisualModelPluginTests(ServerCase):
         self.assertEqual(body["config"]["provider"], "remote")
         self.assertEqual(info["provider"], "remote")
         self.assertEqual((info["remote"]["url"], info["remote"]["model"], info["remote"]["resize"]),
-                         ("http://192.168.125.70:8080", "video-model", False))
+                         ("http://192.168.1.10:8080", "video-model", False))
         # The remote key never comes back from the viewer.
         for reply in (body, info, overview, self.get_json("/api/config/visual-model")):
             self.assertNotIn("sk-remote-secret-5678", json.dumps(reply))
@@ -1941,10 +1941,10 @@ class InViewBackButtonTests(ServerCase):
 
 
 LIVE_CONFIG = {"theme": "dark", "video_size": "100%",
-               "visual_endpoint": "http://192.168.125.71:8091/v1/chat/completions",
+               "visual_endpoint": "http://192.168.1.20:8091/v1/chat/completions",
                "visual_model": "qwen2.5vl:7b", "visual_api_key": "live-pair-tok-4242"}
 LIVE_MT_PLUGINS = ("esp32-sensor=http://127.0.0.1:8091,esp32-server=http://127.0.0.1:8093,"
-                   "monkeytester-ai=http://192.168.125.71:8091")
+                   "monkeytester-ai=http://192.168.1.20:8091")
 
 
 class AiAddressImportTests(unittest.TestCase):
@@ -1974,11 +1974,11 @@ class AiAddressImportTests(unittest.TestCase):
         self.cfg_file.write_text(json.dumps(LIVE_CONFIG))
         env = {"MT_PLUGINS": LIVE_MT_PLUGINS}
         url, log = self.run_import(env)
-        self.assertEqual(url, "http://192.168.125.71:8091")
+        self.assertEqual(url, "http://192.168.1.20:8091")
         self.assertIn("imported monkeytester-ai address from MT_PLUGINS; the MT_PLUGINS "
                       "entry is ignored from now on", log)
         cfg = json.loads(self.cfg_file.read_text())
-        self.assertEqual(cfg, {**LIVE_CONFIG, "visual_plugin_url": "http://192.168.125.71:8091",
+        self.assertEqual(cfg, {**LIVE_CONFIG, "visual_plugin_url": "http://192.168.1.20:8091",
                                "visual_plugin": "monkeytester-ai"})
         # Idempotent: a second start imports nothing, writes nothing, says the
         # env entry is ignored.
@@ -1989,15 +1989,15 @@ class AiAddressImportTests(unittest.TestCase):
         self.assertEqual(self.cfg_file.stat().st_mtime_ns, mtime)
         # A changed env entry is ignored from now on; the other plugins still
         # come from MT_PLUGINS.
-        env = {"MT_PLUGINS": LIVE_MT_PLUGINS.replace("192.168.125.71", "10.9.9.9")}
+        env = {"MT_PLUGINS": LIVE_MT_PLUGINS.replace("192.168.1.20", "10.9.9.9")}
         self.assertEqual(self.run_import(env)[0], "")
-        self.assertEqual(app.ai_plugin_url(), "http://192.168.125.71:8091")
+        self.assertEqual(app.ai_plugin_url(), "http://192.168.1.20:8091")
         pc = app._plugin_client()
         plugins = pc.viewer_plugins(env, app.ai_plugin_url(), "live-pair-tok-4242")
         self.assertEqual({n: c.url for n, c in plugins.items()},
                          {"esp32-sensor": "http://127.0.0.1:8091",
                           "esp32-server": "http://127.0.0.1:8093",
-                          "monkeytester-ai": "http://192.168.125.71:8091"})
+                          "monkeytester-ai": "http://192.168.1.20:8091"})
         self.assertEqual(plugins["monkeytester-ai"].token, "live-pair-tok-4242")
 
     def test_import_without_env_entry_or_config_does_nothing_harmful(self):

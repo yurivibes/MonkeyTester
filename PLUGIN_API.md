@@ -10,7 +10,7 @@ Implementations:
 | Plugin | Repo | Default port |
 |---|---|---|
 | `esp32` | MonkeyTester-Plugin-Esp32 | 8091 |
-| `monkeytester-ai` | MonkeyTester-Plugin-AI | 8091 (on the Mac, e.g. `http://192.168.125.71:8091`); address set in Settings → Device Plugins, not `MT_PLUGINS` |
+| `monkeytester-ai` | MonkeyTester-Plugin-AI | 8091 (on the Mac, e.g. `http://192.168.1.20:8091`, an example address; use your Mac's); address set in Settings → Device Plugins, not `MT_PLUGINS` |
 
 The Mobile Controller still uses its own API (`API.md` in that repo); moving it onto
 this contract is a later step.

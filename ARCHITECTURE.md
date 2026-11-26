@@ -4,8 +4,10 @@
 
 ## System Diagram
 
+> **Note:** IP addresses in this document (`192.168.1.10` for the Linux host, `192.168.1.20` for the Mac, `192.168.1.100:5555` for an Android phone) are examples only. Don't use them as-is; replace them with your own machines' addresses.
+
 ```
-        Linux host (192.168.125.70)                  Mac (192.168.125.5)
+        Linux host (192.168.1.10)                  Mac (192.168.1.20)
 ┌──────────────────────────────────────┐   ┌───────────────────────────────────┐
 │ MonkeyTester (this repo)             │   │ MonkeyTester-Plugin-Mobile-Controller    │
 │                                      │   │ (separate repo)                   │
