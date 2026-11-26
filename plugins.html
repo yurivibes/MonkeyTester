@@ -8,33 +8,49 @@
 {{CSS}}
 {{SETTINGS_CSS}}
 
-/* Device plugins */
-.plugins-list { display: flex; gap: 12px; flex-wrap: wrap; }
+/* Plugin tables: every section is title + "?" intro, an Add row, its status
+   line, then one table of the added plugins (Name | Status | Address |
+   Details | Actions). Configure opens an inline row under the plugin's row. */
 .plugins-none { font-size: 0.8rem; color: var(--text-muted); }
 .plugins-none.bad { color: var(--fail); }
-.plugin-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 16px;
-    min-width: 240px;
-    max-width: 340px;
-}
-.plugin-card h4 { font-size: 0.95rem; font-weight: 600; }
-.plugin-card .status-ok { color: var(--pass); }
-.plugin-card .status-bad { color: var(--fail); }
-.plugin-card .meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
-.plugin-card .meta code { font-family: monospace; font-size: 0.75rem; }
-.plugin-card .meta.bad { color: var(--fail); }
+.plugin-add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; margin: 4px 0 8px; }
+.plugin-add-row .pm-add-hint { color: var(--text-muted); font-size: 0.8rem; }
+.plugin-add-row input { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; font-size: 0.85rem; min-width: 160px; }
+.plugin-add-row input[type="url"] { min-width: 220px; }
+.plugin-add-row button { padding: 5px 12px; white-space: nowrap; }
+.plugin-add-row[hidden] { display: none; }
+.plugin-table-wrap { width: 100%; overflow-x: auto; margin-top: 4px; }
+.plugin-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.plugin-table th, .plugin-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+.plugin-table th { background: var(--card); color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.plugin-table td.pt-name { font-weight: 600; white-space: nowrap; }
+.plugin-table td.pt-status { white-space: nowrap; }
+.plugin-table td.pt-address { width: 30%; min-width: 220px; }
+.plugin-table td.pt-address input { width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; font-family: monospace; font-size: 0.8rem; }
+.plugin-table td.pt-address code { font-family: monospace; font-size: 0.8rem; color: var(--text); word-break: break-all; }
+.plugin-table td.pt-details { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; }
+.plugin-table td.pt-details code { font-family: monospace; font-size: 0.75rem; }
+.plugin-table td.pt-details .bad { color: var(--fail); }
+.plugin-table td.pt-actions { white-space: nowrap; }
+.plugin-table td.pt-actions button { padding: 4px 10px; margin: 0 4px 4px 0; }
+.plugin-table td.pt-actions button[aria-expanded="true"] { background: var(--acid); color: var(--on-acid); border-color: var(--acid); }
+.plugin-table button[disabled] { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+.plugin-table td.pt-empty { color: var(--text-muted); font-size: 0.8rem; }
+.plugin-table .status-ok { color: var(--pass); }
+.plugin-table .status-bad { color: var(--fail); }
+.plugin-table .status-muted { color: var(--text-muted); }
+.plugin-table tr.plugin-row.configuring > td { background: color-mix(in srgb, var(--acid) 8%, transparent); }
+.plugin-table tr.plugin-configure-row > td { background: var(--surface); padding: 10px 14px; }
 
-/* Click-through configure panel (monkeytester-ai plugin rows) */
+/* Configure panel (monkeytester-ai / config-owning plugins, build plugins):
+   lives inside the inline configure row while open. */
 .plugin-configure { display: none; }
-.plugin-configure.open { display: block; max-width: 520px; margin-top: 14px; }
+.plugin-configure.open { display: block; max-width: 560px; }
 .plugin-configure-head h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
 .plugin-configure-head .url { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; }
 .plugin-configure select {
     width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--border);
-    color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 0.9rem;
+    color: var(--text); padding: 8px 12px; font-size: 0.9rem;
 }
 .plugin-configure .inline-row { display: flex; gap: 8px; align-items: center; max-width: 480px; }
 .plugin-configure .inline-row button { padding: 7px 12px; white-space: nowrap; }
@@ -54,7 +70,7 @@
 .plugin-configure .copilot-account { font-size: 0.85rem; }
 .plugin-configure .copilot-code {
     font-family: monospace; font-size: 1.6rem; font-weight: 700; letter-spacing: 0.12em;
-    padding: 6px 12px; border: 1px dashed var(--border); border-radius: 6px; display: inline-block; margin: 6px 0;
+    padding: 6px 12px; border: 1px dashed var(--border); display: inline-block; margin: 6px 0;
 }
 .plugin-configure .legacy-hint, .plugin-configure .copilot-error { font-size: 0.8rem; color: var(--fail); margin: 6px 0; max-width: 480px; }
 .plugin-configure .switch-row { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; margin-top: 8px; }
@@ -62,51 +78,34 @@
 .plugin-configure .remote-error { font-size: 0.8rem; color: var(--fail); margin: 6px 0; max-width: 480px; }
 .plugin-configure input[type="text"], .plugin-configure input[type="url"], .plugin-configure input[type="password"] {
     width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--border);
-    color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 0.9rem;
+    color: var(--text); padding: 8px 12px; font-size: 0.9rem;
 }
-.plugin-card .ai-plugin-address { font-family: monospace; font-size: 0.8rem; color: var(--text); }
 .plugin-warn { font-size: 0.8rem; color: var(--fail); margin-top: 8px; }
 .plugin-warn.hidden { display: none; }
 
-/* Manage device plugins (add / edit / remove) */
-.plugin-manage { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-.plugin-manage-row { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; max-width: 480px; }
-.plugin-manage-row code { font-family: monospace; font-size: 0.8rem; color: var(--text); }
-.plugin-manage-add { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; flex-wrap: wrap; max-width: 480px; }
-.plugin-manage input { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 6px; max-width: 300px; }
-.plugin-manage button { padding: 4px 10px; white-space: nowrap; }
-.plugin-manage button[disabled] { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
-#pluginManageStatus.saved { color: var(--pass); }
-#pluginManageStatus.error { color: var(--fail); }
-
-/* Two sections on the page: Test Plugins (device plugins + monkeytester-ai)
-   and the Build Plugin section (the local build tool). Cards, manage boxes
-   and Configure panels reuse the classes above. */
 .plugins-section-title { font-size: 1.05rem; font-weight: 700; margin: 20px 0 8px; }
 .plugins-section-title { display: flex; align-items: center; gap: 8px; }
 .section-help-btn { width: 22px; height: 22px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; line-height: 1; cursor: pointer; background: transparent; color: var(--text); border: 1px solid var(--border-strong); }
 .section-help-btn:hover, .section-help-btn[aria-expanded="true"] { background: var(--acid); color: var(--on-acid); border-color: var(--acid); }
-#buildManageStatus.saved { color: var(--pass); }
-#buildManageStatus.error { color: var(--fail); }
-#controllerManageStatus.saved { color: var(--pass); }
-#controllerManageStatus.error { color: var(--fail); }
+#pluginManageStatus.saved, #buildManageStatus.saved, #controllerManageStatus.saved { color: var(--pass); }
+#pluginManageStatus.error, #buildManageStatus.error, #controllerManageStatus.error { color: var(--fail); }
 
-/* Device Config section (moved here from the retired device-config.html page) */
-.config-device-list { display: flex; flex-direction: column; gap: 12px; }
-.config-device { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+/* Controller devices: friendly names (moved here from the retired device-config.html page) */
+.config-device-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.config-device { background: var(--surface); border: 1px solid var(--border); padding: 16px; }
 .config-device-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-.config-device-path { font-family: monospace; font-size: 0.8rem; color: var(--text-muted); background: var(--card); padding: 4px 8px; border-radius: 4px; }
+.config-device-path { font-family: monospace; font-size: 0.8rem; color: var(--text-muted); background: var(--card); padding: 4px 8px; }
 .config-device-name { font-weight: 600; font-size: 0.95rem; }
 .config-device-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.config-device-form input { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; }
+.config-device-form input { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; font-size: 0.9rem; }
 .config-device-form input:focus { outline: none; border-color: var(--accent); }
 .config-device-form input.name-input { flex: 1; min-width: 180px; }
 .config-device-form button { white-space: nowrap; }
 .config-save-status { font-size: 0.75rem; margin-top: 6px; min-height: 16px; }
 .config-save-status.saved { color: var(--pass); }
 .config-save-status.error { color: var(--fail); }
-.config-info { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
-.config-save-all { margin-bottom: 16px; display: flex; gap: 10px; align-items: center; }
+.config-info { background: var(--card); border: 1px solid var(--border); padding: 12px 16px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+.config-save-all { margin: 16px 0; display: flex; gap: 10px; align-items: center; }
 .config-save-all button { padding: 8px 16px; background: var(--acid); color: var(--on-acid); border: 2px solid var(--acid); }
 .config-save-all button[disabled] { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
 .config-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px; }
@@ -123,49 +122,312 @@
 
     <div class="settings-section" id="pluginsTestSection">
         <div class="plugins-section-title">Test Plugins<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="testPluginsHelp" title="What is this?" aria-label="What is a test plugin?">?</button></div>
-        <div class="config-info" id="testPluginsHelp" hidden>A <strong>test plugin</strong> gives tests something the phones can't: a device plugin drives extra hardware a test talks to, and the vision-model plugin reads the screenshots. Register device plugins in the box below; a plugin with its own settings, such as the vision-model plugin, has a <strong>Configure</strong> button on its row. Tests call a plugin by its registered name.</div>
-        <div class="plugins-none bad" id="pluginsError" hidden></div>
-        <div class="plugins-list" id="pluginsList"></div>
-        <div class="plugin-configure" id="pluginConfigure"></div>
-        <div class="plugin-warn" id="pluginWarnNote" hidden></div>
-        <div class="plugin-manage" id="pluginManage"></div>
+        <div class="config-info" id="testPluginsHelp" hidden>A <strong>test plugin</strong> gives tests something the phones can't: a device plugin drives extra hardware a test talks to, and the vision-model plugin reads the screenshots. Add a plugin with the row below; a plugin with its own settings, such as the vision-model plugin, has a <strong>Configure</strong> button on its row. Tests call a plugin by its registered name.</div>
+        <div class="plugin-add-row" id="pluginAddRow"><span class="pm-add-hint">Add a Test Plugin:</span>
+            <input type="text" id="pluginAddName" placeholder="name, e.g. esp32-sensor" autocomplete="off" aria-label="Plugin name">
+            <input type="url" id="pluginAddUrl" placeholder="http://host:port" autocomplete="off" aria-label="Plugin address">
+            <input type="password" id="pluginAddToken" autocomplete="new-password" placeholder="pairing token (optional)" aria-label="Pairing token (optional)">
+            <button class="btn-secondary" id="pluginAddBtn" type="button">Add</button></div>
         <div class="settings-status" id="pluginManageStatus" hidden></div>
+        <div class="plugins-none bad" id="pluginsError" hidden></div>
+        <div class="plugin-table-wrap"><table class="plugin-table" id="pluginsTable">
+            <thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Details</th><th>Actions</th></tr></thead>
+            <tbody id="pluginsTbody"><tr class="plugin-empty-row"><td colspan="5" class="pt-empty">Loading…</td></tr></tbody>
+        </table></div>
+        <div class="plugin-warn" id="pluginWarnNote" hidden></div>
+        <div class="plugin-configure" id="pluginConfigure"></div>
     </div>
 
     <div class="settings-section" id="pluginsBuildSection">
         <div class="plugins-section-title">Build Plugin<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="buildPluginHelp" title="What is this?" aria-label="What is a build plugin?">?</button></div>
-        <div class="config-info" id="buildPluginHelp" hidden>A <strong>build plugin</strong> builds a branch of your app on its own host and uploads the apps to the viewer, which then tests them on the devices. Register its address in the box below, and use <strong>Configure</strong> on its card for the code host settings. Projects pick a build plugin on <a href="/config">Settings &rarr; Build &amp; Test</a>.</div>
-        <div class="plugins-list" id="buildPluginsList"></div>
-        <div class="plugin-configure" id="buildConfigure"></div>
-        <div class="plugin-manage" id="buildManage"></div>
+        <div class="config-info" id="buildPluginHelp" hidden>A <strong>build plugin</strong> builds a branch of your app on its own host and uploads the apps to the viewer, which then tests them on the devices. Add its address with the row below, and use <strong>Configure</strong> on its row for the code host settings. Projects pick a build plugin on <a href="/config">Settings &rarr; Build &amp; Test</a>.</div>
+        <div class="plugin-add-row" id="buildAddRow"><span class="pm-add-hint">Add a Build Plugin:</span>
+            <input type="text" id="buildAddName" placeholder="name, e.g. build-local" autocomplete="off" aria-label="Build plugin name">
+            <input type="url" id="buildAddUrl" placeholder="http://host:port" autocomplete="off" aria-label="Build plugin address">
+            <input type="password" id="buildAddToken" autocomplete="new-password" placeholder="pairing token (optional)" aria-label="Pairing token (optional)">
+            <button class="btn-secondary" id="buildAddBtn" type="button">Add</button></div>
         <div class="settings-status" id="buildManageStatus" hidden></div>
+        <div class="plugin-table-wrap"><table class="plugin-table" id="buildPluginsTable">
+            <thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Details</th><th>Actions</th></tr></thead>
+            <tbody id="buildTbody"><tr class="plugin-empty-row"><td colspan="5" class="pt-empty">Loading…</td></tr></tbody>
+        </table></div>
+        <div class="plugin-configure" id="buildConfigure"></div>
     </div>
 
 
     <div class="settings-section" id="deviceConfigSection">
         <div class="plugins-section-title">Controller Plugin<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="controllerPluginHelp" title="What is this?" aria-label="What is a controller plugin?">?</button></div>
-        <div class="config-info" id="controllerPluginHelp" hidden>A <strong>controller plugin</strong> owns the phones and tablets connected to it: it lists those devices and runs the test steps on them. Register its address in the box below. Friendly names set for its devices replace the runner-recorded names on run pages.</div>
-        <div class="plugin-manage" id="controllerManage"></div>
+        <div class="config-info" id="controllerPluginHelp" hidden>A <strong>controller plugin</strong> owns the phones and tablets connected to it: it lists those devices and runs the test steps on them. Add its address with the row below (there is one controller). Friendly names set for its devices replace the runner-recorded names on run pages.</div>
+        <div class="plugin-add-row" id="controllerAddRow" hidden><span class="pm-add-hint">Add the controller:</span>
+            <input type="url" id="controllerAddUrl" placeholder="http://&lt;controller-host&gt;:8090" autocomplete="off" aria-label="Controller address">
+            <button class="btn-secondary" id="controllerAddBtn" type="button">Add</button></div>
         <div class="settings-status" id="controllerManageStatus" hidden></div>
+        <div class="plugin-table-wrap"><table class="plugin-table" id="controllerTable">
+            <thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Details</th><th>Actions</th></tr></thead>
+            <tbody id="controllerTbody"><tr class="plugin-empty-row"><td colspan="5" class="pt-empty">Loading…</td></tr></tbody>
+        </table></div>
+        <div class="config-device-list" id="device-list">
+            <div class="loading">Loading devices...</div>
+        </div>
         <div class="config-save-all">
             <button class="btn-secondary" id="saveAllBtn">Save All Changes</button>
             <span class="config-save-status" id="global-status"></span>
-        </div>
-        <div class="config-device-list" id="device-list">
-            <div class="loading">Loading devices...</div>
         </div>
     </div>
 </div>
 <script>
 {{JS}}
 
-// Device plugins: VT_PLUGINS (minus monkeytester-ai) + the read-only monkeytester-ai
-// row at its Settings address. The row has no add/edit controls: the address and
-// the pairing token live in the Configure panel.
+// Device plugins, build plugins and the controller: one table per section.
+// State is declared up here; the first loads and the 15 s refresh timers start
+// at the END of the script (after every `let`/`const` they touch exists).
+const AI_NAME_DEFAULT = "monkeytester-ai";
 let aiPluginState = { configured: false, url: "" };
+let testRows = [];     // last /api/plugins device rows shown in the Test table
+let buildRows = [];    // last /api/plugins build rows
+let lastControllerData = null;
+let lastDeviceCount = null;
 
+// ── Shared table machinery ──
+// The 15 s refresh never rebuilds a table with innerHTML: rows are keyed by
+// plugin name and updated cell by cell, so (a) the inline configure row
+// (<tr class="plugin-configure-row">) is never touched — an open panel and
+// everything typed into it survive the refresh — and (b) an Address input is
+// the same DOM node across refreshes: it only takes the new saved address when
+// the user hasn't edited it, so typing is never wiped.
+function setHtml(el, html) {
+    if (el.__html !== html) { el.innerHTML = html; el.__html = html; }
+}
+
+function normAddr(v) { return String(v || "").trim().replace(/\/+$/, ""); }
+
+function rowFor(tbody, key) {
+    for (const tr of tbody.children) {
+        if (tr.classList.contains("plugin-row") && tr.dataset.plugin === key) return tr;
+    }
+    return null;
+}
+
+function configureRowOf(tbody) {
+    for (const tr of tbody.children) if (tr.classList.contains("plugin-configure-row")) return tr;
+    return null;
+}
+
+function makePluginRow(key) {
+    const tr = document.createElement("tr");
+    tr.className = "plugin-row";
+    tr.dataset.plugin = key;
+    tr.innerHTML = '<td class="pt-name"></td><td class="pt-status"></td><td class="pt-address"></td>'
+        + '<td class="pt-details"></td><td class="pt-actions"></td>';
+    return tr;
+}
+
+function updateRowDirty(tr) {
+    const inp = tr.querySelector("input.pt-addr");
+    const btn = tr.querySelector('button[data-act="save"]');
+    if (!btn) return;
+    btn.disabled = !inp || !inp.value.trim() || normAddr(inp.value) === normAddr(inp.dataset.saved);
+}
+
+function updatePluginRow(tr, r) {
+    const [tdName, tdStatus, tdAddr, tdDetails, tdActions] = tr.children;
+    if (tdName.textContent !== r.name) tdName.textContent = r.name;
+    setHtml(tdStatus, r.status);
+    if (r.readonly) {
+        setHtml(tdAddr, "<code>" + escapeHtml(r.saved || "\u2014") + "</code>");
+    } else {
+        let inp = tdAddr.querySelector("input.pt-addr");
+        if (!inp) {
+            tdAddr.innerHTML = "";
+            tdAddr.__html = null;
+            inp = document.createElement("input");
+            inp.type = "url";
+            inp.className = "pt-addr";
+            inp.placeholder = "http://host:port";
+            inp.autocomplete = "off";
+            inp.setAttribute("aria-label", "Address of " + r.name);
+            inp.value = r.saved;
+            inp.dataset.saved = r.saved;
+            tdAddr.appendChild(inp);
+        } else if (inp.dataset.saved !== r.saved) {
+            // Staging: an untouched input follows the saved address; an edited
+            // one keeps the user's value (Save address stays enabled for it).
+            if (normAddr(inp.value) === normAddr(inp.dataset.saved)) inp.value = r.saved;
+            inp.dataset.saved = r.saved;
+        }
+    }
+    setHtml(tdDetails, r.details);
+    setHtml(tdActions, r.actions);
+    tr.classList.toggle("configuring", !!r.open);
+    updateRowDirty(tr);
+}
+
+// rows: [{key, name, status, saved, readonly, details, actions, open}].
+// onConfigureGone(): called when the plugin with the open configure row
+// disappeared (removed elsewhere) — the section closes its panel.
+function syncPluginTable(tbody, rows, emptyMsg, onConfigureGone) {
+    const keys = new Set(rows.map(r => r.key));
+    const cfg = configureRowOf(tbody);
+    if (cfg && !keys.has(cfg.dataset.for) && onConfigureGone) onConfigureGone();
+    let empty = null;
+    for (const tr of Array.from(tbody.children)) {
+        if (tr.classList.contains("plugin-empty-row")) empty = tr;
+        else if (tr.classList.contains("plugin-row") && !keys.has(tr.dataset.plugin)) tr.remove();
+    }
+    if (!rows.length) {
+        if (!empty) {
+            empty = document.createElement("tr");
+            empty.className = "plugin-empty-row";
+            empty.innerHTML = '<td colspan="5" class="pt-empty"></td>';
+            tbody.appendChild(empty);
+        }
+        empty.firstElementChild.textContent = emptyMsg;
+        return;
+    }
+    if (empty) empty.remove();
+    let cursor = null;  // the last node in its final place
+    for (const r of rows) {
+        const tr = rowFor(tbody, r.key) || makePluginRow(r.key);
+        updatePluginRow(tr, r);
+        const want = cursor ? cursor.nextSibling : tbody.firstChild;
+        if (want !== tr) tbody.insertBefore(tr, want);  // only on add/reorder
+        cursor = tr;
+        const c = configureRowOf(tbody);
+        if (c && c.dataset.for === r.key) {
+            if (tr.nextSibling !== c) tr.after(c);
+            cursor = c;
+        }
+    }
+}
+
+function openConfigureRow(tbody, key, panel) {
+    const row = rowFor(tbody, key);
+    if (!row) return false;
+    const tr = document.createElement("tr");
+    tr.className = "plugin-configure-row";
+    tr.dataset.for = key;
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.appendChild(panel);
+    tr.appendChild(td);
+    row.after(tr);
+    return true;
+}
+
+function closeConfigureRow(tbody, panel, park) {
+    panel.classList.remove("open");
+    panel.innerHTML = "";
+    park.appendChild(panel);  // hidden (no .open) until the next Configure
+    const tr = configureRowOf(tbody);
+    if (tr) tr.remove();
+}
+
+function statusCell(ok, notConfigured) {
+    if (notConfigured) return '<span class="status-muted">not configured</span>';
+    return '<span class="' + (ok ? "status-ok" : "status-bad") + '">'
+        + (ok ? "\u25cf online" : "\u25cf offline") + "</span>";
+}
+
+function actionsHtml(o) {
+    let html = "";
+    if (o.save) html += '<button class="btn-secondary" type="button" data-act="save" disabled>Save address</button>';
+    if (o.configure) html += '<button class="btn-secondary" type="button" data-act="configure" aria-expanded="'
+        + (o.open ? "true" : "false") + '">Configure</button>';
+    if (o.remove) html += '<button class="btn-secondary" type="button" data-act="remove">Remove</button>';
+    return html || '<span class="status-muted">\u2014</span>';
+}
+
+function pluginLabel(p) {
+    return typeof p.plugin === "object"
+        ? [p.plugin.name, p.plugin.version].filter(Boolean).join(" ")
+        : String(p.plugin);
+}
+
+// Everything the old cards showed, one compact line each.
+function detailsHtml(p, opts) {
+    opts = opts || {};
+    const L = [];
+    if (opts.managed) L.push('<span class="ai-plugin-managed">Managed by the MonkeyTester app</span>');
+    if (p.plugin) L.push("plugin <code>" + escapeHtml(pluginLabel(p)) + "</code> \u00b7 contract v"
+        + escapeHtml(String(p.contract_version ?? "?")));
+    if (p.capabilities && p.capabilities.length)
+        L.push(p.capabilities.map(c => "<code>" + escapeHtml(String(c)) + "</code>").join(" "));
+    if (p.devices && p.devices.length) {
+        for (const d of p.devices) L.push(escapeHtml(String(d.id))
+            + (d.model ? " \u00b7 " + escapeHtml(String(d.model)) : "")
+            + (d.state ? " \u00b7 " + escapeHtml(String(d.state)) : ""));
+    }
+    if (p.platforms && p.platforms.length)
+        L.push("builds " + p.platforms.map(x => x === "ios" ? "iOS" : escapeHtml(String(x))).join(" + "));
+    if (opts.build) {
+        const f = p.forge || {};
+        if (f.configured) {
+            L.push("code host " + escapeHtml(f.label || f.kind || "")
+                + (f.url ? " \u00b7 " + escapeHtml(f.url) : "")
+                + (f.user ? " \u00b7 as <code>" + escapeHtml(f.user) + "</code>" : " \u00b7 token saved"));
+        } else if (p.ok) {
+            L.push('<span class="bad">no code host token saved \u2014 open Configure</span>');
+        }
+    }
+    if (p.token && p.token.configured) L.push("pairing token \u2026<code>" + escapeHtml(p.token.last4 || "") + "</code>");
+    if (p.queue && (p.queue.running || p.queue.waiting))
+        L.push("queue: " + escapeHtml(String(p.queue.running)) + " running \u00b7 "
+            + escapeHtml(String(p.queue.waiting)) + " waiting");
+    if (p.error && !opts.hideError) L.push('<span class="bad">' + escapeHtml(p.error) + "</span>");
+    return L.join("<br>") || '<span class="status-muted">\u2014</span>';
+}
+
+function setSectionStatus(id, msg, type, clearAfterMs) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.hidden = !msg;
+    el.textContent = msg;
+    el.className = "settings-status " + (type || "");
+    if (clearAfterMs) setTimeout(() => { if (el.textContent === msg) { el.textContent = ""; el.hidden = true; } }, clearAfterMs);
+}
+
+async function postConfig(url, payload) {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+                                   body: JSON.stringify(payload) });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || out.ok === false) throw new Error(errorText(out, res.status));
+    return out;
+}
+
+// Delegated listeners per table: Save address greys/ungreys on typing, Enter
+// in an address saves when it differs, the action buttons act by data-act.
+// Clicks inside the inline configure row belong to the panel, not the table.
+function wireTable(tbodyId, onAction) {
+    const tbody = document.getElementById(tbodyId);
+    tbody.addEventListener("input", ev => {
+        if (ev.target.matches("input.pt-addr")) updateRowDirty(ev.target.closest("tr"));
+    });
+    tbody.addEventListener("keydown", ev => {
+        if (ev.key !== "Enter" || !ev.target.matches("input.pt-addr")) return;
+        const btn = ev.target.closest("tr").querySelector('button[data-act="save"]');
+        if (btn && !btn.disabled) btn.click();
+    });
+    tbody.addEventListener("click", ev => {
+        const btn = ev.target.closest("button[data-act]");
+        if (!btn || btn.closest("tr.plugin-configure-row")) return;
+        const tr = btn.closest("tr.plugin-row");
+        if (!tr) return;
+        const inp = tr.querySelector("input.pt-addr");
+        onAction(btn.dataset.act, tr.dataset.plugin, inp ? inp.value.trim() : "", btn);
+    });
+}
+
+function wireAddRow(ids, onAdd) {
+    const btn = document.getElementById(ids.btn);
+    btn.addEventListener("click", onAdd);
+    for (const id of ids.inputs) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("keydown", ev => { if (ev.key === "Enter") onAdd(); });
+    }
+}
+
+// ── Test Plugins: device plugins + monkeytester-ai (shown once configured) ──
 async function loadPlugins() {
-    const host = document.getElementById("pluginsList");
     try {
         const res = await fetch("/api/plugins");
         if (!res.ok) return;
@@ -175,169 +437,82 @@ async function loadPlugins() {
         const errEl = document.getElementById("pluginsError");
         errEl.hidden = !data.error;
         errEl.textContent = data.error || "";
-        const devicePlugins = plugins.filter(p => p.kind !== "build");
-        const buildPlugins = plugins.filter(p => p.kind === "build");
-        renderManage(devicePlugins);
-        renderBuildCards(buildPlugins);
-        renderBuildManage(buildPlugins);
-        if (!devicePlugins.length) {
-            host.innerHTML = '<div class="plugins-none">No Test Plugins registered yet — add one in the box below.</div>';
-            return;
-        }
-        host.innerHTML = devicePlugins.map(p => {
-            const isAi = p.source === "settings";
-            const notConfigured = isAi && !aiPluginState.configured;
-            let html = '<div class="plugin-card" data-plugin="' + attrEscape(p.name) + '"><h4>' + escapeHtml(p.name) + "</h4>";
-            html += '<div class="meta"><span class="' + (p.ok ? "status-ok" : "status-bad") + '">'
-                + (notConfigured ? "not configured" : (p.ok ? "\u25cf online" : "\u25cf offline")) + "</span>"
-                + (isAi ? " \u00b7 Address <code class=\"ai-plugin-address\">" + escapeHtml(p.url || "not configured") + "</code>"
-                    : " \u00b7 <code>" + escapeHtml(p.url) + "</code>") + "</div>";
-            // Managed mode (VT_MANAGED_AI_PLUGIN_URL + _TOKEN): the launcher app
-            // supplies the address and token, so the row shows them read-only.
-            if (isAi && p.managed) html += '<div class="meta ai-plugin-managed">Managed by the MonkeyTester app</div>';
-            if (p.plugin) {
-                const label = typeof p.plugin === "object"
-                    ? [p.plugin.name, p.plugin.version].filter(Boolean).join(" ")
-                    : String(p.plugin);
-                html += '<div class="meta">plugin <code>' + escapeHtml(label)
-                    + "</code> \u00b7 contract v" + escapeHtml(String(p.contract_version ?? "?")) + "</div>";
-            }
-            if (p.capabilities && p.capabilities.length) {
-                html += '<div class="meta">' + p.capabilities.map(c => "<code>"
-                    + escapeHtml(String(c)) + "</code>").join(" ") + "</div>";
-            }
-            if (p.devices && p.devices.length) {
-                html += '<div class="meta">' + p.devices.map(d => escapeHtml(String(d.id))
-                    + (d.model ? " \u00b7 " + escapeHtml(String(d.model)) : "")
-                    + (d.state ? " \u00b7 " + escapeHtml(String(d.state)) : "")).join("<br>") + "</div>";
-            }
-            if (p.error && !notConfigured) html += '<div class="meta bad">' + escapeHtml(p.error) + "</div>";
-            // A plugin whose GET /config reports model info owns its config UI:
-            // its row gets the click-through Configure panel. monkeytester-ai gets
-            // it always — even unconfigured, so the panel can set the first address.
-            if (p.config || isAi) {
-                html += '<div class="meta"><button class="btn-secondary plugin-configure-btn" '
-                    + 'data-plugin="' + attrEscape(p.name) + '">Configure</button></div>';
-            }
-            return html + "</div>";
-        }).join("");
+        const aiName = aiPluginState.name || AI_NAME_DEFAULT;
+        const isAi = p => p.kind !== "build" && (p.source === "settings" || p.name === aiName);
+        // The AI row only while configured: no always-present "not configured"
+        // row any more — it is added through the Add row like any plugin.
+        testRows = plugins.filter(p => p.kind !== "build" && (!isAi(p) || aiPluginState.configured))
+            .map(p => Object.assign({}, p, { __ai: isAi(p) }));
+        buildRows = plugins.filter(p => p.kind === "build");
+        renderTestTable();
+        renderBuildTable();
     } catch (e) {
         // Transient fetch failure: keep whatever was last rendered.
     }
 }
 
-// Manage state — declared BEFORE the first loadPlugins() below: the manage
-// renderer runs inside it, and `let` declarations are not hoisted.
-let manageRows = [];
-let lastPluginData = [];
-const manageState = { stagedUrls: {}, addName: "", addUrl: "" };
-// Build Plugin manage state, declared BEFORE the first loadPlugins() below
-// (the build manage renderer runs inside it, and `let`/`const` are not hoisted).
-let buildRows = [];
-const buildManageState = { stagedUrls: {}, addName: "", addUrl: "", addToken: "" };
-
-loadPlugins();
-setInterval(loadPlugins, 15000);
-
-// ── Manage device plugins: add / edit address / remove (Settings owns the list) ──
-// One row per registered plugin (the monkeytester-ai row is not managed here —
-// its Configure panel owns its address), plus one Add row. Every action is ONE
-// POST to /api/config/plugins ({"set": {name, url}} / {"remove": name}); the
-// viewer stores the address only when the service answers GET /health with the
-// plugin contract, and the plugin's own error message shows in the status line.
-function savedUrlFor(name) {
-    for (const p of manageRows) if (p.name === name) return p.url || "";
-    return "";
-}
-
-function renderManage(pluginData) {
-    const host = document.getElementById("pluginManage");
-    if (!host) return;
-    // Snapshot what the user already typed BEFORE innerHTML replaces the inputs
-    // (blur events dispatch late and unreliably; reading the old DOM is exact).
-    document.querySelectorAll('#pluginManage input[data-pm-input]').forEach(inp => {
-        const name = inp.dataset.pmInput;
-        const saved = savedUrlFor(name);
-        if (inp.value && inp.value.trim() !== saved) manageState.stagedUrls[name] = inp.value;
-        else delete manageState.stagedUrls[name];
-    });
-    const oldAddName = document.getElementById("pluginAddName"), oldAddUrl = document.getElementById("pluginAddUrl");
-    if (oldAddName) manageState.addName = oldAddName.value;
-    if (oldAddUrl) manageState.addUrl = oldAddUrl.value;
-    lastPluginData = pluginData;
-    manageRows = pluginData.filter(p => p.source !== "settings" && p.kind !== "build");
-    let html = "";
-    for (const p of manageRows) {
-        const saved = p.url || "";
-        const staged = manageState.stagedUrls[p.name];
-        const shown = staged !== undefined ? staged : saved;
-        const dirty = shown !== saved;
-        html += '<div class="plugin-manage-row"><code>' + escapeHtml(p.name) + "</code>"
-            + '<input type="url" data-pm-input="' + attrEscape(p.name) + '"'
-            + ' placeholder="http://host:port" value="' + attrEscape(shown) + '">'
-            + '<button class="btn-secondary" data-pm-save data-pm-name="' + attrEscape(p.name) + '"'
-            + (dirty ? "" : " disabled") + ">Save address</button>"
-            + '<button class="btn-secondary" data-pm-remove data-pm-name="' + attrEscape(p.name)
-            + '">Remove</button></div>';
-    }
-    html += '<div class="plugin-manage-add"><span class="pm-add-hint">Add a Test Plugin:</span>'
-        + '<input type="text" id="pluginAddName" placeholder="name, e.g. esp32-hub">'
-        + '<input type="url" id="pluginAddUrl" placeholder="http://host:port">'
-        + '<button class="btn-secondary" id="pluginAddBtn">Add</button></div>';
-    host.innerHTML = html;
-    // Re-fill the fresh inputs with what was staged (snapshot taken above).
-    document.querySelectorAll('#pluginManage input[data-pm-input]').forEach(inp => {
-        if (manageState.stagedUrls[inp.dataset.pmInput] !== undefined)
-            inp.value = manageState.stagedUrls[inp.dataset.pmInput];
-    });
-    const an = document.getElementById("pluginAddName"), au = document.getElementById("pluginAddUrl");
-    if (an) an.value = manageState.addName;
-    if (au) au.value = manageState.addUrl;
-}
-
-function manageSetStatus(msg, type) {
-    const el = document.getElementById("pluginManageStatus");
-    if (!el) return;
-    el.textContent = msg;
-    el.className = "settings-status " + type;
+function renderTestTable() {
+    const panelOpen = document.getElementById("pluginConfigure").classList.contains("open");
+    syncPluginTable(document.getElementById("pluginsTbody"), testRows.map(p => {
+        const managed = p.__ai && !!p.managed;
+        const open = panelOpen && configureFor === p.name;
+        return {
+            key: p.name, name: p.name,
+            status: statusCell(p.ok, p.__ai && !aiPluginState.configured),
+            saved: p.url || "", readonly: managed,
+            details: detailsHtml(p, { managed }),
+            open,
+            actions: actionsHtml({ save: !managed, configure: !!(p.config || p.__ai), remove: !managed, open }),
+        };
+    }), "No Test Plugins added yet \u2014 add one above.", closePluginConfigure);
 }
 
 async function managePost(payload, okMsg) {
+    setSectionStatus("pluginManageStatus", "Checking the plugin\u2026", "");
     try {
-        await postJSON("/api/config/plugins", payload);
-        manageSetStatus(okMsg, "saved");
-        await loadPlugins();  // re-render list + rows from the saved state
+        await postConfig("/api/config/plugins", payload);
     } catch (e) {
-        manageSetStatus("Not saved: " + e.message, "error");
+        setSectionStatus("pluginManageStatus", "Not saved: " + e.message, "error");
+        return false;
     }
+    setSectionStatus("pluginManageStatus", okMsg, "saved", 6000);
+    await loadPlugins();  // re-render the table from the saved state
+    return true;
 }
 
-document.getElementById("pluginManage").addEventListener("click", ev => {
-    const btn = ev.target.closest("button");
-    if (!btn) return;
-    if (btn.hasAttribute("data-pm-remove")) {
-        managePost({ remove: btn.dataset.pmName }, "Removed plugin " + btn.dataset.pmName + ".");
-    } else if (btn.hasAttribute("data-pm-save")) {
-        const name = btn.dataset.pmName;
-        const inp = btn.closest(".plugin-manage-row").querySelector("input[data-pm-input]");
-        const url = inp ? inp.value.trim() : "";
-        if (!url) { manageSetStatus("Type the new address first.", "error"); return; }
-        if (url === savedUrlFor(name)) { manageSetStatus("No change — that address is already saved.", ""); return; }
-        managePost({ set: { name, url } }, "Saved address for " + name + ".");
-        delete manageState.stagedUrls[name];
-    } else if (btn.id === "pluginAddBtn") {
-        // Read the LIVE field values: a just-typed value is in the DOM before
-        // the blur capture has staged it.
-        const an = document.getElementById("pluginAddName"), au = document.getElementById("pluginAddUrl");
-        const name = (an ? an.value : manageState.addName).trim();
-        const url = (au ? au.value : manageState.addUrl).trim();
-        if (!name || !url) {
-            manageSetStatus("Type both a name and an address first.", "error");
-            return;
+wireTable("pluginsTbody", async (act, name, url, btn) => {
+    if (act === "configure") {
+        togglePluginConfigure(name);
+    } else if (act === "remove") {
+        if (configureFor === name) closePluginConfigure();
+        await managePost({ remove: name }, "Removed plugin " + name + ".");
+    } else if (act === "save") {
+        if (!url) { setSectionStatus("pluginManageStatus", "Type the new address first.", "error"); return; }
+        btn.disabled = true;
+        // monkeytester-ai's row goes through the same set op: the viewer sees
+        // its /health name and stores it the AI way (visual_plugin_url).
+        if (await managePost({ set: { name, url } }, "Saved address for " + name + ".")) {
+            const tr = rowFor(document.getElementById("pluginsTbody"), name);
+            const inp = tr && tr.querySelector("input.pt-addr");
+            if (inp) { inp.value = normAddr(url); }
         }
-        managePost({ set: { name, url } }, "Added plugin " + name + ".");
-        manageState.addName = "";
-        manageState.addUrl = "";
+        const tr = rowFor(document.getElementById("pluginsTbody"), name);
+        if (tr) updateRowDirty(tr);
+    }
+});
+
+wireAddRow({ btn: "pluginAddBtn", inputs: ["pluginAddName", "pluginAddUrl", "pluginAddToken"] }, async () => {
+    const an = document.getElementById("pluginAddName"), au = document.getElementById("pluginAddUrl");
+    const at = document.getElementById("pluginAddToken");
+    const name = an.value.trim(), url = au.value.trim(), token = at.value.trim();
+    if (!name || !url) {
+        setSectionStatus("pluginManageStatus", "Type both a name and an address first.", "error");
+        return;
+    }
+    const op = { name, url };
+    if (token) op.token = token;
+    if (await managePost({ set: op }, "Added plugin " + name + ".")) {
+        an.value = ""; au.value = ""; at.value = "";
     }
 });
 
@@ -345,166 +520,73 @@ document.getElementById("pluginManage").addEventListener("click", ev => {
 // Same registry as the Test Plugins above: config.json `plugins` map, object
 // entries {name: {url, token}} — the viewer validates the address against the
 // build plugin contract (BUILD_PLUGIN_API.md) and marks the row kind "build".
-// The card's Configure panel holds the plugin's code host settings (proxied to
+// The row's Configure opens the plugin's code host panel inline (proxied to
 // the plugin's own /config); the read-only token never lives in the viewer.
-function buildCard(p) {
-    let html = '<div class="plugin-card" data-plugin="' + attrEscape(p.name) + '"><h4>' + escapeHtml(p.name) + "</h4>";
-    html += '<div class="meta"><span class="' + (p.ok ? "status-ok" : "status-bad") + '">'
-        + (p.ok ? "\u25cf online" : "\u25cf offline") + "</span> \u00b7 <code>" + escapeHtml(p.url) + "</code></div>";
-    if (p.plugin) {
-        const label = typeof p.plugin === "object"
-            ? [p.plugin.name, p.plugin.version].filter(Boolean).join(" ")
-            : String(p.plugin);
-        html += '<div class="meta">plugin <code>' + escapeHtml(label)
-            + "</code> \u00b7 contract v" + escapeHtml(String(p.contract_version ?? "?")) + "</div>";
-    }
-    if (p.platforms && p.platforms.length) {
-        html += '<div class="meta">builds ' + p.platforms.map(x => x === "ios" ? "iOS" : x).join(" + ") + "</div>";
-    }
-    const f = p.forge || {};
-    if (f.configured) {
-        html += '<div class="meta">code host ' + escapeHtml(f.label || f.kind || "")
-            + (f.url ? " \u00b7 " + escapeHtml(f.url) : "")
-            + (f.user ? " \u00b7 as <code>" + escapeHtml(f.user) + "</code>" : " \u00b7 token saved") + "</div>";
-    } else if (p.ok) {
-        html += '<div class="meta bad">no code host token saved \u2014 open Configure</div>';
-    }
-    if (p.token && p.token.configured) html += '<div class="meta">pairing token \u2026<code>' + escapeHtml(p.token.last4 || "") + "</code></div>";
-    if (p.queue && (p.queue.running || p.queue.waiting)) {
-        html += '<div class="meta">queue: ' + escapeHtml(String(p.queue.running)) + " running \u00b7 " + escapeHtml(String(p.queue.waiting)) + " waiting</div>";
-    }
-    if (p.error) html += '<div class="meta bad">' + escapeHtml(p.error) + "</div>";
-    html += '<div class="meta"><button class="btn-secondary plugin-configure-btn" '
-        + 'data-plugin="' + attrEscape(p.name) + '">Configure</button></div>';
-    return html + "</div>";
-}
-
-function renderBuildCards(rows) {
-    const host = document.getElementById("buildPluginsList");
-    if (!host) return;
-    if (!rows.length) {
-        host.innerHTML = '<div class="plugins-none">No build plugin registered yet \u2014 add one in the box below.</div>';
-        return;
-    }
-    host.innerHTML = rows.map(buildCard).join("");
-}
-
-// Manage box: one row per registered build plugin (address editable, Remove)
-// plus one Add row (name, address, optional pairing token). Every action is
-// ONE POST to the unified /api/config/plugins; the viewer stores the address
-// only when the plugin's /health answers the build plugin contract.
 function savedBuildUrlFor(name) {
     for (const p of buildRows) if (p.name === name) return p.url || "";
     return "";
 }
 
-function buildManageSetStatus(msg, type) {
-    const el = document.getElementById("buildManageStatus");
-    if (!el) return;
-    el.textContent = msg;
-    el.className = "settings-status " + type;
-    setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 6000);
+function renderBuildTable() {
+    const panelOpen = document.getElementById("buildConfigure").classList.contains("open");
+    syncPluginTable(document.getElementById("buildTbody"), buildRows.map(p => {
+        const open = panelOpen && buildPanelPlugin === p.name;
+        return {
+            key: p.name, name: p.name, status: statusCell(p.ok, false),
+            saved: p.url || "", readonly: false,
+            details: detailsHtml(p, { build: true }), open,
+            actions: actionsHtml({ save: true, configure: true, remove: true, open }),
+        };
+    }), "No build plugin added yet \u2014 add one above.", closeBuildPanel);
 }
 
 async function buildManagePost(payload, okMsg) {
+    setSectionStatus("buildManageStatus", "Checking the plugin\u2026", "");
     try {
-        await fetch("/api/config/plugins", { method: "POST", headers: {"Content-Type": "application/json"},
-                                             body: JSON.stringify(payload) });
+        await postConfig("/api/config/plugins", payload);
     } catch (e) {
-        buildManageSetStatus("Not saved: " + e.message, "error");
-        return;
+        setSectionStatus("buildManageStatus", "Not saved: " + e.message, "error");
+        return false;
     }
-    // loadPlugins re-reads /api/plugins; the saved state shows there.
+    setSectionStatus("buildManageStatus", okMsg, "saved", 6000);
     await loadPlugins();
-    buildManageSetStatus(okMsg, "saved");
+    return true;
 }
 
-function renderBuildManage(rows) {
-    const host = document.getElementById("buildManage");
-    if (!host) return;
-    // Snapshot what the user already typed BEFORE innerHTML replaces the inputs.
-    document.querySelectorAll('#buildManage input[data-bm-input]').forEach(inp => {
-        const name = inp.dataset.bmInput;
-        const saved = savedBuildUrlFor(name);
-        if (inp.value && inp.value.trim() !== saved) buildManageState.stagedUrls[name] = inp.value;
-        else delete buildManageState.stagedUrls[name];
-    });
-    const oldAddName = document.getElementById("buildAddName"), oldAddUrl = document.getElementById("buildAddUrl");
-    const oldAddToken = document.getElementById("buildAddToken");
-    if (oldAddName) buildManageState.addName = oldAddName.value;
-    if (oldAddUrl) buildManageState.addUrl = oldAddUrl.value;
-    if (oldAddToken) buildManageState.addToken = oldAddToken.value;
-    buildRows = rows;
-    let html = "";
-    for (const p of rows) {
-        const saved = p.url || "";
-        const staged = buildManageState.stagedUrls[p.name];
-        const shown = staged !== undefined ? staged : saved;
-        const dirty = shown !== saved;
-        html += '<div class="plugin-manage-row"><code>' + escapeHtml(p.name) + "</code>"
-            + '<input type="url" data-bm-input="' + attrEscape(p.name) + '"'
-            + ' placeholder="http://host:port" value="' + attrEscape(shown) + '">'
-            + '<button class="btn-secondary" data-bm-save data-bm-name="' + attrEscape(p.name) + '"'
-            + (dirty ? "" : " disabled") + ">Save address</button>"
-            + '<button class="btn-secondary" data-bm-remove data-bm-name="' + attrEscape(p.name)
-            + '">Remove</button></div>';
-    }
-    html += '<div class="plugin-manage-add"><span class="pm-add-hint">Add a Build Plugin:</span>'
-        + '<input type="text" id="buildAddName" placeholder="name, e.g. build-local">'
-        + '<input type="url" id="buildAddUrl" placeholder="http://host:port">'
-        + '<input type="password" id="buildAddToken" autocomplete="new-password" '
-        + 'placeholder="pairing token (only if the plugin has PLUGIN_TOKEN)">'
-        + '<button class="btn-secondary" id="buildAddBtn">Add</button></div>';
-    host.innerHTML = html;
-    // Re-fill the fresh inputs with what was staged (snapshot taken above).
-    document.querySelectorAll('#buildManage input[data-bm-input]').forEach(inp => {
-        if (buildManageState.stagedUrls[inp.dataset.bmInput] !== undefined)
-            inp.value = buildManageState.stagedUrls[inp.dataset.bmInput];
-    });
-    const an = document.getElementById("buildAddName"), au = document.getElementById("buildAddUrl");
-    const at = document.getElementById("buildAddToken");
-    if (an) an.value = buildManageState.addName;
-    if (au) au.value = buildManageState.addUrl;
-    if (at) at.value = buildManageState.addToken;
-}
-
-document.getElementById("buildManage").addEventListener("click", ev => {
-    const btn = ev.target.closest("button");
-    if (!btn) return;
-    if (btn.hasAttribute("data-bm-remove")) {
-        buildManagePost({ remove: btn.dataset.bmName }, "Removed build plugin " + btn.dataset.bmName + ".");
-    } else if (btn.hasAttribute("data-bm-save")) {
-        const name = btn.dataset.bmName;
-        const inp = btn.closest(".plugin-manage-row").querySelector("input[data-bm-input]");
-        const url = inp ? inp.value.trim() : "";
-        if (!url) { buildManageSetStatus("Type the new address first.", "error"); return; }
-        if (url === savedBuildUrlFor(name)) { buildManageSetStatus("No change \u2014 that address is already saved.", ""); return; }
-        buildManagePost({ set: { name, url } }, "Saved address for " + name + ".");
-        delete buildManageState.stagedUrls[name];
-    } else if (btn.id === "buildAddBtn") {
-        // Read the LIVE field values: a just-typed value is in the DOM before
-        // the blur capture has staged it.
-        const an = document.getElementById("buildAddName"), au = document.getElementById("buildAddUrl");
-        const at = document.getElementById("buildAddToken");
-        const name = (an ? an.value : buildManageState.addName).trim();
-        const url = (au ? au.value : buildManageState.addUrl).trim();
-        const token = (at ? at.value : buildManageState.addToken).trim();
-        if (!name || !url) {
-            buildManageSetStatus("Type both a name and an address first.", "error");
-            return;
-        }
-        const op = { name, url };
-        if (token) op.token = token;
-        buildManagePost({ set: op }, "Added build plugin " + name + ".");
-        buildManageState.addName = "";
-        buildManageState.addUrl = "";
-        buildManageState.addToken = "";
+wireTable("buildTbody", async (act, name, url, btn) => {
+    if (act === "configure") {
+        toggleBuildConfigure(name);
+    } else if (act === "remove") {
+        if (buildPanelPlugin === name) closeBuildPanel();
+        await buildManagePost({ remove: name }, "Removed build plugin " + name + ".");
+    } else if (act === "save") {
+        if (!url) { setSectionStatus("buildManageStatus", "Type the new address first.", "error"); return; }
+        btn.disabled = true;
+        await buildManagePost({ set: { name, url } }, "Saved address for " + name + ".");
+        const tr = rowFor(document.getElementById("buildTbody"), name);
+        if (tr) updateRowDirty(tr);
     }
 });
 
-// Card Configure button -> the plugin's code host panel, proxied to the
-// plugin's own GET/POST /config (the viewer is just the relay; the read-only
-// code host token is stored by the plugin only). One Save applies all fields.
+wireAddRow({ btn: "buildAddBtn", inputs: ["buildAddName", "buildAddUrl", "buildAddToken"] }, async () => {
+    const an = document.getElementById("buildAddName"), au = document.getElementById("buildAddUrl");
+    const at = document.getElementById("buildAddToken");
+    const name = an.value.trim(), url = au.value.trim(), token = at.value.trim();
+    if (!name || !url) {
+        setSectionStatus("buildManageStatus", "Type both a name and an address first.", "error");
+        return;
+    }
+    const op = { name, url };
+    if (token) op.token = token;
+    if (await buildManagePost({ set: op }, "Added build plugin " + name + ".")) {
+        an.value = ""; au.value = ""; at.value = "";
+    }
+});
+
+// Row Configure -> the plugin's code host panel, inline under its row,
+// proxied to the plugin's own GET/POST /config (the viewer is just the relay;
+// the read-only code host token is stored by the plugin only). One Save
+// applies all fields.
 let buildPanelPlugin = null;
 let buildPanelSaved = null;
 
@@ -519,22 +601,23 @@ function buildPanelStatus(msg, type) {
 async function toggleBuildConfigure(name) {
     const panel = document.getElementById("buildConfigure");
     if (!panel) return;
-    if (panel.classList.contains("open") && buildPanelPlugin === name) {
-        panel.classList.remove("open");
-        panel.innerHTML = "";
-        buildPanelPlugin = null;
-        buildPanelSaved = null;
-        return;
-    }
+    const wasOpen = panel.classList.contains("open") && buildPanelPlugin === name;
+    if (panel.classList.contains("open")) closeBuildPanel();
+    if (wasOpen) return;
+    if (!openConfigureRow(document.getElementById("buildTbody"), name, panel)) return;
     buildPanelPlugin = name;
     buildPanelSaved = null;
     panel.classList.add("open");
+    panel.innerHTML = '<div class="hint">Loading\u2026</div>';
+    renderBuildTable();  // Configure shows pressed
     try {
         const res = await fetch("/api/config/build/plugins/" + encodeURIComponent(name) + "/config");
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+        if (buildPanelPlugin !== name) return;  // closed or switched meanwhile
         renderBuildPanel(data);
     } catch (e) {
+        if (buildPanelPlugin !== name) return;
         panel.innerHTML = '<div class="hint">Could not read the plugin\u2019s settings: '
             + escapeHtml(e.message) + "</div>";
     }
@@ -645,13 +728,10 @@ function closeBuildPanel() {
     buildPanelPlugin = null;
     buildPanelSaved = null;
     const panel = document.getElementById("buildConfigure");
-    if (panel) { panel.classList.remove("open"); panel.innerHTML = ""; }
+    if (panel) closeConfigureRow(document.getElementById("buildTbody"), panel,
+                                 document.getElementById("pluginsBuildSection"));
+    renderBuildTable();
 }
-
-document.getElementById("buildPluginsList").addEventListener("click", ev => {
-    const btn = ev.target.closest(".plugin-configure-btn");
-    if (btn) toggleBuildConfigure(btn.dataset.plugin);
-});
 
 // ── Configure panel: the monkeytester-ai plugin owns the vision provider ──
 // (Local model, Remote server or GitHub Copilot), its models, the remote
@@ -681,10 +761,6 @@ let staged = {};        // field -> intended value, only while it differs from s
 let lastPluginInfo = null;  // last /api/visual-model/plugin reply
 const copilotPoll = { timer: null, gen: 0 };
 
-document.getElementById("pluginsList").addEventListener("click", ev => {
-    const btn = ev.target.closest(".plugin-configure-btn");
-    if (btn) togglePluginConfigure(btn.dataset.plugin);
-});
 
 function pluginSetStatus(msg, type) {
     const el = document.getElementById("pluginConfigureStatus");
@@ -705,23 +781,36 @@ function stopCopilotPoll() {
     copilotPoll.timer = null;
 }
 
+
+// Row Configure -> this panel opens inline under the plugin's row (a
+// <tr class="plugin-configure-row">); clicking Configure again closes it.
+// One panel per section. The 15 s table refresh never touches the configure
+// row, so an open panel and its staged edits survive it.
 function togglePluginConfigure(name) {
     const panel = document.getElementById("pluginConfigure");
     if (!panel) return;
-    stopCopilotPoll();
-    if (panel.classList.contains("open") && configureFor === name) {
-        panel.classList.remove("open");
-        panel.innerHTML = "";
-        configureFor = "";
-        savedPanel = null;
-        staged = {};
-        return;
-    }
+    const wasOpen = panel.classList.contains("open") && configureFor === name;
+    if (panel.classList.contains("open")) closePluginConfigure();
+    if (wasOpen) return;
+    if (!openConfigureRow(document.getElementById("pluginsTbody"), name, panel)) return;
     configureFor = name;
     savedPanel = null;
     staged = {};
     panel.classList.add("open");
+    panel.innerHTML = '<div class="hint">Loading\u2026</div>';
+    renderTestTable();  // Configure shows pressed
     renderPluginConfigure(name);
+}
+
+function closePluginConfigure() {
+    stopCopilotPoll();
+    configureFor = "";
+    savedPanel = null;
+    staged = {};
+    const panel = document.getElementById("pluginConfigure");
+    if (panel) closeConfigureRow(document.getElementById("pluginsTbody"), panel,
+                                 document.getElementById("pluginsTestSection"));
+    renderTestTable();
 }
 
 function selectedProvider() {
@@ -817,7 +906,9 @@ function panelFieldValues() {
     const sel = (id) => { const s = g(id); return (s && !s.disabled) ? String(s.value || "") : ""; };
     const checked = document.querySelector('input[name="pluginProvider"]:checked');
     return {
-        address: String(g("pluginAddressInput").value || ""),
+        // The plugin address and its removal moved to the table row: the
+        // panel has no such fields, so they never stage (current == saved).
+        address: "",
         token: String(g("pluginTokenSetInput").value || ""),
         provider: checked ? checked.value : "",
         localModel: sel("pluginModelSelect"),
@@ -827,7 +918,7 @@ function panelFieldValues() {
         remoteResize: g("pluginRemoteResize").checked === true,
         remoteKey: String(g("pluginRemoteKeyInput").value || ""),
         tokenChoice: sel("pluginTokenChoice"),
-        pluginChoice: sel("pluginAddressChoice"),
+        pluginChoice: "",
         copilotChoice: sel("pluginCopilotChoice"),
     };
 }
@@ -891,7 +982,7 @@ function updateSaveHint() {
     if (staged.token_op === "set" && !staged.token_value) {
         blocker = " Paste the pairing token first \u2014 the Set choice needs it.";
     } else if (!aiPluginState.configured && !("plugin_url" in staged) && !("plugin_remove" in staged)) {
-        blocker = " Set the plugin address first \u2014 type it in the Plugin address field, then Save.";
+        blocker = " Add the plugin first \u2014 use the Add row above the table, then Save.";
     } else if (p === "copilot" && !signedIn) {
         blocker = " Sign in with GitHub first \u2014 the plugin refuses GitHub Copilot while signed out.";
     } else if (p === "remote" && !(remote.url && (remote.models || []).length)) {
@@ -967,29 +1058,16 @@ async function renderPluginConfigure(name) {
                 ? '<div class="legacy-hint" id="pluginLegacyHint">This viewer\u2019s saved settings still select GitHub Copilot the old way, so test runs refuse to start. '
                     + escapeHtml(data.legacy_hint || "") + ". Saving here replaces the old setting.</div>"
                 : "")
-            // ── "Plugin" section (top of the panel): plugin address + the
-            // Plugin keep/remove select, then the pairing-token select and
-            // its status block. In managed mode (the launcher app supplies the
-            // address and token) it is only the read-only address + a note. ──
+            // ── "Plugin" section (top of the panel): the pairing-token select
+            // and its status block. The plugin's address and its removal live
+            // on the table row now (Address cell + Save address, Remove). In
+            // managed mode (the launcher app supplies the address and token)
+            // it is only the read-only address + a note. ──
             + (data.managed ? managedPluginSection(String(info.url || data.url || "")) : (
             '<div class="panel-section" id="pluginPluginSection">'
             + '<div class="panel-section-head">Plugin</div>'
-            // The plugin's own address: the FIRST thing the panel sets, above
-            // the provider choice. Editing only STAGES it — the single Save
-            // button applies it (validated: /health + authenticated /config).
-            + '<div class="settings-field"><label for="pluginAddressInput">Plugin address</label>'
-            + '<div class="inline-row"><input type="url" id="pluginAddressInput" placeholder="http://192.168.125.71:8091" value="'
-            + attrEscape(staged.plugin_url || String(info.url || data.url || "")) + '" autocomplete="off">'
-            + (data.configured ? '<select id="pluginAddressChoice"><option value="keep">Configured (keep)</option>'
-                + '<option value="remove">Remove plugin</option></select>' : "")
-            + '</div><div class="hint">The monkeytester-ai plugin\u2019s own address: the viewer checks it first ('
-            + "<code>/health</code> must speak the plugin contract and name plugin <code>monkeytester-ai</code>, "
-            + "and <code>/config</code> must accept the pairing token) and saves nothing if that fails; a saved address "
-            + "reaches <code>Run/config.json</code>. This is NOT the Remote server address below: that is a model server "
-            + "the plugin talks to. Editing this field only stages the change \u2014 the single <strong>Save changes</strong> button "
-            + "at the bottom of the Configuration section below applies it (with everything else you changed). The <strong>Plugin</strong> select beside "
-            + "it offers a staged \u201cRemove plugin\u201d choice applied by Save. If the check fails with a 401, paste "
-            + "the pairing token in the Pairing token field and Save again.</div></div>"
+            + '<div class="hint">The plugin\u2019s address is edited on its table row (Address + <strong>Save address</strong>); '
+            + "<strong>Remove</strong> on the row removes the plugin.</div>"
             // Token select (keep / set… / replace / remove) + write-only
             // token status block, part of the Plugin section.
             + '<div class="settings-field"><label>Pairing token</label>'
@@ -1008,8 +1086,8 @@ async function renderPluginConfigure(name) {
                     + 'placeholder="Paste the plugin\u2019s pairing token"></div>')
             + '<div class="hint">The pairing token is a credential the AI service owns: it is shown '
             + "once when generated and never again \u2014 only its last 4 characters. The <strong>Token</strong> select stages the "
-            + "operation: Set (paste the plugin\u2019s token first; Save stores the viewer\u2019s copy first, no plugin call, then "
-            + "validates the address with it), Replace (Save asks the service for a new one, shown once by the service itself) or "
+            + "operation: Set (paste the plugin\u2019s token first; Save stores the viewer\u2019s copy, no plugin "
+            + "call), Replace (Save asks the service for a new one, shown once by the service itself) or "
             + "Remove (Save forgets the viewer\u2019s copy).</div></div>"
             + '</div>'))  // end of the Plugin section
             // ── "Configuration" section (below Plugin): provider radios,
@@ -1037,7 +1115,7 @@ async function renderPluginConfigure(name) {
             + '<div class="hint" id="pluginModelsHint">' + (data.configured
                 ? ids.length + " installed model(s) on plugin "
                     + escapeHtml(info.name || data.plugin || name) + " \u2014 the one marked (selected) is active now."
-                : "No plugin address set yet \u2014 save one above and the plugin's installed models appear here.")
+                : "No plugin address set yet \u2014 add the plugin in the Add row above and its installed models appear here.")
             + "</div></div>"
             // Remote server (OpenAI-compatible, e.g. llama-server)
             + '<div class="provider-section" id="pluginRemoteSection">'
@@ -1104,8 +1182,6 @@ async function renderPluginConfigure(name) {
         }
         const tcSel = document.getElementById("pluginTokenChoice");
         if (tcSel && staged.token_op) tcSel.value = staged.token_op;
-        const paSel = document.getElementById("pluginAddressChoice");
-        if (paSel && staged.plugin_remove) paSel.value = "remove";
         const cpSel = document.getElementById("pluginCopilotChoice");
         if (cpSel && staged.copilot_op) cpSel.value = staged.copilot_op;
         savedPanel = {
@@ -1132,12 +1208,12 @@ function wirePluginConfigure(name) {
         r.addEventListener("change", () => { recomputeStaged(); showProviderSection(effectiveProvider()); }));
     // Edits only stage: mark dirty on typing (blur fires when a typed value
     // settles) and on select/switch changes.
-    ["pluginAddressInput", "pluginRemoteUrl", "pluginTokenSetInput", "pluginRemoteKeyInput"].forEach(id => {
+    ["pluginRemoteUrl", "pluginTokenSetInput", "pluginRemoteKeyInput"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener("blur", () => recomputeStaged());
     });
     ["pluginModelSelect", "pluginRemoteModel", "pluginRemoteResize",
-     "pluginTokenChoice", "pluginAddressChoice", "pluginCopilotChoice"].forEach(id => {
+     "pluginTokenChoice", "pluginCopilotChoice"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener("change", () => recomputeStaged());
     });
@@ -1189,7 +1265,7 @@ async function savePanelChanges() {
     const steps = planSavePayload(staged);
     if (!steps.length) { pluginSetStatus("No changes to save", ""); return; }
     if (!aiPluginState.configured && !steps.some(s => s.kind === "address")) {
-        pluginSetStatus("Set the plugin address first \u2014 type it in the Plugin address field and Save.", "error");
+        pluginSetStatus("Add the plugin first \u2014 use the Add row above the table.", "error");
         return;
     }
     const done = [], bad = [], skipped = [];
@@ -1355,6 +1431,8 @@ async function renderDevices() {
         fetchJSON(configUrl).catch(() => ({}))
     ]);
     savedNames = names;
+    lastDeviceCount = Array.isArray(devices) ? devices.length : null;
+    renderControllerTable();  // the controller row's Details show the count
 
     if (!devices.length) {
         listEl.innerHTML = '<div class="loading">No devices found. Check that the controller plugin is running and the devices are connected to it.</div>';
@@ -1422,20 +1500,19 @@ document.addEventListener('keydown', async (e) => {
 document.addEventListener('input', updateSaveAllBtn);
 document.addEventListener('change', updateSaveAllBtn);
 
-renderDevices();
-setInterval(renderDevices, 15000);
 
 // No inline onclick (page JS rule): wire the Save button to its handler.
 (function () {
     const btn = document.getElementById('saveAllBtn');
     if (btn) btn.addEventListener('click', saveAllDevices);
 })();
-// ── Manage Mobile Controller box: one registration slot (config.json controller_url) ──
-// Settings owns the address once the key exists (the CONTROLLER_URL env was
-// imported into it once on the first viewer start). Save address is greyed
-// while nothing differs from the saved value; Remove appears once registered.
-let controllerStagedUrl = "";
 
+// ── Controller Plugin: one registration slot (config.json controller_url) ──
+// Settings owns the address once the key exists (the start-up environment
+// value was imported into it once). The Add row shows only while no
+// controller is set; then a one-row table: Status from the controller's
+// /health (via /api/config/controller `live`), Address editable + Save
+// address (greyed until it differs), Details, Remove. No Configure.
 async function loadControllerManage() {
     let data;
     try {
@@ -1443,64 +1520,76 @@ async function loadControllerManage() {
     } catch (e) {
         return;
     }
-    renderControllerManage(data);
+    lastControllerData = data;
+    renderControllerTable();
 }
 
-function renderControllerManage(data) {
-    // Snapshot what the user already typed BEFORE innerHTML replaces the input
-    // (blur events fire late and miss programmatic redraws).
-    const old = document.getElementById('controllerAddressInput');
-    const saved = (data.url || '').trim();
-    if (old && old.value.trim() !== saved) controllerStagedUrl = old.value.trim();
-    const host = document.getElementById('controllerManage');
-    let html = '<div class="plugin-manage-row"><code>' + escapeHtml(saved || 'not configured') + '</code>';
-    html += '<input type="text" id="controllerAddressInput" placeholder="http://<controller-host>:8090" value="' + escapeHtml(controllerStagedUrl || saved) + '" />';
-    html += '<button class="btn-secondary">Save address</button>';
-    if (saved) html += '<button class="btn-secondary">Remove</button>';
-    html += '</div>';
-    host.innerHTML = html;
-    const row = host.querySelector('.plugin-manage-row');
-    const buttons = row.querySelectorAll('button');
-    const saveBtn = buttons[0];
-    saveBtn.disabled = !(controllerStagedUrl && controllerStagedUrl !== saved);
-    saveBtn.addEventListener('click', () => {
-        const inp = document.getElementById('controllerAddressInput');
-        const url = inp ? inp.value.trim() : controllerStagedUrl;
-        if (url) controllerPost({set: {url}}, 'Address saved');
-    });
-    if (buttons.length > 1) {
-        const removeBtn = buttons[1];
-        removeBtn.addEventListener('click', () => controllerPost({remove: true}, 'Removed'));
+function controllerDetails(data) {
+    const live = data.live || {};
+    const L = [];
+    if (live.api_version !== undefined && live.api_version !== null)
+        L.push("API v" + escapeHtml(String(live.api_version)));
+    for (const k of ["appium", "adb"]) {
+        const v = live[k];
+        if (v === undefined || v === null) continue;
+        L.push(k + ": " + escapeHtml(typeof v === "object" ? JSON.stringify(v)
+            : (v === true ? "ready" : v === false ? "not ready" : String(v))));
     }
+    if (lastDeviceCount !== null) L.push(lastDeviceCount + " device" + (lastDeviceCount === 1 ? "" : "s") + " connected");
+    if (data.source === "env") L.push("address from the viewer\u2019s start-up settings \u2014 Save address moves it here");
+    if (live.error) L.push('<span class="bad">' + escapeHtml(String(live.error)) + "</span>");
+    return L.join("<br>") || '<span class="status-muted">\u2014</span>';
+}
+
+function renderControllerTable() {
+    const data = lastControllerData;
+    if (!data) return;
+    const configured = !!data.configured;
+    document.getElementById("controllerAddRow").hidden = configured;
+    const live = data.live || {};
+    const rows = configured ? [{
+        key: "controller", name: data.name || "controller",
+        status: statusCell(!!live.ok, false),
+        saved: data.url || "", readonly: false,
+        details: controllerDetails(data), open: false,
+        actions: actionsHtml({ save: true, remove: true }),
+    }] : [];
+    syncPluginTable(document.getElementById("controllerTbody"), rows,
+                    "No controller added yet \u2014 add one above.", null);
 }
 
 async function controllerPost(payload, okMsg) {
-    const statusEl = document.getElementById('controllerManageStatus');
-    statusEl.hidden = false;
-    statusEl.textContent = 'Working...';
-    let out = null, ok = false;
+    setSectionStatus("controllerManageStatus", "Working\u2026", "");
     try {
-        const res = await fetch('/api/config/controller', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        });
-        out = await res.json();
-        ok = res.ok && out && out.ok;
+        await postConfig('/api/config/controller', payload);
     } catch (e) {
-        ok = false;
+        setSectionStatus("controllerManageStatus", "Failed: " + e.message, "error");
+        return false;
     }
-    statusEl.className = 'settings-status ' + (ok ? 'saved' : 'error');
-    statusEl.textContent = ok ? okMsg : 'Failed: ' + ((out && out.error) || 'network error');
-    if (ok) {
-        controllerStagedUrl = '';
-        await loadControllerManage();
-    }
-    setTimeout(() => { statusEl.hidden = true; statusEl.textContent = ''; }, 4000);
+    setSectionStatus("controllerManageStatus", okMsg, "saved", 4000);
+    await loadControllerManage();
+    renderDevices();
+    return true;
 }
 
-loadControllerManage();
-setInterval(loadControllerManage, 15000);
+wireTable("controllerTbody", async (act, key, url, btn) => {
+    if (act === "remove") {
+        await controllerPost({ remove: true }, "Removed");
+    } else if (act === "save") {
+        if (!url) return;
+        btn.disabled = true;
+        await controllerPost({ set: { url } }, "Address saved");
+        const tr = rowFor(document.getElementById("controllerTbody"), "controller");
+        if (tr) updateRowDirty(tr);
+    }
+});
+
+wireAddRow({ btn: "controllerAddBtn", inputs: ["controllerAddUrl"] }, async () => {
+    const inp = document.getElementById("controllerAddUrl");
+    const url = inp.value.trim();
+    if (!url) { setSectionStatus("controllerManageStatus", "Type the controller\u2019s address first.", "error"); return; }
+    if (await controllerPost({ set: { url } }, "Controller added")) inp.value = "";
+});
 
 
 // ── Section help: the "?" next to each section title shows/hides its intro ──
@@ -1513,6 +1602,14 @@ document.addEventListener('click', (ev) => {
     box.hidden = !open;
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 });
+
+// ── First loads + the 15 s refresh (every declaration above exists now) ──
+loadPlugins();
+setInterval(loadPlugins, 15000);
+renderDevices();
+setInterval(renderDevices, 15000);
+loadControllerManage();
+setInterval(loadControllerManage, 15000);
 </script>
 </body>
 </html>

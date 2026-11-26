@@ -169,8 +169,7 @@ class PanelStagingTests(unittest.TestCase):
         staged selects — none of the old action/save buttons anywhere."""
         src = (ROOT / "plugins.html").read_text()
         for present in ('id="pluginSaveAll"', 'id="pluginTokenChoice"',
-                        'id="pluginAddressChoice"', 'id="pluginCopilotChoice"',
-                        "planSavePayload"):
+                        'id="pluginCopilotChoice"', "planSavePayload"):
             self.assertIn(present, src)
         for gone in ('id="pluginAddressSave"', 'id="pluginSaveBtn"',
                      'id="pluginTokenSetBtn"', 'id="pluginTokenRemoveBtn"',
@@ -198,10 +197,12 @@ class PanelStagingTests(unittest.TestCase):
         i_save = src.index('id="pluginSaveAll"')
         self.assertLess(i_plugin, i_config)
         self.assertLess(i_config, i_save)
-        # The plugin address field lives in the Plugin section, above the
-        # Configuration heading; the token select too.
-        self.assertLess(src.index('id="pluginAddressInput"'), i_config)
+        # The token select lives in the Plugin section, above the
+        # Configuration heading. The plugin address field and the
+        # keep/remove-plugin select are gone: the table row owns them.
         self.assertLess(src.index('id="pluginTokenChoice"'), i_config)
+        self.assertNotIn('id="pluginAddressInput"', src)
+        self.assertNotIn('id="pluginAddressChoice"', src)
         # No element comes between the Save row and the end of the
         # Configuration section: the Save inline-row div is what closes it.
         self.assertIn('<span class="hint" id="pluginSaveHint"></span></div>\'\n            + \'</div>\'',

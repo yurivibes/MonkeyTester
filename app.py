@@ -730,6 +730,47 @@ def _changes_managed_ai_plugin(data):
     return any(data.get(k) for k in ("generate_token", "clear_token", "clear_api_key"))
 
 
+def _ai_plugin_address_op(url, api_key=None):
+    """Set or remove the monkeytester-ai plugin's address (config.json
+    visual_plugin_url + visual_plugin). Shared by POST /api/config/visual-model
+    {plugin_url, api_key?} and the Settings → Plugins Add row (POST
+    /api/config/plugins, a set op whose address is monkeytester-ai, or
+    {"remove": "monkeytester-ai"}). Validate first — GET <url>/health must
+    speak the plugin contract and name plugin monkeytester-ai, and GET
+    <url>/config with the pairing token (api_key if given, else the stored
+    one) must answer 200 — and store nothing when that fails. url "" removes
+    the plugin. Caller holds _CONFIG_LOCK. Returns (http status, body)."""
+    pc = _plugin_client()
+    cfg = load_config()
+    if not url.strip():
+        cfg.pop("visual_plugin_url", None)
+        if (cfg.get("visual_plugin") or "").strip() == pc.AI_PLUGIN_NAME:
+            cfg.pop("visual_plugin", None)
+        save_config(cfg)
+        _PLUGIN_SELECTED_CACHE.clear()
+        print("monkeytester-ai plugin address removed", file=sys.stderr, flush=True)
+        return 200, {"saved": True, "plugin": "", "plugin_url": "",
+                     "token": token_info(cfg.get("visual_api_key") or "")}
+    given = api_key.strip() if isinstance(api_key, str) else ""
+    token = given or (cfg.get("visual_api_key") or "").strip()
+    try:
+        url = pc.ai_validate_address(url, token=token or None, timeout=5)
+    except pc.PluginError as e:
+        status = 400 if e.code in ("invalid_request", "wrong_plugin", "contract") else 502
+        return status, {"error": e.message, "code": e.code,
+                        "plugin": pc.AI_PLUGIN_NAME, "plugin_status": e.status}
+    cfg["visual_plugin_url"] = url
+    cfg["visual_plugin"] = pc.AI_PLUGIN_NAME
+    cfg.setdefault("visual_provider", "local")
+    if given:
+        cfg["visual_api_key"] = given
+    save_config(cfg)
+    _PLUGIN_SELECTED_CACHE.clear()
+    print(f"monkeytester-ai plugin address set to {url}", file=sys.stderr, flush=True)
+    return 200, {"saved": True, "plugin": pc.AI_PLUGIN_NAME, "plugin_url": url,
+                 "token": token_info(cfg.get("visual_api_key") or "")}
+
+
 def ai_plugin_client(cfg=None):
     """(plugin_client module, PluginClient) for the monkeytester-ai plugin at
     its Settings address (config.json visual_plugin_url), authenticated with
@@ -4185,7 +4226,11 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         {"remove": name} forgets either entry; a build plugin still used by
         a project refuses. The first write seeds the map from the VT_PLUGINS
         entries still live then, and afterwards Settings owns the list.
-        monkeytester-ai is not managed here — its Configure panel owns it."""
+        monkeytester-ai goes through the same Add row: a set op whose
+        address's /health names plugin monkeytester-ai (or whose name is
+        monkeytester-ai) is stored the AI way (_ai_plugin_address_op:
+        visual_plugin_url + visual_plugin, token -> visual_api_key), and
+        {"remove": "monkeytester-ai"} clears it; managed mode refuses (409)."""
         try:
             data = json.loads(self._body())
         except ValueError:
@@ -4228,6 +4273,19 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             if not isinstance(name, str) or not pc.PLUGIN_NAME_RE.fullmatch(name):
                 bad(f"plugin name {name!r} must match {pc.PLUGIN_NAME_RE.pattern}")
                 return
+            if name == pc.AI_PLUGIN_NAME:
+                # The AI row on Settings → Plugins: same as
+                # /api/config/visual-model {"plugin_url": ""}.
+                if managed_ai_plugin():
+                    self.send_json_status(409, {"error": MANAGED_AI_MESSAGE})
+                    return
+                with _CONFIG_LOCK:
+                    if not ai_plugin_url(load_config()):
+                        bad(f"no plugin {name!r} registered", "nothing_to_remove")
+                        return
+                    status, body = _ai_plugin_address_op("")
+                self.send_json({"ok": True, "removed": name, "ai": body})
+                return
             with _CONFIG_LOCK:
                 config = load_config()
                 base = base_and_save(config)
@@ -4259,10 +4317,6 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             if not isinstance(name, str) or not pc.PLUGIN_NAME_RE.fullmatch(name):
                 bad(f"plugin name {name!r} must match {pc.PLUGIN_NAME_RE.pattern}")
                 return
-            if name == pc.AI_PLUGIN_NAME:
-                bad("monkeytester-ai's address is set in its Configure panel, not here",
-                    "reserved_name")
-                return
             token_given = "token" in op
             token_val = op.get("token")
             if token_given and not (token_val is None or isinstance(token_val, str)):
@@ -4271,6 +4325,30 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             # One /health read decides which contract the address speaks.
             status, health = _get_json(f"{(url or '').strip().rstrip('/')}/health", timeout=5)
             contract = (health or {}).get("contract") if isinstance(health, dict) else None
+            hplugin = (health or {}).get("plugin") if isinstance(health, dict) else None
+            hname = hplugin.get("name") if isinstance(hplugin, dict) else hplugin
+            if hname == pc.AI_PLUGIN_NAME or name == pc.AI_PLUGIN_NAME:
+                # monkeytester-ai is added through the same Add row, but it is
+                # stored the AI way (config.json visual_plugin_url +
+                # visual_plugin, the op's token becomes visual_api_key) and
+                # validated by ai_validate_address — never in `plugins`.
+                if managed_ai_plugin():
+                    self.send_json_status(409, {"error": MANAGED_AI_MESSAGE})
+                    return
+                if not isinstance(url, str) or not url.strip():
+                    bad("url must be an http(s):// address", "bad_url")
+                    return
+                with _CONFIG_LOCK:
+                    status, body = _ai_plugin_address_op(
+                        url, token_val if isinstance(token_val, str) else None)
+                if status != 200:
+                    self.send_json_status(status, body)
+                    return
+                self.send_json({"ok": True, "ai": True,
+                                "plugin": {"name": pc.AI_PLUGIN_NAME,
+                                           "url": body["plugin_url"],
+                                           "token": body["token"]}})
+                return
             if contract == bpc.CONTRACT:
                 with _CONFIG_LOCK:
                     config = load_config()
@@ -4503,44 +4581,16 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         token (api_key if given, else the stored one) must answer 200 — and
         store nothing when that fails. "plugin_url": "" removes the plugin
         (visual_plugin_url and visual_plugin)."""
-        pc = _plugin_client()
         url = data.get("plugin_url")
         if not isinstance(url, str):
             self.send_json_status(400, {"error": "plugin_url must be a string",
                                         "code": "invalid_request"})
             return
-        cfg = load_config()
-        if not url.strip():
-            cfg.pop("visual_plugin_url", None)
-            if (cfg.get("visual_plugin") or "").strip() == pc.AI_PLUGIN_NAME:
-                cfg.pop("visual_plugin", None)
-            save_config(cfg)
-            _PLUGIN_SELECTED_CACHE.clear()
-            print("monkeytester-ai plugin address removed", file=sys.stderr, flush=True)
-            self.send_json({"saved": True, "plugin": "", "plugin_url": "",
-                            "token": token_info(cfg.get("visual_api_key") or "")})
-            return
-        given = data.get("api_key")
-        given = given.strip() if isinstance(given, str) else ""
-        token = given or (cfg.get("visual_api_key") or "").strip()
-        try:
-            url = pc.ai_validate_address(url, token=token or None, timeout=5)
-        except pc.PluginError as e:
-            status = 400 if e.code in ("invalid_request", "wrong_plugin", "contract") else 502
-            self.send_json_status(status, {"error": e.message, "code": e.code,
-                                           "plugin": pc.AI_PLUGIN_NAME,
-                                           "plugin_status": e.status})
-            return
-        cfg["visual_plugin_url"] = url
-        cfg["visual_plugin"] = pc.AI_PLUGIN_NAME
-        cfg.setdefault("visual_provider", "local")
-        if given:
-            cfg["visual_api_key"] = given
-        save_config(cfg)
-        _PLUGIN_SELECTED_CACHE.clear()
-        print(f"monkeytester-ai plugin address set to {url}", file=sys.stderr, flush=True)
-        self.send_json({"saved": True, "plugin": pc.AI_PLUGIN_NAME, "plugin_url": url,
-                        "token": token_info(cfg.get("visual_api_key") or "")})
+        status, body = _ai_plugin_address_op(url, data.get("api_key"))
+        if status == 200:
+            self.send_json(body)
+        else:
+            self.send_json_status(status, body)
 
     def _save_visual_model_config(self, data):
         provider = (data.get("provider") or "").strip().lower() if "provider" in data else None
