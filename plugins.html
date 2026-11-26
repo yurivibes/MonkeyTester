@@ -26,11 +26,6 @@
 .plugin-card .meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
 .plugin-card .meta code { font-family: monospace; font-size: 0.75rem; }
 .plugin-card .meta.bad { color: var(--fail); }
-details.plugins-howto { font-size: 0.8rem; color: var(--text-muted); margin-top: 12px; }
-details.plugins-howto summary { font-weight: 600; }
-details.plugins-howto ul { margin: 0; padding-left: 20px; }
-details.plugins-howto li { padding: 2px 0; }
-details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
 
 /* Click-through configure panel (monkeytester-ai plugin rows) */
 .plugin-configure { display: none; }
@@ -88,7 +83,6 @@ details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
    and the Build Plugin section (the local build tool). Cards, manage boxes
    and Configure panels reuse the classes above. */
 .plugins-section-title { font-size: 1.05rem; font-weight: 700; margin: 20px 0 8px; }
-.plugins-intro { font-size: 0.85rem; color: var(--text-muted); margin-top: 6px; max-width: 640px; }
 #buildManageStatus.saved { color: var(--pass); }
 #buildManageStatus.error { color: var(--fail); }
 #controllerManageStatus.saved { color: var(--pass); }
@@ -126,25 +120,13 @@ details.plugins-howto code { font-family: monospace; font-size: 0.75rem; }
 
     <div class="settings-section" id="pluginsTestSection">
         <div class="plugins-section-title">Test Plugins</div>
-        <div class="plugins-intro">Test Plugins run the tests: the <code>esp32-*</code> device plugins own the hardware, and <strong>monkeytester-ai</strong> is the vision-model plugin. Each is a standalone HTTP service implementing <code>PLUGIN_API.md</code> (contract <code>monkeytester-plugin</code>), kept in its own repo — the viewer holds no hardware code. The <strong>Build Plugin</strong> section below belongs to Build &amp; Test, not to tests.</div>
+        <div class="config-info">A <strong>test plugin</strong> gives tests something the phones can't: a device plugin drives extra hardware a test talks to, and the vision-model plugin reads the screenshots. Register device plugins in the box below; a plugin with its own settings, such as the vision-model plugin, has a <strong>Configure</strong> button on its row. Tests call a plugin by its registered name.</div>
         <div class="plugins-none bad" id="pluginsError" hidden></div>
         <div class="plugins-list" id="pluginsList"></div>
         <div class="plugin-configure" id="pluginConfigure"></div>
         <div class="plugin-warn" id="pluginWarnNote" hidden></div>
         <div class="plugin-manage" id="pluginManage"></div>
         <div class="settings-status" id="pluginManageStatus" hidden></div>
-        <details class="plugins-howto">
-            <summary>How to configure a Test Plugin</summary>
-            <ul>
-                <li>A plugin is a standalone HTTP service implementing <code>PLUGIN_API.md</code> (contract <code>monkeytester-plugin</code>), kept in its own repo — the viewer holds no hardware code.</li>
-                <li>Device plugins are registered here, in the <strong>Manage device plugins</strong> box: the list lives in <code>Run/config.json</code> as a <code>plugins</code> map {name: url}. On the first viewer start, entries of the environment variable <code>VT_PLUGINS=name=url[,name=url]</code> are imported into that map once, after which the variable is ignored &mdash; Settings owns the list. The <strong>monkeytester-ai</strong> plugin is separate: its address is only set in that row's <strong>Configure</strong> panel (<strong>Plugin address</strong> field) and saved in <code>Run/config.json</code> as <code>visual_plugin_url</code>. When a launcher app runs the viewer, it supplies that address and the pairing token itself (<code>VT_MANAGED_AI_PLUGIN_URL</code> + <code>VT_MANAGED_AI_PLUGIN_TOKEN</code>): the row then shows the address read-only with &ldquo;Managed by the MonkeyTester app&rdquo;.</li>
-                <li>On Linux, run the plugin as a systemd user service (its own repo ships the unit). Register it in <strong>Manage device plugins</strong> after a viewer start; entries an existing <code>visualtest-viewer.service.d/plugins.conf</code> drop-in still sets via <code>Environment=VT_PLUGINS=&hellip;</code> are imported into Settings once, so the drop-in no longer needs to list plugins.</li>
-                <li>If a plugin is started with a token (its own <code>PLUGIN_TOKEN</code>), give the viewer the same value in <strong>Settings &rarr; Configuration &rarr; Service tokens</strong> (admins): it is checked against the plugin's <code>GET /devices</code>, stored in <code>service_tokens.json</code> (mode 0600) and sent as <code>X-Plugin-Token</code>. The old <code>PLUGIN_TOKEN</code> / <code>VT_PLUGIN_TOKEN_&lt;NAME&gt;</code> environment variables are imported there once, then ignored. A missing or wrong token shows here as a 401 error.</li>
-                <li>The <strong>monkeytester-ai</strong> row always shows a <strong>Configure</strong> button, even with no plugin set yet. Its panel is laid out in two sections, <strong>Plugin</strong> on top (plugin address field, the Plugin keep/remove select, the Token select and the write-only token status), then <strong>Configuration</strong> below it (provider radios, model dropdowns, the Remote server subsection, the Copilot select) with the single <strong>Save changes</strong> button as the LAST element at the bottom of the Configuration section. It edits everything through fields — <strong>Plugin address</strong>, pairing-token paste, the <strong>Local model</strong>/<strong>Remote server</strong>/<strong>GitHub Copilot</strong> provider radios, the remote server's address, model, resize switch and API key — and ONE <strong>Save changes</strong> button applies all pending edits in the plugin's required order (pairing-token op first, then the plugin address — including a staged “Remove plugin” choice —, then the remote keys in one request, then the provider last). The button stays greyed while nothing differs from the saved state. Token Set/Replace/Remove, plugin removal and Copilot sign in/out are staged <strong>selects</strong>, not buttons: any armed choice marks the panel dirty and the single Save executes it; only <strong>Load models</strong> and <strong>Refresh list</strong> stay as buttons (fetches — Load models validates, and thereby saves, the typed remote address: the plugin contract only lists remote models of a saved address). Choose <strong>Local model</strong> (one of the plugin's installed models), <strong>Remote server</strong> (an OpenAI-compatible server such as llama-server, with an optional API key &mdash; that server's address is a different thing from the plugin address) or <strong>GitHub Copilot</strong> (sign in with GitHub, then pick a vision model). The plugin stores the remote API key and the GitHub sign-in and forwards vision calls; the viewer stores neither.</li>
-                <li><strong>Add</strong> and <strong>Save address</strong> only store an address whose service answers <code>GET /health</code> with the <code>monkeytester-plugin</code> contract at a supported version — a refused save shows the plugin's own error. <strong>Remove</strong> forgets a registration (and its token). Plugin tokens are set in Settings &rarr; Configuration &rarr; Service tokens.</li>
-                <li>Tests call a plugin with steps like <code>PLUGIN: esp32 factory-reset</code>; the name must match a registered plugin name (Settings → Plugins, Test Plugins).</li>
-            </ul>
-        </details>
     </div>
 
     <div class="settings-section" id="pluginsBuildSection">
