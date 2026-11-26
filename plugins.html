@@ -165,7 +165,7 @@
 
     <div class="settings-section" id="deviceConfigSection">
         <div class="plugins-section-title">Controller Plugin<button type="button" class="section-help-btn" aria-expanded="false" aria-controls="controllerPluginHelp" title="What is this?" aria-label="What is a controller plugin?">?</button></div>
-        <div class="config-info" id="controllerPluginHelp" hidden>A <strong>controller plugin</strong> owns the phones and tablets connected to it: it lists those devices and runs the test steps on them. Add its address with the row below (there is one controller). Friendly names set for its devices replace the runner-recorded names on run pages.</div>
+        <div class="config-info" id="controllerPluginHelp" hidden>A <strong>controller plugin</strong> owns the phones and tablets connected to it: it lists those devices and runs the test steps on them. Add its address with the row below (there is one controller), and use <strong>Configure</strong> on its row to name its devices. Friendly names set for its devices replace the runner-recorded names on run pages.</div>
         <div class="plugin-add-row" id="controllerAddRow" hidden><span class="pm-add-hint">Add the controller:</span>
             <input type="url" id="controllerAddUrl" placeholder="http://&lt;controller-host&gt;:8090" autocomplete="off" aria-label="Controller address">
             <button class="btn-secondary" id="controllerAddBtn" type="button">Add</button></div>
@@ -174,13 +174,7 @@
             <thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Details</th><th>Actions</th></tr></thead>
             <tbody id="controllerTbody"><tr class="plugin-empty-row"><td colspan="5" class="pt-empty">Loading…</td></tr></tbody>
         </table></div>
-        <div class="config-device-list" id="device-list">
-            <div class="loading">Loading devices...</div>
-        </div>
-        <div class="config-save-all">
-            <button class="btn-secondary" id="saveAllBtn">Save All Changes</button>
-            <span class="config-save-status" id="global-status"></span>
-        </div>
+        <div class="plugin-configure" id="controllerConfigure"></div>
     </div>
 </div>
 <script>
@@ -1405,14 +1399,18 @@ function warnIfRunning() {
         } catch (e) {}
     })();
 }
-// ── Device Config section: friendly names for Mobile Controller devices ──
-// Moved from the retired device-config.html page: the options now live in the
-// Device Config section on this page. Same /api/config/devices API and the
-// same greyed Save rule (disabled while every shown name matches the saved map).
+// ── Controller Configure panel: friendly names for the controller's devices ──
+// The names list + Save All Changes live in the controller row's inline
+// Configure panel (like the Test/Build plugin panels). Same /api/config/devices
+// API and the same greyed Save rule (disabled while every shown name matches
+// the saved map). The 15 s refresh always re-reads /devices (the row's Details
+// show the count) but only redraws the list while the panel is open, and a
+// name the user has typed but not saved survives the redraw.
 const configUrl = '/api/config/devices';
 
 // The saved device-name map, kept current on every render.
 let savedNames = null;
+let controllerPanelOpen = false;
 
 function saveAllDirty() {
     if (!savedNames) return true;
@@ -1430,18 +1428,25 @@ function updateSaveAllBtn() {
     if (btn) btn.disabled = !saveAllDirty();
 }
 
-async function renderDevices() {
-    const listEl = document.getElementById('device-list');
-    listEl.innerHTML = '<div class="loading">Loading devices...</div>';
-
+// fresh: drop typed-but-unsaved names (panel just opened, or just saved).
+async function renderDevices(fresh) {
     const [devices, names] = await Promise.all([
         fetchJSON('/devices').catch(() => []),
         fetchJSON(configUrl).catch(() => ({}))
     ]);
+    const typed = {};
+    if (!fresh && savedNames) {
+        document.querySelectorAll('.config-device').forEach(el => {
+            const input = el.querySelector('.name-input');
+            if (input && input.value.trim() !== (savedNames[el.dataset.id] || '')) typed[el.dataset.id] = input.value;
+        });
+    }
     savedNames = names;
     lastDeviceCount = Array.isArray(devices) ? devices.length : null;
     renderControllerTable();  // the controller row's Details show the count
 
+    const listEl = document.getElementById('device-list');
+    if (!controllerPanelOpen || !listEl) return;
     if (!devices.length) {
         listEl.innerHTML = '<div class="loading">No devices found. Check that the controller plugin is running and the devices are connected to it.</div>';
         updateSaveAllBtn();
@@ -1451,6 +1456,7 @@ async function renderDevices() {
     let html = '';
     for (const device of devices) {
         const id = escapeHtml(device.id);
+        const value = Object.prototype.hasOwnProperty.call(typed, device.id) ? typed[device.id] : (names[device.id] || '');
         html += '<div class="config-device" data-id="' + id + '">';
         html += '<div class="config-device-header">';
         html += '<span class="config-device-path">' + id + '</span>';
@@ -1458,12 +1464,48 @@ async function renderDevices() {
         html += '<span style="font-size:0.75rem;color:var(--text-muted);">' + escapeHtml(device.platform) + '</span>';
         html += '</div>';
         html += '<div class="config-device-form">';
-        html += '<div style="flex:1;min-width:180px;"><div class="config-label">Friendly Name</div><input type="text" class="name-input" placeholder="Device name..." value="' + escapeHtml(names[device.id] || '') + '" /></div>';
+        html += '<div style="flex:1;min-width:180px;"><div class="config-label">Friendly Name</div><input type="text" class="name-input" placeholder="Device name..." aria-label="Friendly name for ' + id + '" value="' + escapeHtml(value) + '" /></div>';
         html += '</div>';
         html += '</div>';
     }
+    // Keep focus/caret in the input being typed into across the redraw.
+    const active = document.activeElement;
+    const activeId = active && active.classList.contains('name-input') ? active.closest('.config-device')?.dataset.id : null;
     listEl.innerHTML = html;
+    if (activeId) {
+        for (const el of listEl.querySelectorAll('.config-device')) {
+            if (el.dataset.id === activeId) { const i = el.querySelector('.name-input'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+        }
+    }
     updateSaveAllBtn();
+}
+
+function toggleControllerConfigure() {
+    const panel = document.getElementById("controllerConfigure");
+    if (!panel) return;
+    if (controllerPanelOpen) { closeControllerConfigure(); return; }
+    if (!openConfigureRow(document.getElementById("controllerTbody"), "controller", panel)) return;
+    controllerPanelOpen = true;
+    const url = lastControllerData && lastControllerData.url ? lastControllerData.url : "";
+    panel.innerHTML = '<div class="plugin-configure-head"><h4>Device names</h4>'
+        + (url ? '<div class="url">' + escapeHtml(url) + '</div>' : '') + '</div>'
+        + '<div class="hint">A friendly name replaces the runner-recorded name for that device on run pages. Leave it empty to use the recorded name.</div>'
+        + '<div class="config-device-list" id="device-list"><div class="loading">Loading devices...</div></div>'
+        + '<div class="config-save-all"><button class="btn-secondary" id="saveAllBtn" type="button" disabled>Save All Changes</button>'
+        + '<span class="config-save-status" id="global-status"></span></div>';
+    panel.classList.add("open");
+    // No inline onclick (page JS rule): wire the Save button to its handler.
+    document.getElementById("saveAllBtn").addEventListener("click", saveAllDevices);
+    renderControllerTable();  // Configure shows pressed
+    renderDevices(true);
+}
+
+function closeControllerConfigure() {
+    controllerPanelOpen = false;
+    const panel = document.getElementById("controllerConfigure");
+    if (panel) closeConfigureRow(document.getElementById("controllerTbody"), panel,
+                                 document.getElementById("deviceConfigSection"));
+    renderControllerTable();
 }
 
 async function saveAllDevices() {
@@ -1493,7 +1535,7 @@ async function saveAllDevices() {
 
     statusEl.className = 'config-save-status ' + (ok ? 'saved' : 'error');
     statusEl.textContent = ok ? 'Saved' : 'Failed to save';
-    if (ok) await renderDevices();
+    if (ok) await renderDevices(true);
     setTimeout(() => { statusEl.textContent = ''; }, 3000);
 }
 
@@ -1509,18 +1551,13 @@ document.addEventListener('input', updateSaveAllBtn);
 document.addEventListener('change', updateSaveAllBtn);
 
 
-// No inline onclick (page JS rule): wire the Save button to its handler.
-(function () {
-    const btn = document.getElementById('saveAllBtn');
-    if (btn) btn.addEventListener('click', saveAllDevices);
-})();
-
 // ── Controller Plugin: one registration slot (config.json controller_url) ──
 // Settings owns the address once the key exists (the start-up environment
 // value was imported into it once). The Add row shows only while no
 // controller is set; then a one-row table: Status from the controller's
 // /health (via /api/config/controller `live`), Address editable + Save
-// address (greyed until it differs), Details, Remove. No Configure.
+// address (greyed until it differs), Details, Configure (device names,
+// inline under the row), Remove.
 async function loadControllerManage() {
     let data;
     try {
@@ -1559,11 +1596,11 @@ function renderControllerTable() {
         key: "controller", name: data.name || "controller",
         status: statusCell(!!live.ok, false),
         saved: data.url || "", readonly: false,
-        details: controllerDetails(data), open: false,
-        actions: actionsHtml({ save: true, remove: true }),
+        details: controllerDetails(data), open: controllerPanelOpen,
+        actions: actionsHtml({ save: true, configure: true, remove: true, open: controllerPanelOpen }),
     }] : [];
     syncPluginTable(document.getElementById("controllerTbody"), rows,
-                    "No controller added yet \u2014 add one above.", null);
+                    "No controller added yet \u2014 add one above.", closeControllerConfigure);
 }
 
 async function controllerPost(payload, okMsg) {
@@ -1581,7 +1618,10 @@ async function controllerPost(payload, okMsg) {
 }
 
 wireTable("controllerTbody", async (act, key, url, btn) => {
-    if (act === "remove") {
+    if (act === "configure") {
+        toggleControllerConfigure();
+    } else if (act === "remove") {
+        if (controllerPanelOpen) closeControllerConfigure();
         await controllerPost({ remove: true }, "Removed");
     } else if (act === "save") {
         if (!url) return;

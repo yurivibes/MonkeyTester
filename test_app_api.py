@@ -577,7 +577,7 @@ class SettingsPagesTests(ServerCase):
     PAGES = {
         "/config": [b'id="buildSection"', b'id="light_mode"'],
         "/plugins": [b'id="pluginsTable"', b'id="buildPluginsTable"', b'id="controllerTable"',
-                     b"config-device-list"],
+                     b'id="controllerConfigure"'],
         "/run-status": [b'id="runStatusPanel"'],
     }
 
