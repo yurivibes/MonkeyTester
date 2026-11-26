@@ -143,22 +143,22 @@ are listed in `SECURITY.md` under "Code hardening".
 
 This needs a Mobile Controller and, if you use it, a MonkeyTester-Plugin-AI on API version 2.
 Open `/api/status` to check that the viewer can reach both. For the vision model,
-add the MonkeyTester-Plugin-AI service in **Settings → Device Plugins**, in the monkeytester-ai
+add the MonkeyTester-Plugin-AI service in **Settings → Device Plugins**, in the AI
 row's **Configure** panel (the **Plugin address** field and **Pairing token** block at its top):
 its address (e.g. `http://192.168.1.20:8091`) and pairing token. The viewer checks both
-first (`/health` must be the monkeytester-ai plugin and `/config` must accept the token) and
+first (`/health` must be the AI plugin and `/config` must accept the token) and
 saves nothing if that fails; the address goes into `Run/config.json` as `visual_plugin_url`
 and can be changed later in the same panel. The plugin's row stays read-only (it shows the
 current address, or "not configured"). A
-`monkeytester-ai=…` entry in `MT_PLUGINS` (the old way) is imported into config.json once
+`monkeytester-ai=…` (or `AI=…`) entry in `MT_PLUGINS` (the old way) is imported into config.json once
 when the viewer starts and ignored after that, so remove it from `MT_PLUGINS`; the other
 device plugins now live in Settings too — register them in the **Manage device plugins**
 box (saved as the `plugins` map in `Run/config.json`, the variable imported into it once).
 
 **App-managed plugin (legacy):** when both `MT_MANAGED_AI_PLUGIN_URL` (e.g.
 `http://127.0.0.1:8091`) and `MT_MANAGED_AI_PLUGIN_TOKEN` (the pairing token) are set, the
-viewer and the runner use them for the monkeytester-ai plugin, winning over config.json's
-`visual_plugin_url`/`visual_api_key`, and monkeytester-ai is the vision plugin even without
+viewer and the runner use them for the AI plugin, winning over config.json's
+`visual_plugin_url`/`visual_api_key`, and AI is the vision plugin even without
 `visual_plugin` in config.json. Neither value is ever written to config.json, and the
 `MT_PLUGINS` import is skipped. The plugin's row and its Configure panel show the address
 read-only with "Managed by the MonkeyTester app" (no address field, Plugin or Token select);
@@ -218,27 +218,37 @@ MonkeyTester-Plugin-Server);
 an address is saved (in the `plugins` map of `Run/config.json`) only once its `GET /health`
 answers with the plugin contract, and a `MT_PLUGINS=name=url[,name=url]` environment
 variable is imported into that map once at viewer start and ignored after that. Call
-them from a test with `PLUGIN: <plugin> <action> [key=value …] [device=<id>] [timeout=<s>]`.
+them from a test with a step whose command is the plugin's name:
+`<PLUGIN-NAME>: <action> [key=value …] [device=<id>] [timeout=<s>]`, e.g.
+`ESP32-SERVER: expect`. Plugin names are UPPERCASE (`[A-Z0-9][A-Z0-9_-]{0,63}`; the viewer
+refuses a lowercase name with 400 `bad_request`) and may not be a built-in step command
+(CLICK, VERIFY, WAIT, IF, END, …: 400 `reserved_name`). The colon is required. The old
+`PLUGIN: <name> <action>` step was removed: it is a parse error naming the replacement.
+The vision steps run under the AI plugin's name (default `AI`, renamable):
+`AI: VERIFY <text>`, `AI: CLICK <text>`, `AI: INPUT <field> "<text>"` — bare `VERIFY:`,
+`CLICK:` and `INPUT:` are parse errors. Any other action after the AI's name (e.g.
+`AI: set-model …`) is relayed to the AI plugin. The runner reads the AI's current name from
+its `/health` at run start (falling back to `AI`, and saying so in the log).
 The Settings page lists the active plugins with their live state, capabilities and
 connected devices, and lets you add, edit or remove them; the `plugins` map decides which
-device plugins are enabled. The monkeytester-ai plugin is the exception: its address is set
+device plugins are enabled. The AI plugin is the exception: its address is set
 only in that row's **Configure** panel (see above), not in the manage box.
-A `PLUGIN` step may carry an inline block, indented lines up to a line that is exactly
+A plugin step may carry an inline block, indented lines up to a line that is exactly
 `END`, which is sent to the action as its `script` param:
 
 ```
-PLUGIN: esp32 flash firmware_dir=${FIRMWARE_DIR}
-PLUGIN: esp32 factory-reset
-PLUGIN: esp32 broadcast-ssid seconds=0
-PLUGIN: esp32 expect
+ESP32: flash firmware_dir=${FIRMWARE_DIR}
+ESP32: factory-reset
+ESP32: broadcast-ssid seconds=0
+ESP32: expect
   GET /temperature.json -> 500
 END
-VERIFY: The temperature card shows an error
-PLUGIN: esp32 expect
+AI: VERIFY The temperature card shows an error
+ESP32: expect
   GET /temperature.json -> normal
 END
-VERIFY: The temperature card shows a live reading
-PLUGIN: esp32 clear
+AI: VERIFY The temperature card shows a live reading
+ESP32: clear
 ```
 
 Fonts, styles and asset placement are checked with `SNAPSHOT` (compare against a baseline kept
@@ -440,7 +450,7 @@ Setup:
   the same as iOS, so e.g. `device-setup` starts on Home after `onboarding`.
   Set `CLEAR_DATA` in that case to clear again.
 - A step that only one platform needs (e.g. an iOS-only system prompt)
-  takes an `IF IOS:` or `IF ANDROID:` prefix: `IF IOS: CLICK: Allow button`. On the
+  takes an `IF IOS:` or `IF ANDROID:` prefix: `IF IOS: AI: CLICK Allow button`. On the
   other platform it shows as skipped and doesn't fail the test. For several
   steps, wrap them in a block: a line `IF IOS:` (or `IF ANDROID:`), the steps,
   then `END IF` (or `END IF IOS`). Blocks don't nest, and a missing or

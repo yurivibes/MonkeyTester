@@ -56,7 +56,7 @@
 .plugin-table tr.plugin-row.configuring > td { background: color-mix(in srgb, var(--acid) 8%, var(--surface)); }
 .plugin-table tr.plugin-configure-row > td { background: var(--surface); padding: 10px 14px; }
 
-/* Configure panel (monkeytester-ai / config-owning plugins, build plugins):
+/* Configure panel (the AI plugin / config-owning plugins, build plugins):
    lives inside the inline configure row while open. */
 .plugin-configure { display: none; }
 .plugin-configure.open { display: block; max-width: 560px; }
@@ -189,7 +189,7 @@
 // Device plugins, build plugins and the controller: one table per section.
 // State is declared up here; the first loads and the 15 s refresh timers start
 // at the END of the script (after every `let`/`const` they touch exists).
-const AI_NAME_DEFAULT = "monkeytester-ai";
+const AI_NAME_DEFAULT = "AI";
 let aiPluginState = { configured: false, url: "" };
 let testRows = [];     // last /api/plugins device rows shown in the Test table
 let buildRows = [];    // last /api/plugins build rows
@@ -451,7 +451,7 @@ function wireAddRow(ids, onAdd) {
     }
 }
 
-// ── Test Plugins: device plugins + monkeytester-ai (shown once configured) ──
+// ── Test Plugins: device plugins + the AI plugin (shown once configured) ──
 async function loadPlugins() {
     try {
         const res = await fetch("/api/plugins");
@@ -481,7 +481,7 @@ function renderTestTable() {
     syncPluginTable(document.getElementById("pluginsTbody"), testRows.map(p => {
         const managed = p.__ai && !!p.managed;
         const open = panelOpen && configureFor === p.name;
-        // The row key stays the registry key (monkeytester-ai for the AI
+        // The row key stays the registry key (AI for the AI
         // slot); the Name column shows the name the plugin reports.
         return {
             key: p.name, name: p.display_name || p.name,
@@ -537,7 +537,7 @@ wireTable("pluginsTbody", async (act, name, url, btn) => {
     } else if (act === "save") {
         if (!url) { setSectionStatus("pluginManageStatus", "Type the new address first.", "error"); return; }
         btn.disabled = true;
-        // monkeytester-ai's row goes through the same set op: the viewer sees
+        // The AI plugin's row goes through the same set op: the viewer sees
         // its /health name and stores it the AI way (visual_plugin_url).
         // `row` says which row is edited; the name comes from /health, and a
         // different one renames the row (the reload drops the old row).
@@ -797,7 +797,7 @@ function closeBuildPanel() {
     renderBuildTable();
 }
 
-// ── Configure panel: the monkeytester-ai plugin owns the vision provider ──
+// ── Configure panel: the AI plugin owns the vision provider ──
 // (Local model, Remote server or GitHub Copilot), its models, the remote
 // server's address/model/resize/API key, the Copilot sign-in and the pairing
 // token. Every call goes through the viewer, which relays to the plugin.
@@ -931,7 +931,7 @@ function stagePanelFields(saved, current) {
     // shows the error inline and keeps Save greyed).
     if (saved.renamable && typeof current.name === "string") {
         const n = current.name.trim();
-        if (n && n !== saved.name && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(n)) out.name = n;
+        if (n && n !== saved.name && /^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(n)) out.name = n;  // PLUGIN_NAME_PATTERN
     }
     return out;
 }
@@ -1087,7 +1087,10 @@ function updateSaveHint() {
 // on input AND change — and "Reset to default" only puts default_name into
 // the input (Save still applies it). Values go in via .value/.textContent
 // and data-* attributes, never into HTML strings.
-const PLUGIN_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+// Names are UPPERCASE (plugin_client.PLUGIN_NAME_RE): a test calls a plugin
+// with a step whose command IS its name (`ESP32-SERVER: expect`). The server
+// also refuses built-in step commands (400 reserved_name) and shows why.
+const PLUGIN_NAME_PATTERN = /^[A-Z0-9][A-Z0-9_-]{0,63}$/;
 
 function nameSectionHtml(forTests) {
     return '<div class="panel-section" id="pluginNameSection">'
@@ -1098,9 +1101,13 @@ function nameSectionHtml(forTests) {
         + '<div class="hint" id="pluginNameDefault"></div>'
         + '<div class="name-error" id="pluginNameError" role="alert" hidden></div>'
         + '<div class="hint">The plugin stores this name and reports it; the Name column shows it. '
-        + 'Letters, digits, <code>-</code> and <code>_</code>, up to 64 characters.'
-        + (forTests ? " Tests call the plugin by this name (<code>PLUGIN: &lt;name&gt; \u2026</code>), so "
-            + "update the tests that use it after a rename." : "")
+        + 'UPPERCASE letters, digits, <code>-</code> and <code>_</code>, up to 64 characters; not a '
+        + 'built-in step command (CLICK, VERIFY, WAIT, \u2026).'
+        + (forTests ? " Tests call the plugin by this name (<code>ESP32-SERVER: expect \u2026</code>), so "
+            + "update the tests that use it after a rename."
+            : " Tests write the vision steps under this name (<code>AI: CLICK Login</code>, "
+            + "<code>AI: VERIFY \u2026</code>, <code>AI: INPUT \u2026</code>), so update the tests "
+            + "after a rename.")
         + "</div></div>";
 }
 
@@ -1124,7 +1131,8 @@ function checkNameField() {
     const v = inp.value.trim();
     const msg = !v ? "Enter a name."
         : PLUGIN_NAME_PATTERN.test(v) ? ""
-        : "Use letters, digits, - and _ only, starting with a letter or digit (up to 64 characters).";
+        : PLUGIN_NAME_PATTERN.test(v.toUpperCase()) ? "Plugin names are uppercase: " + v.toUpperCase() + "."
+        : "Use UPPERCASE letters, digits, - and _ only, starting with a letter or digit (up to 64 characters).";
     if (err) { err.textContent = msg; err.hidden = !msg; }
     inp.setAttribute("aria-invalid", msg ? "true" : "false");
     return !msg;

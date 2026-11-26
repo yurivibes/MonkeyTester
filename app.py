@@ -315,7 +315,7 @@ MANAGED_AI_MESSAGE = "managed by the MonkeyTester app"
 
 
 def managed_ai_plugin(env=None):
-    """(url, token) of the monkeytester-ai plugin when the MonkeyTester Mac
+    """(url, token) of the AI plugin when the MonkeyTester Mac
     app manages it ("managed mode"), else None.
 
     The Mac launcher picks the AI plugin's port and pairing token fresh on
@@ -334,9 +334,9 @@ def managed_ai_plugin(env=None):
 
 
 def ai_plugin_url(cfg=None):
-    """The monkeytester-ai plugin's address: MT_MANAGED_AI_PLUGIN_URL in
+    """The AI plugin's address: MT_MANAGED_AI_PLUGIN_URL in
     managed mode (managed_ai_plugin), else Settings → Device Plugins
-    (config.json visual_plugin_url), '' when none is set. A monkeytester-ai
+    (config.json visual_plugin_url), '' when none is set. An AI
     entry in MT_PLUGINS is imported once at start (import_ai_plugin_address)
     and ignored after that."""
     managed = managed_ai_plugin()
@@ -347,7 +347,7 @@ def ai_plugin_url(cfg=None):
 
 
 def ai_pairing_token(cfg=None):
-    """The pairing token for every call to the monkeytester-ai plugin:
+    """The pairing token for every call to the AI plugin:
     MT_MANAGED_AI_PLUGIN_TOKEN in managed mode, else config.json
     visual_api_key; '' when none is set."""
     managed = managed_ai_plugin()
@@ -357,17 +357,17 @@ def ai_pairing_token(cfg=None):
     return (cfg.get("visual_api_key") or "").strip()
 
 
-_AI_IMPORT_MESSAGE = ("imported monkeytester-ai address from MT_PLUGINS; "
+_AI_IMPORT_MESSAGE = ("imported AI plugin address from MT_PLUGINS; "
                       "the MT_PLUGINS entry is ignored from now on")
 
 
 def import_ai_plugin_address(env=None):
-    """One-time move of the monkeytester-ai address from MT_PLUGINS into
+    """One-time move of the AI address from MT_PLUGINS into
     config.json, run when the viewer starts. Only when config.json has no
-    visual_plugin_url yet and MT_PLUGINS has a monkeytester-ai entry: writes
+    visual_plugin_url yet and MT_PLUGINS has an AI entry: writes
     visual_plugin_url (+ visual_plugin) atomically, keeping every other key
     (legacy visual_endpoint included, so a config that still has it keeps
-    working). Afterwards a monkeytester-ai entry in MT_PLUGINS is ignored and
+    working). Afterwards an AI entry in MT_PLUGINS is ignored and
     that is logged once. Returns the imported URL, or ''.
     Does nothing in managed mode (the launcher app supplies the address on every
     launch)."""
@@ -378,10 +378,10 @@ def import_ai_plugin_address(env=None):
     try:
         entries = dict(pc.parse_plugins(env.get("MT_PLUGINS", "")))
     except pc.PluginError as e:
-        print(f"MT_PLUGINS is malformed, monkeytester-ai address not imported: {e.message}",
+        print(f"MT_PLUGINS is malformed, AI plugin address not imported: {e.message}",
               file=sys.stderr, flush=True)
         return ""
-    env_url = (entries.get(pc.AI_PLUGIN_NAME) or "").strip().rstrip("/")
+    env_url = next((u for n, u in entries.items() if pc.is_ai_identity(n)), "").strip().rstrip("/")
     if not env_url:
         return ""
     with _CONFIG_LOCK:
@@ -403,15 +403,17 @@ def import_device_plugins(env=None):
     (the `plugins` map {name: url}), run when the viewer starts — the same
     pattern as import_ai_plugin_address: the first start copies every entry,
     afterwards Settings → Device Plugins owns the list and the environment
-    variable is ignored (that is logged once). monkeytester-ai is skipped —
+    variable is ignored (that is logged once). AI is skipped —
     its own import handles it. Nothing is written when MT_PLUGINS has no
     device entry, so a later Settings add seeds from the still-live env then.
     Returns the imported map."""
     env = os.environ if env is None else env
     pc = _plugin_client()
     try:
-        entries = {name: url for name, url in pc.parse_plugins(env.get("MT_PLUGINS", ""))
-                   if name != pc.AI_PLUGIN_NAME}
+        # Names are uppercase now: an MT_PLUGINS entry from before that
+        # (esp32-sensor=...) is imported as ESP32-SENSOR.
+        entries = {name.upper(): url for name, url in pc.parse_plugins(env.get("MT_PLUGINS", ""))
+                   if not pc.is_ai_identity(name)}
     except pc.PluginError as e:
         print(f"MT_PLUGINS is malformed, device plugins not imported: {e.message}",
               file=sys.stderr, flush=True)
@@ -461,8 +463,61 @@ def import_controller_url(env=None):
     return url
 
 
+def migrate_plugin_names():
+    """One-time (idempotent) move to uppercase plugin names, run when the
+    viewer starts: every device-plugin key of config.json `plugins` that is
+    not uppercase is re-keyed to its uppercase form in place (its service
+    token plugin:<old> moves to plugin:<NEW>), and visual_plugin becomes
+    AI_PLUGIN_NAME when it names the AI by a legacy name (monkeytester-ai),
+    else its uppercase form. Build plugin rows (object entries) keep their
+    names: build plugins are not step commands. A key whose uppercase form is
+    already taken is left as it is and logged. Returns {old: new}."""
+    pc = _plugin_client()
+    moved = {}
+    with _CONFIG_LOCK:
+        if not CONFIG_FILE.exists():
+            return moved
+        cfg = load_config()
+        changed = False
+        raw = cfg.get("plugins")
+        if isinstance(raw, dict):
+            out = {}
+            for key, entry in raw.items():
+                new = key.upper() if isinstance(key, str) else key
+                if isinstance(entry, dict) or new == key or not pc.valid_plugin_name(new):
+                    out[key] = entry
+                    continue
+                if new in raw or new in out:
+                    print(f"plugin {key} not renamed to {new}: that name is already registered",
+                          file=sys.stderr, flush=True)
+                    out[key] = entry
+                    continue
+                out[new] = entry
+                moved[key] = new
+            if moved:
+                cfg["plugins"] = out
+                changed = True
+        vp = cfg.get("visual_plugin")
+        if isinstance(vp, str) and vp.strip():
+            want = pc.AI_PLUGIN_NAME if pc.is_ai_identity(vp.strip()) else vp.strip().upper()
+            if want != vp:
+                cfg["visual_plugin"] = want
+                changed = True
+        if changed:
+            save_config(cfg)
+    for old, new in moved.items():
+        token = auth.plugin_token(old)
+        if token:
+            auth.set_service_token(f"plugin:{old}", "")
+            if not auth.plugin_token(new):
+                auth.set_service_token(f"plugin:{new}", token)
+        print(f"plugin {old} renamed to {new} (plugin names are uppercase)",
+              file=sys.stderr, flush=True)
+    return moved
+
+
 def plugin_base_url(name, env=None):
-    """Base URL of a plugin: monkeytester-ai's comes from Settings
+    """Base URL of a plugin: the AI plugin's comes from Settings
     (config.json visual_plugin_url), any other from the plugin list in effect
     (config.json `plugins` once Settings owns it, else MT_PLUGINS); '' when
     unset."""
@@ -486,7 +541,7 @@ def plugin_base_url(name, env=None):
 
 def visual_plugin_name(cfg=None):
     """The AI plugin selected from the Device Plugins panel, or '' for a legacy
-    endpoint config. Always monkeytester-ai in managed mode."""
+    endpoint config. Always AI in managed mode."""
     if managed_ai_plugin():
         return _plugin_client().AI_PLUGIN_NAME
     cfg = load_config() if cfg is None else cfg
@@ -519,7 +574,7 @@ def vision_settings():
     """(endpoint, api_key, model), with what Settings saved winning over the
     environment. This is the same order run_on_device.py applies.
 
-    The provider is plugin-based: config.json names the monkeytester-ai
+    The provider is plugin-based: config.json names the AI
     plugin (visual_plugin) and its endpoint is the plugin's address from
     Settings (visual_plugin_url). A config.json that still carries visual_endpoint/visual_model works
     as before and logs a deprecation once."""
@@ -535,7 +590,7 @@ def vision_settings():
     if plugin or cfg.get("visual_endpoint") or cfg.get("visual_model"):
         log_deprecation(
             "config.json uses visual_endpoint/visual_model for the local provider; "
-            "Settings → Device Plugins now uses the monkeytester-ai plugin at the address "
+            "Settings → Device Plugins now uses the AI plugin at the address "
             "set there (visual_plugin_url). Old setups keep working; remove the old keys "
             "to silence this.")
     return ((cfg.get("visual_endpoint") or os.environ.get("VISION_MODEL_API_URL")
@@ -547,7 +602,7 @@ def vision_settings():
 
 COPILOT_MOVED_MESSAGE = (
     "GitHub Copilot is now configured on the MonkeyTester-Plugin-AI plugin: Settings → "
-    "Device Plugins → monkeytester-ai → Configure → GitHub Copilot")
+    "Device Plugins → AI → Configure → GitHub Copilot")
 
 
 def legacy_copilot_selected(cfg=None):
@@ -654,7 +709,7 @@ def _plugin_client():
 def plugins_status():
     """Each device plugin's /health, for /api/status: the plugin list in effect
     (config.json `plugins` once Settings owns it, else MT_PLUGINS) minus
-    monkeytester-ai, plus monkeytester-ai at its Settings address. Plugins are
+    AI, plus AI at its Settings address. Plugins are
     optional (only tests with PLUGIN steps need them), so they don't change
     the top-level ok."""
     cfg = load_config()
@@ -669,14 +724,15 @@ def _ai_pairing_tokens():
     key = ai_pairing_token()
     if not key:
         return {}
-    return {name: key for name in {visual_plugin_name() or "monkeytester-ai", "monkeytester-ai"}}
+    ai = _plugin_client().AI_PLUGIN_NAME
+    return {name: key for name in {visual_plugin_name() or ai, ai}}
 
 
 def plugins_overview():
     """Active device plugins with live state and devices, for the Settings page,
     plus ai_plugin {name, url, configured, token:{configured,last4}}.
 
-    The monkeytester-ai row is ALWAYS listed, even with no address configured:
+    The AI row is ALWAYS listed, even with no address configured:
     its Configure panel (plugin address + pairing token) is where the first
     address gets set, so an unconfigured row shows "not configured" and the
     Configure button. The synthesized entry has ok False, no config probe
@@ -724,7 +780,7 @@ def plugins_overview():
 def _add_row_names(pc, row):
     """The /plugins row's names from its /health `plugin` field: display_name
     is what the Name column shows — the name the plugin reports right now —
-    (the row key while the plugin can't be reached; monkeytester-ai for the
+    (the row key while the plugin can't be reached; AI for the
     AI row), default_name its fixed ID (PLUGIN_API.md) and renamable whether
     its Configure panel offers the Name section. The row key (`name`) stays
     the registry key / route segment. Build plugins are never renamable
@@ -764,7 +820,7 @@ class PluginDocsError(Exception):
 def plugin_docs_target(name):
     """(base url, request headers) for a /plugins row key, from the viewer's
     own config — the same lookups the rows and Configure panels use — or None
-    for an unknown name. Device plugins, monkeytester-ai and build plugins
+    for an unknown name. Device plugins, AI and build plugins
     send X-Plugin-Token; the Mobile Controller (row key "controller", unless a
     plugin is registered under that name) sends X-Controller-Token."""
     if not isinstance(name, str) or not PLUGIN_DOCS_NAME_RE.fullmatch(name):
@@ -849,7 +905,7 @@ def fetch_plugin_docs(name):
     return body
 
 
-AI_NOT_CONFIGURED = ("no monkeytester-ai plugin configured — set its address first "
+AI_NOT_CONFIGURED = ("no AI plugin configured — set its address first "
                      "in Settings → Device Plugins (its Configure panel)")
 
 AI_ROW_NOT_CONFIGURED = ("not configured — set the plugin address in the row's "
@@ -867,12 +923,12 @@ def _changes_managed_ai_plugin(data):
 
 
 def _ai_plugin_address_op(url, api_key=None):
-    """Set or remove the monkeytester-ai plugin's address (config.json
+    """Set or remove the AI plugin's address (config.json
     visual_plugin_url + visual_plugin). Shared by POST /api/config/visual-model
     {plugin_url, api_key?} and the Settings → Plugins Add row (POST
-    /api/config/plugins, a set op whose address is monkeytester-ai, or
-    {"remove": "monkeytester-ai"}). Validate first — GET <url>/health must
-    speak the plugin contract and name plugin monkeytester-ai, and GET
+    /api/config/plugins, a set op whose address is AI, or
+    {"remove": "AI"}). Validate first — GET <url>/health must
+    speak the plugin contract and name plugin AI, and GET
     <url>/config with the pairing token (api_key if given, else the stored
     one) must answer 200 — and store nothing when that fails. url "" removes
     the plugin. Caller holds _CONFIG_LOCK. Returns (http status, body)."""
@@ -884,7 +940,7 @@ def _ai_plugin_address_op(url, api_key=None):
             cfg.pop("visual_plugin", None)
         save_config(cfg)
         _PLUGIN_SELECTED_CACHE.clear()
-        print("monkeytester-ai plugin address removed", file=sys.stderr, flush=True)
+        print("AI plugin address removed", file=sys.stderr, flush=True)
         return 200, {"saved": True, "plugin": "", "plugin_url": "",
                      "token": token_info(cfg.get("visual_api_key") or "")}
     given = api_key.strip() if isinstance(api_key, str) else ""
@@ -902,7 +958,7 @@ def _ai_plugin_address_op(url, api_key=None):
         cfg["visual_api_key"] = given
     save_config(cfg)
     _PLUGIN_SELECTED_CACHE.clear()
-    print(f"monkeytester-ai plugin address set to {url}", file=sys.stderr, flush=True)
+    print(f"AI plugin address set to {url}", file=sys.stderr, flush=True)
     return 200, {"saved": True, "plugin": pc.AI_PLUGIN_NAME, "plugin_url": url,
                  "token": token_info(cfg.get("visual_api_key") or "")}
 
@@ -910,7 +966,7 @@ def _ai_plugin_address_op(url, api_key=None):
 def _plugin_registry(cfg):
     """The shared Settings → Plugins registry {name: entry} (device url
     strings and build objects): config.json `plugins` once it owns the list,
-    else the still-live MT_PLUGINS device entries (monkeytester-ai never
+    else the still-live MT_PLUGINS device entries (AI never
     joins: its address is visual_plugin_url)."""
     pc = _plugin_client()
     raw = cfg.get("plugins")
@@ -918,13 +974,13 @@ def _plugin_registry(cfg):
         return dict(raw)
     try:
         return {n: u for n, u in pc.parse_plugins(os.environ.get("MT_PLUGINS", ""))
-                if n != pc.AI_PLUGIN_NAME}
+                if not pc.is_ai_identity(n)}
     except pc.PluginError:
         return {}
 
 
 def _ai_reported_name(cfg):
-    """The name the monkeytester-ai plugin reports on /health right now
+    """The name the AI plugin reports on /health right now
     (None when none is configured or it doesn't answer)."""
     url = ai_plugin_url(cfg)
     if not url:
@@ -938,7 +994,7 @@ def _ai_reported_name(cfg):
 def rename_collision(new, own_key, cfg):
     """The name_taken message when `new` is already the name of ANOTHER
     registered row — a device or build plugin key in the registry, or the
-    monkeytester-ai row (its reserved key, or the custom name it reports) —
+    AI row (its reserved key, or the custom name it reports) —
     else None. `own_key` is the row being renamed (its own name is never a
     collision). Checked by the viewer before it calls the plugin."""
     pc = _plugin_client()
@@ -956,7 +1012,7 @@ def rename_collision(new, own_key, cfg):
 
 
 def ai_plugin_client(cfg=None):
-    """(plugin_client module, PluginClient) for the monkeytester-ai plugin at
+    """(plugin_client module, PluginClient) for the AI plugin at
     its Settings address (config.json visual_plugin_url), authenticated with
     the pairing token (visual_api_key). Raises PluginError(code=
     "not_configured") when no address is set."""
@@ -973,7 +1029,7 @@ def visual_plugin_info(timeout=6):
     """Live view of the AI plugin for the Device Plugins panel (GET /api/visual-model/plugin).
 
     The plugin owns its whole provider config (local models, remote server,
-    Copilot, the pairing token): this checks the monkeytester-ai plugin at its
+    Copilot, the pairing token): this checks the AI plugin at its
     Settings address (plugin contract /health plus a working GET /models) and
     proxies its /models and /config. Credentials (pairing token, remote API
     key, GitHub token) are only ever seen here as {configured, last4}.
@@ -997,7 +1053,7 @@ def visual_plugin_info(timeout=6):
             body = pc.ai_models(client, timeout=timeout)
         except pc.PluginError as e:
             info["error"] = (f"{e.message} — a plugin without /models is not "
-                             "a monkeytester-ai plugin")
+                             "an AI plugin")
             return info
         for m in body.get("data") or body.get("models") or []:
             if isinstance(m, dict) and m.get("id"):
@@ -1016,7 +1072,7 @@ def visual_plugin_info(timeout=6):
     qualified = [i for i in infos if i["ok"]]
     saved = visual_plugin_name(cfg)
     chosen = None
-    for want in [saved, "monkeytester-ai"]:
+    for want in [saved, pc.AI_PLUGIN_NAME]:
         if chosen:
             break
         for i in qualified:
@@ -1064,7 +1120,7 @@ def visual_plugin_info(timeout=6):
             "default_name": default_name or pc.AI_PLUGIN_NAME,
             "renamable": bool(renamable),
             "error": None if chosen else (
-                (infos[0].get("error") or "monkeytester-ai is not answering") if infos
+                (infos[0].get("error") or "the AI plugin is not answering") if infos
                 else AI_NOT_CONFIGURED)}
 
 
@@ -1194,7 +1250,7 @@ def _press_add(event):
 
 
 # Read-modify-write of Run/config.json happens on several request threads
-# (and once at start for the monkeytester-ai address import).
+# (and once at start for the AI address import).
 _CONFIG_LOCK = threading.RLock()
 
 
@@ -4497,13 +4553,13 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         {"remove": name} forgets either entry; a build plugin still used by
         a project refuses. The first write seeds the map from the MT_PLUGINS
         entries still live then, and afterwards Settings owns the list.
-        monkeytester-ai goes through the same Add row: a set op whose
-        address's /health names plugin monkeytester-ai (or whose row is
-        monkeytester-ai) is stored the AI way (_ai_plugin_address_op:
+        AI goes through the same Add row: a set op whose
+        address's /health names plugin AI (or whose row is
+        AI) is stored the AI way (_ai_plugin_address_op:
         visual_plugin_url + visual_plugin, token -> visual_api_key), and
-        {"remove": "monkeytester-ai"} clears it; managed mode refuses (409).
-        Editing another row onto a monkeytester-ai address, or the
-        monkeytester-ai row onto a non-AI address, is 400 bad_request (the
+        {"remove": "AI"} clears it; managed mode refuses (409).
+        Editing another row onto an AI address, or the
+        AI row onto a non-AI address, is 400 bad_request (the
         vision-model plugin is added/removed through the Add row)."""
         try:
             data = json.loads(self._body())
@@ -4529,9 +4585,9 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
         def env_entries():
             try:
-                return {name: url for name, url in
+                return {name.upper(): url for name, url in
                         pc.parse_plugins(os.environ.get("MT_PLUGINS", ""))
-                        if name != pc.AI_PLUGIN_NAME}
+                        if not pc.is_ai_identity(name)}
             except pc.PluginError:
                 return {}
 
@@ -4544,7 +4600,8 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
         if set(data) == {"remove"}:
             name = data["remove"]
-            if not isinstance(name, str) or not pc.PLUGIN_NAME_RE.fullmatch(name):
+            # Any case: build plugin rows keep their own (lowercase) names.
+            if not pc.loose_plugin_name(name):
                 bad(f"plugin name {name!r} must match {pc.PLUGIN_NAME_RE.pattern}")
                 return
             if name == pc.AI_PLUGIN_NAME:
@@ -4603,7 +4660,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             bad("url must be an http(s):// address", "bad_url")
             return
         row = data.get("row")
-        if "row" in data and not (isinstance(row, str) and pc.PLUGIN_NAME_RE.fullmatch(row)):
+        if "row" in data and not pc.loose_plugin_name(row):
             bad(f"row {row!r} must be the name of a registered plugin")
             return
         token_given = "token" in op
@@ -4619,13 +4676,16 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         contract = health.get("contract") if answered else None
         hplugin = health.get("plugin") if answered else None
         hname = hplugin.get("name") if isinstance(hplugin, dict) else hplugin
-        if not (isinstance(hname, str) and pc.PLUGIN_NAME_RE.fullmatch(hname)):
+        # Read in any case here: the AI from before uppercase names reports
+        # monkeytester-ai, and build plugins keep their own name rule. A test
+        # plugin's name must be uppercase (checked below).
+        if not pc.loose_plugin_name(hname):
             hname = None
         # The AI is recognised by its fixed ID (plugin.default_name, else
         # plugin.name for older builds), never by a name the user changed.
         hident = pc.plugin_identity(hplugin) if hname else None
         if hident == ai or row == ai:
-            # monkeytester-ai is added through the same Add row, but it is
+            # AI is added through the same Add row, but it is
             # stored the AI way (config.json visual_plugin_url +
             # visual_plugin, the op's token becomes visual_api_key) and
             # validated by ai_validate_address — never in `plugins`.
@@ -4667,6 +4727,17 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             return
         name = hname
         build = contract == bpc.CONTRACT
+        if not build:
+            # A test plugin's name is a step command (`ESP32-SERVER: expect`):
+            # uppercase (400 bad_request) and not a built-in (400 reserved_name).
+            problem = pc.plugin_name_problem(name)
+            if problem:
+                bad(f"{same_addr}/health reports {problem[0]}", problem[1])
+                return
+            if name == ai or name == _ai_reported_name(load_config()):
+                bad(f"{name} is the vision-model plugin's name; a test plugin can't take it",
+                    "name_taken")
+                return
         b = _builds()
         # A build-plugin rename re-points projects: hold builds' lock too.
         with _CONFIG_LOCK, (b._LOCK if build else threading.RLock()):
@@ -4765,7 +4836,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         and the plugin's current name is a no-op. On success the registry row
         is RE-KEYED like an address-edit rename: key moved in place, service
         token plugin:<old> -> plugin:<new>, response renamed_from. The
-        monkeytester-ai row renames through /api/config/visual-model."""
+        AI row renames through /api/config/visual-model."""
         pc = _plugin_client()
 
         def bad(msg, code="bad_request", status=400):
@@ -4774,7 +4845,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         data = self._read_json_body()
         if data is None:
             return
-        if not pc.valid_plugin_name(row):
+        if not pc.loose_plugin_name(row):
             bad(f"no plugin {row!r} registered", "not_found", 404)
             return
         if row == pc.AI_PLUGIN_NAME:
@@ -4786,8 +4857,9 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
                 "viewer relays to a device plugin")
             return
         new = data["name"]
-        if not pc.valid_plugin_name(new):
-            bad(f"name must match {pc.PLUGIN_NAME_RE.pattern}")
+        problem = pc.plugin_name_problem(new)
+        if problem:
+            bad(*problem)
             return
         with _CONFIG_LOCK:
             cfg = load_config()
@@ -4943,11 +5015,11 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         save is forwarded to the plugin's POST /config.
 
         Address shape: {plugin_url, api_key?} sets or removes the
-        monkeytester-ai plugin's address (see _save_ai_plugin_address).
+        AI plugin's address (see _save_ai_plugin_address).
         Token shape {set_token}: first-time "Set pairing token" — stores only
         the viewer's copy (the service already holds it), no plugin call.
 
-        New shape (the Device Plugins → monkeytester-ai → Configure panel):
+        New shape (the Device Plugins → AI → Configure panel):
         {provider?, model?, copilot_model?, remote_url?, remote_model?,
         remote_resize?, remote_api_key?, plugin?, generate_token?,
         clear_token?}. provider ("local" | "remote" | "copilot") picks which
@@ -5013,9 +5085,9 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
     def _save_ai_plugin_address(self, data):
         """POST /api/config/visual-model {plugin_url, api_key?}: set the
-        monkeytester-ai plugin's address (Settings → Device Plugins).
+        AI plugin's address (Settings → Device Plugins).
         Validate first — GET <url>/health must speak the plugin contract and
-        name plugin monkeytester-ai, and GET <url>/config with the pairing
+        name plugin AI, and GET <url>/config with the pairing
         token (api_key if given, else the stored one) must answer 200 — and
         store nothing when that fails. "plugin_url": "" removes the plugin
         (visual_plugin_url and visual_plugin)."""
@@ -5069,9 +5141,9 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
                 if not self._admin_required():
                     return
                 new_name = data.get("name")
-                if not pc.valid_plugin_name(new_name):
-                    self.send_json_status(400, {"error": f"name must match {pc.PLUGIN_NAME_RE.pattern}",
-                                                "code": "bad_request"})
+                problem = pc.plugin_name_problem(new_name)
+                if problem:
+                    self.send_json_status(400, {"error": problem[0], "code": problem[1]})
                     return
                 try:
                     health = client.health(timeout=5)
@@ -5157,7 +5229,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             for legacy_key in ("visual_endpoint", "visual_model"):
                 if cfg.pop(legacy_key, None) is not None:
                     log_deprecation(
-                        f"config.json key {legacy_key} was dropped; the monkeytester-ai "
+                        f"config.json key {legacy_key} was dropped; the AI "
                         "plugin now owns the vision endpoint and models")
             if data.get("clear_token"):
                 cfg.pop("visual_api_key", None)
@@ -5168,7 +5240,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             if "endpoint" in data or "model_name" in data:
                 log_deprecation(
                     "saving visual_endpoint/visual_model for the local provider is deprecated; "
-                    "Settings → Device Plugins now selects a model on the monkeytester-ai plugin")
+                    "Settings → Device Plugins now selects a model on the AI plugin")
             if "endpoint" in data:
                 cfg["visual_endpoint"] = (data.get("endpoint") or "").strip()
             if "model_name" in data:
@@ -6033,9 +6105,11 @@ if __name__ == "__main__":
     print(f"Serving MonkeyTester viewer on http://localhost:{port}")
     print(f"Reading from: {TEST_DIR}")
     # MT_VIEWER_BIND picks the listen address (default every interface).
-    # One-time: move a monkeytester-ai MT_PLUGINS entry into config.json.
+    # One-time: move an AI MT_PLUGINS entry into config.json.
     import_ai_plugin_address()
     import_device_plugins()
+    # One-time: plugin names are uppercase (keys, visual_plugin, tokens).
+    migrate_plugin_names()
     import_controller_url()
     # One-time: gitea_config.json / MT_BUILD_PLUGINS -> build_config.json.
     builds.VIEWER_PORT = port

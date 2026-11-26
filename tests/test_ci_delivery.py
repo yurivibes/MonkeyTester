@@ -250,7 +250,7 @@ class SubmitTests(unittest.TestCase):
         case = Path(tmp) / "cases" / name
         case.mkdir(parents=True)
         (case / "INSTRUCTION.txt").write_text("MODE: once")
-        (case / "t.txt").write_text("CLICK: x")
+        (case / "t.txt").write_text("AI: CLICK x")
 
     def test_wrong_platform_or_no_cases_fail(self):
         with tempfile.TemporaryDirectory() as tmp:

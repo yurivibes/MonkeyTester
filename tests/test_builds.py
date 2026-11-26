@@ -106,11 +106,11 @@ class PluginSettingsTests(BuildCase):
         # plain url string (a Test Plugin), not as a build entry; dead and
         # malformed requests save nothing.
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
-                       "plugin": {"name": "x"}}
+                       "plugin": {"name": "X"}}
         status, body = self.call("POST", "/api/config/plugins",
                                  {"set": {"url": self.peer_url}})
         self.assertEqual(status, 200, body)
-        self.assertEqual(self.registry()["x"], self.peer_url)  # string, not {url, token}
+        self.assertEqual(self.registry()["X"], self.peer_url)  # string, not {url, token}
         status, body = self.call("POST", "/api/config/plugins",
                                  {"set": {"url": "http://127.0.0.1:9"}})
         self.assertEqual((status, body["code"]), (400, "unreachable"))
@@ -777,7 +777,7 @@ class UploadAttachTests(BuildCase):
         ctype, body = load_submit().build_multipart(
             {"device_mode": "android", "case": "eula", **fields},
             [("apk", "app.apk", b"PK"), ("tests", "INSTRUCTION.txt", b"MODE: once\n"),
-             ("tests", "a.txt", b"VERIFY: x\n")])
+             ("tests", "a.txt", b"AI: VERIFY x\n")])
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/run-test", data=body,
                                      method="POST", headers={"Content-Type": ctype})
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -807,7 +807,7 @@ class UploadAttachTests(BuildCase):
         tests = self.root / "mt-tests" / "eula"
         tests.mkdir(parents=True, exist_ok=True)
         (tests / "INSTRUCTION.txt").write_text("MODE: once\n")
-        (tests / "01_a.txt").write_text("VERIFY: x\n")
+        (tests / "01_a.txt").write_text("AI: VERIFY x\n")
         apk = self.root / "app.apk"
         apk.write_bytes(b"PK")
         out = io.StringIO()

@@ -45,15 +45,15 @@ class RunnerSavesSourcesTests(unittest.TestCase):
     def test_multi_case_copies_into_case_folders(self):
         write_tests(self.src, {
             "eula/INSTRUCTION.txt": "MODE: once\n",
-            "eula/01_a.txt": "# comment\n\nVERIFY: EULA shown\n",
+            "eula/01_a.txt": "# comment\n\nAI: VERIFY EULA shown\n",
             "home/INSTRUCTION.txt": "MODE: everytime\n",
-            "home/01_a.txt": "CLICK: Home\n",
+            "home/01_a.txt": "AI: CLICK Home\n",
         })
         core.save_test_sources(self.resolve(self.src))
         t = self.run_dir / "tests"
-        self.assertEqual((t / "eula" / "01_a.txt").read_text(), "# comment\n\nVERIFY: EULA shown\n")
+        self.assertEqual((t / "eula" / "01_a.txt").read_text(), "# comment\n\nAI: VERIFY EULA shown\n")
         self.assertEqual((t / "eula" / "INSTRUCTION.txt").read_text(), "MODE: once\n")
-        self.assertEqual((t / "home" / "01_a.txt").read_text(), "CLICK: Home\n")
+        self.assertEqual((t / "home" / "01_a.txt").read_text(), "AI: CLICK Home\n")
         self.assertEqual((t / "home" / "INSTRUCTION.txt").read_text(), "MODE: everytime\n")
 
     def test_single_case_copies_flat(self):
@@ -78,11 +78,11 @@ class ApiTestSourceTests(ServerCase):
         self.result("devices/device_1/results/eula__01_a_result.json", case="eula", test="eula__01_a")
         write_tests(self.runs / "run_1", {
             "tests/eula/INSTRUCTION.txt": "MODE: once\n",
-            "tests/eula/01_a.txt": "VERIFY: <b>EULA</b>\n",
+            "tests/eula/01_a.txt": "AI: VERIFY <b>EULA</b>\n",
         })
         data = self.get_json("/api/test/run_1/eula__01_a?device=device_1")
         self.assertEqual(data["test_source"], {
-            "test_file": "01_a.txt", "test": "VERIFY: <b>EULA</b>\n", "instruction": "MODE: once\n"})
+            "test_file": "01_a.txt", "test": "AI: VERIFY <b>EULA</b>\n", "instruction": "MODE: once\n"})
         self.assertNotIn("full_json", data)
 
     def test_single_case_without_instruction(self):

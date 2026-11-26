@@ -304,18 +304,19 @@ class PluginStepTests(StubCase):
         self.addCleanup(env.stop)
 
     def step(self, args):
+        """Run `<plugin> <rest>` as the step `<PLUGIN>: <rest>`."""
+        name, _, rest = args.partition(" ")
+        step = core.parse_steps([f"{name.upper()}: {rest}"])[0]
         out = io.StringIO()
         with redirect_stdout(out):
-            ok = core.execute_step({"line": 1, "command": "PLUGIN", "args": args,
-                                    "raw": f"PLUGIN: {args}"})
+            ok = core.execute_step(step)
         return ok, out.getvalue()
 
     def test_parse_args(self):
         self.assertEqual(core.parse_plugin_args(
-            'esp32 wait-log pattern="WiFi connected" n=2 device=aa:bb timeout=30'),
-            ("esp32", "wait-log", {"pattern": "WiFi connected", "n": "2"}, "aa:bb", 30.0))
-        for bad in ("esp32", 'esp32 x "unclosed', "esp32 x loose", "esp32 x timeout=soon",
-                    "esp32 x timeout=0"):
+            'wait-log pattern="WiFi connected" n=2 device=aa:bb timeout=30'),
+            ("wait-log", {"pattern": "WiFi connected", "n": "2"}, "aa:bb", 30.0))
+        for bad in ("", 'x "unclosed', "x loose", "x timeout=soon", "x timeout=0"):
             with self.assertRaises(ValueError, msg=bad):
                 core.parse_plugin_args(bad)
 
@@ -324,7 +325,7 @@ class PluginStepTests(StubCase):
         self.assertTrue(ok)
         self.assertEqual(self.posted_jobs(), [{"action": "scenario", "params": {"name": "sensor fail"},
                                                "device": "aa:bb", "timeout_ms": 5000}])
-        self.assertIn("[esp32] -> scenario", out)
+        self.assertIn("[ESP32] -> scenario", out)
         self.assertIn("j-1 passed", out)
 
     def test_variables_are_resolved(self):
@@ -343,7 +344,7 @@ class PluginStepTests(StubCase):
     def test_unknown_plugin_and_action(self):
         ok, out = self.step("nope scenario")
         self.assertFalse(ok)
-        self.assertIn("Unknown plugin 'nope'", out)
+        self.assertIn("Unknown plugin 'NOPE'", out)
         self.assertIn("esp32", out)
         ok, out = self.step("esp32 nope")
         self.assertFalse(ok)
@@ -365,49 +366,49 @@ class BlockParseTests(unittest.TestCase):
 
     def test_block_lines_are_stripped_blank_dropped_and_hashes_kept(self):
         steps = self.parse(
-            "PLUGIN: esp32 flash firmware_dir=/fw\n"
-            "PLUGIN: esp32 expect\n"
+            "ESP32: flash firmware_dir=/fw\n"
+            "ESP32: expect\n"
             "    GET /temperature.json -> 500\n"
             "\n"
             "  # a comment the plugin sees\n"
-            "\tVERIFY: not a step here\n"
+            "\tAI: VERIFY not a step here\n"
             "    END\n"
-            "VERIFY: The temperature card shows an error\n"
+            "AI: VERIFY The temperature card shows an error\n"
             "# a test-file comment\n"
-            "PLUGIN: esp32 clear\n")
+            "ESP32: clear\n")
         self.assertEqual([(s["line"], s["command"]) for s in steps],
-                         [(1, "PLUGIN"), (2, "PLUGIN"), (8, "VERIFY"), (10, "PLUGIN")])
+                         [(1, "ESP32"), (2, "ESP32"), (8, "AI"), (10, "ESP32")])
         self.assertNotIn("block", steps[0])
         self.assertEqual(steps[1]["block"], ["GET /temperature.json -> 500",
-                                             "# a comment the plugin sees", "VERIFY: not a step here"])
-        self.assertEqual(steps[1]["raw"], "PLUGIN: esp32 expect")
+                                             "# a comment the plugin sees", "AI: VERIFY not a step here"])
+        self.assertEqual(steps[1]["raw"], "ESP32: expect")
         self.assertNotIn("block", steps[3])
         self.assertFalse(any("error" in s for s in steps))
 
     def test_block_needs_indentation_to_start_but_not_after(self):
-        steps = self.parse("PLUGIN: esp32 expect\n  a\nb\n END\nWAIT: 1")
+        steps = self.parse("ESP32: expect\n  a\nb\n END\nWAIT: 1")
         self.assertEqual(steps[0]["block"], ["a", "b"])
-        self.assertEqual([s["command"] for s in steps], ["PLUGIN", "WAIT"])
-        steps = self.parse("PLUGIN: esp32 clear\nWAIT: 1")
-        self.assertEqual([s["command"] for s in steps], ["PLUGIN", "WAIT"])
+        self.assertEqual([s["command"] for s in steps], ["ESP32", "WAIT"])
+        steps = self.parse("ESP32: clear\nWAIT: 1")
+        self.assertEqual([s["command"] for s in steps], ["ESP32", "WAIT"])
         self.assertNotIn("block", steps[0])
 
     def test_end_right_after_the_step_is_an_empty_block(self):
-        steps = self.parse("PLUGIN: esp32 expect\nEND\nWAIT: 1")
+        steps = self.parse("ESP32: expect\nEND\nWAIT: 1")
         self.assertEqual(steps[0]["block"], [])
-        self.assertEqual([s["command"] for s in steps], ["PLUGIN", "WAIT"])
+        self.assertEqual([s["command"] for s in steps], ["ESP32", "WAIT"])
 
     def test_end_must_be_the_whole_line(self):
-        steps = self.parse("PLUGIN: esp32 expect\n  END of story\n  ENDING\nEND")
+        steps = self.parse("ESP32: expect\n  END of story\n  ENDING\nEND")
         self.assertEqual(steps[0]["block"], ["END of story", "ENDING"])
         self.assertNotIn("error", steps[0])
 
     def test_unterminated_block_is_an_error_with_its_line(self):
-        steps = self.parse("WAIT: 1\nPLUGIN: esp32 expect\n  GET / -> 200\nVERIFY: x\n")
+        steps = self.parse("WAIT: 1\nESP32: expect\n  GET / -> 200\nAI: VERIFY x\n")
         self.assertEqual(len(steps), 2)
         self.assertIn("line 2", steps[1]["error"])
         self.assertIn("no END", steps[1]["error"])
-        self.assertEqual(steps[1]["block"], ["GET / -> 200", "VERIFY: x"])
+        self.assertEqual(steps[1]["block"], ["GET / -> 200", "AI: VERIFY x"])
 
     def test_stray_end_is_an_error(self):
         steps = self.parse("WAIT: 1\nEND\nWAIT: 2")
@@ -425,10 +426,10 @@ class BlockParseTests(unittest.TestCase):
     def test_parse_test_file_and_instruction_steps_use_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "t.txt"
-            path.write_text("PLUGIN: esp32 expect\n  GET / -> 500\nEND\nVERIFY: error\n")
+            path.write_text("ESP32: expect\n  GET / -> 500\nEND\nAI: VERIFY error\n")
             with redirect_stdout(io.StringIO()) as out:
                 steps = core.parse_test_file(path)
-        self.assertEqual([s["command"] for s in steps], ["PLUGIN", "VERIFY"])
+        self.assertEqual([s["command"] for s in steps], ["ESP32", "AI"])
         self.assertEqual(steps[0]["block"], ["GET / -> 500"])
         self.assertIn("GET / -> 500", out.getvalue())
 
@@ -450,7 +451,7 @@ class PluginBlockStepTests(StubCase):
         return ok, out.getvalue()
 
     def test_block_is_sent_as_script(self):
-        ok, out = self.run_text('PLUGIN: esp32 expect device=aa:bb\n'
+        ok, out = self.run_text('ESP32: expect device=aa:bb\n'
                                 '  GET /temperature.json -> 200 {"temperature_c":22.5}\n'
                                 '\n  # keep me\n  GET /status -> 500\nEND')
         self.assertTrue(ok, out)
@@ -464,30 +465,30 @@ class PluginBlockStepTests(StubCase):
     def test_variables_are_resolved_inside_the_block(self):
         core.VARIABLES["TEMP"] = "19.0"
         self.addCleanup(core.VARIABLES.pop, "TEMP", None)
-        ok, _ = self.run_text("PLUGIN: esp32 expect\n  GET /t -> 200 ${TEMP} ${UNSET}\nEND")
+        ok, _ = self.run_text("ESP32: expect\n  GET /t -> 200 ${TEMP} ${UNSET}\nEND")
         self.assertTrue(ok)
         self.assertEqual(self.posted_jobs()[0]["params"], {"script": "GET /t -> 200 19.0 ${UNSET}"})
 
     def test_block_on_action_without_script_fails_before_a_job(self):
-        ok, out = self.run_text("PLUGIN: esp32 scenario name=x\n  something\nEND")
+        ok, out = self.run_text("ESP32: scenario name=x\n  something\nEND")
         self.assertFalse(ok)
         self.assertIn("takes no inline block", out)
         self.assertEqual(self.posted_jobs(), [])
 
     def test_block_and_script_param_together_fail(self):
-        ok, out = self.run_text("PLUGIN: esp32 expect script=x\n  y\nEND")
+        ok, out = self.run_text("ESP32: expect script=x\n  y\nEND")
         self.assertFalse(ok)
         self.assertIn("both an inline block and script=", out)
         self.assertEqual(self.posted_jobs(), [])
 
     def test_unterminated_block_fails_without_a_job(self):
-        ok, out = self.run_text("PLUGIN: esp32 expect\n  GET / -> 200")
+        ok, out = self.run_text("ESP32: expect\n  GET / -> 200")
         self.assertFalse(ok)
         self.assertIn("line 1", out)
         self.assertEqual(self.posted_jobs(), [])
 
     def test_script_param_on_the_line_still_works_without_a_block(self):
-        ok, _ = self.run_text('PLUGIN: esp32 expect script="GET / -> 500"')
+        ok, _ = self.run_text('ESP32: expect script="GET / -> 500"')
         self.assertTrue(ok)
         self.assertEqual(self.posted_jobs()[0]["params"], {"script": "GET / -> 500"})
 
@@ -518,7 +519,7 @@ class AiConfigShapeTests(unittest.TestCase):
         self.assertFalse(plugin_client.public_ai_config({})["copilot"]["configured"])
 
     def test_save_refuses_unknown_keys_and_providers_locally(self):
-        client = PluginClient("monkeytester-ai", "http://127.0.0.1:1")
+        client = PluginClient("AI", "http://127.0.0.1:1")
         with self.assertRaises(PluginError) as ctx:
             plugin_client.ai_save_config(client, {"endpoint": "x"})
         self.assertEqual(ctx.exception.code, "bad_request")
@@ -527,7 +528,7 @@ class AiConfigShapeTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "invalid_request")
 
     def test_save_unwraps_config_and_new_token(self):
-        client = PluginClient("monkeytester-ai", "http://x")
+        client = PluginClient("AI", "http://x")
         with patch.object(client, "_request", return_value={
                 "ok": True, "new_token": "fresh-1234",
                 "config": {"provider": "local", "token": {"configured": True, "last4": "1234"}}}) as req:
@@ -538,7 +539,7 @@ class AiConfigShapeTests(unittest.TestCase):
         self.assertEqual(req.call_args.args[:3], ("POST", "/config", {"token": {"generate": True}}))
 
     def test_device_flow_drops_the_device_code(self):
-        client = PluginClient("monkeytester-ai", "http://x")
+        client = PluginClient("AI", "http://x")
         with patch.object(client, "_request", return_value={
                 "user_code": "ABCD-1234", "device_code": "secret-dc",
                 "verification_uri": "https://github.com/login/device", "interval": 5}):
@@ -583,7 +584,7 @@ class RemoteProviderShapeTests(unittest.TestCase):
                                   "key": {"configured": False, "last4": ""}, "error": None})
 
     def test_save_accepts_remote_keys_and_provider(self):
-        client = PluginClient("monkeytester-ai", "http://x")
+        client = PluginClient("AI", "http://x")
         payload = {"remote_url": "http://r:8080", "remote_model": "video-model",
                    "remote_resize": True, "remote_api_key": None}
         with patch.object(client, "_request", return_value={"ok": True, "config": {
@@ -596,30 +597,30 @@ class RemoteProviderShapeTests(unittest.TestCase):
 
 
 class ViewerPluginListTests(StubCase):
-    """The viewer's plugin list: MT_PLUGINS minus monkeytester-ai, plus
-    monkeytester-ai at its Settings address."""
+    """The viewer's plugin list: MT_PLUGINS minus AI, plus
+    AI at its Settings address."""
 
     def test_env_entry_for_the_ai_plugin_is_replaced_by_the_address(self):
-        env = {"MT_PLUGINS": "esp32-sensor=http://127.0.0.1:8091,monkeytester-ai=http://old:8091",
+        env = {"MT_PLUGINS": "esp32-sensor=http://127.0.0.1:8091,AI=http://old:8091",
                "PLUGIN_TOKEN": "shared"}
         plugins = plugin_client.viewer_plugins(env, "http://new:8091", "pair-1234")
         self.assertEqual({n: (c.url, c.token) for n, c in plugins.items()},
                          {"esp32-sensor": ("http://127.0.0.1:8091", "shared"),
-                          "monkeytester-ai": ("http://new:8091", "pair-1234")})
-        self.assertNotIn("monkeytester-ai", plugin_client.viewer_plugins(env, ""))
+                          "AI": ("http://new:8091", "pair-1234")})
+        self.assertNotIn("AI", plugin_client.viewer_plugins(env, ""))
 
     def test_malformed_env_still_lists_the_ai_plugin(self):
         out = plugin_client.plugins_overview({"MT_PLUGINS": "broken"}, timeout=1,
                                              ai_url="http://127.0.0.1:9")
         self.assertIn("MT_PLUGINS is malformed", out["error"])
         self.assertEqual([(p["name"], p["source"]) for p in out["plugins"]],
-                         [("monkeytester-ai", "settings")])
+                         [("AI", "settings")])
         status = plugin_client.plugins_status({"MT_PLUGINS": "broken"}, timeout=1,
                                               ai_url="http://127.0.0.1:9")
-        self.assertEqual(sorted(status), ["MT_PLUGINS", "monkeytester-ai"])
+        self.assertEqual(sorted(status), ["AI", "MT_PLUGINS"])
 
     def test_validate_address_checks_contract_name_and_config(self):
-        # The stub speaks the contract but is not monkeytester-ai.
+        # The stub speaks the contract but is not AI.
         with self.assertRaises(PluginError) as ctx:
             plugin_client.ai_validate_address(self.url + "/")
         self.assertEqual(ctx.exception.code, "wrong_plugin")
@@ -633,12 +634,12 @@ class ViewerPluginListTests(StubCase):
 
     def test_validate_address_maps_401_to_a_token_error(self):
         health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
-                  "plugin": {"name": "monkeytester-ai"}}
+                  "plugin": {"name": "AI"}}
 
         def fake(self_, method, path, payload=None, timeout=None):
             if path == "/health":
                 return health
-            raise PluginError("unauthorized", "unauthorized", status=401, plugin="monkeytester-ai")
+            raise PluginError("unauthorized", "unauthorized", status=401, plugin="AI")
 
         with patch.object(PluginClient, "_request", fake):
             with self.assertRaises(PluginError) as ctx:
@@ -665,7 +666,7 @@ class PluginConfigListTests(StubCase):
                     {"plugins": {"Bad Name": self.url}},
                     {"plugins": {"esp32;sensor": self.url}},
                     {"plugins": {"": self.url}},
-                    {"plugins": {"monkeytester-ai": self.url}},
+                    {"plugins": {"AI": self.url}},
                     {"plugins": {"x": "ftp://a"}}):
             with self.assertRaises(PluginError) as ctx:
                 pc.parse_config_plugins(bad)
@@ -683,7 +684,7 @@ class PluginConfigListTests(StubCase):
 
     def test_load_plugins_without_the_map_still_uses_env(self):
         pc = plugin_client
-        env = dict(os.environ, MT_PLUGINS="esp32=http://127.0.0.1:9,monkeytester-ai=http://ai:1")
+        env = dict(os.environ, MT_PLUGINS="esp32=http://127.0.0.1:9,AI=http://ai:1")
         plugins = pc.load_plugins({"video_size": "100%"}, env)
         self.assertEqual({n: c.url for n, c in plugins.items()},
                          {"esp32": "http://127.0.0.1:9"})  # the AI entry never joins
@@ -708,7 +709,7 @@ class PluginConfigListTests(StubCase):
         plugins = pc.viewer_plugins(env, ai_url=self.url,
                                     config={"plugins": {"saved": self.url}})
         self.assertEqual({n: c.url for n, c in plugins.items()},
-                         {"saved": self.url, "monkeytester-ai": self.url})
+                         {"saved": self.url, "AI": self.url})
 
 
 if __name__ == "__main__":

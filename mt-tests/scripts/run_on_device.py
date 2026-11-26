@@ -39,7 +39,7 @@ for _cfg_path in _CONFIG_SOURCES:
 
 COPILOT_MOVED_MESSAGE = (
     "GitHub Copilot is now configured on the MonkeyTester-Plugin-AI plugin: Settings → "
-    "Device Plugins → monkeytester-ai → Configure → GitHub Copilot")
+    "Device Plugins → AI → Configure → GitHub Copilot")
 
 if _VISUAL_CONFIG and (_VISUAL_CONFIG.get("visual_provider") or "").strip() == "copilot":
     # The viewer no longer talks to Copilot: the AI plugin owns the sign-in and
@@ -50,7 +50,7 @@ if _VISUAL_CONFIG and (_VISUAL_CONFIG.get("visual_provider") or "").strip() == "
           file=sys.stderr, flush=True)
     sys.exit(2)
 elif _VISUAL_CONFIG:
-    # Provider: the monkeytester-ai plugin at the address set in Settings →
+    # Provider: the AI plugin at the address set in Settings →
     # Device Plugins (config.json visual_plugin_url; the viewer imports a
     # MT_PLUGINS entry into it once). Its URL is the endpoint (the service
     # ignores the model field; the model lives in the plugin, not in
@@ -67,6 +67,10 @@ elif _VISUAL_CONFIG:
                   "set it in Settings → Device Plugins", file=sys.stderr)
             print("DEPRECATED: falling back to visual_endpoint/visual_model", file=sys.stderr)
         _ep = (_VISUAL_CONFIG.get("visual_endpoint") or "").strip()
+    if _plugin_url:
+        # The runner reads the AI's current name from <url>/health at run
+        # start and relays non-vision AI actions (`AI: set-model ...`) there.
+        os.environ["MT_AI_PLUGIN_URL"] = _plugin_url
     if _ep:
         os.environ["VISION_MODEL_API_URL"] = _ep
         os.environ["VISUAL_MODEL_ENDPOINT"] = _ep
@@ -78,7 +82,7 @@ elif _VISUAL_CONFIG:
     if ak:
         os.environ["VISUAL_MODEL_API_KEY"] = ak
 
-# Managed mode: a launcher app passes the monkeytester-ai plugin's
+# Managed mode: a launcher app passes the AI plugin's
 # address and pairing token (both required) to the viewer, and the runner
 # inherits them. They win over config.json (visual_plugin_url,
 # visual_api_key) — the same rule as the viewer's managed_ai_plugin().
@@ -88,6 +92,7 @@ if _MANAGED_AI_URL and _MANAGED_AI_TOKEN:
     os.environ["VISION_MODEL_API_URL"] = _MANAGED_AI_URL + "/v1/chat/completions"
     os.environ["VISUAL_MODEL_ENDPOINT"] = os.environ["VISION_MODEL_API_URL"]
     os.environ["VISUAL_MODEL_API_KEY"] = _MANAGED_AI_TOKEN
+    os.environ["MT_AI_PLUGIN_URL"] = _MANAGED_AI_URL
 del _MANAGED_AI_URL, _MANAGED_AI_TOKEN
 
 # Device plugins: once config.json has a `plugins` map (Settings → Device

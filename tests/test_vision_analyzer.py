@@ -175,12 +175,12 @@ class RunnerConfigTests(unittest.TestCase):
 
     def test_endpoint_comes_from_visual_plugin_url(self):
         # The live config after the one-time import: the legacy keys are still
-        # there, and MT_PLUGINS still names another monkeytester-ai address.
+        # there, and MT_PLUGINS still names another AI address.
         out, _ = self.resolved_endpoint(
             {"visual_endpoint": "http://192.168.1.20:8091/v1/chat/completions",
              "visual_model": "qwen2.5vl:7b", "visual_api_key": "pair-tok-4242",
-             "visual_plugin": "monkeytester-ai", "visual_plugin_url": "http://10.0.0.5:8091/"},
-            mt_plugins="monkeytester-ai=http://192.168.1.20:8091")
+             "visual_plugin": "AI", "visual_plugin_url": "http://10.0.0.5:8091/"},
+            mt_plugins="AI=http://192.168.1.20:8091")
         self.assertEqual(out, {"VISION_MODEL_API_URL": "http://10.0.0.5:8091/v1/chat/completions",
                                "VISUAL_MODEL_API_KEY": "pair-tok-4242", "VISION_MODEL_NAME": ""})
 
@@ -188,14 +188,14 @@ class RunnerConfigTests(unittest.TestCase):
         out, _ = self.resolved_endpoint(
             {"visual_endpoint": "http://192.168.1.20:8091/v1/chat/completions",
              "visual_model": "qwen2.5vl:7b", "visual_api_key": "pair-tok-4242"},
-            mt_plugins="monkeytester-ai=http://192.168.1.20:8091")
+            mt_plugins="AI=http://192.168.1.20:8091")
         self.assertEqual(out["VISION_MODEL_API_URL"], "http://192.168.1.20:8091/v1/chat/completions")
         self.assertEqual(out["VISION_MODEL_NAME"], "qwen2.5vl:7b")
 
     def test_visual_plugin_without_address_falls_back_to_legacy_endpoint(self):
         out, err = self.resolved_endpoint(
-            {"visual_plugin": "monkeytester-ai", "visual_endpoint": "http://old:1/v1/chat/completions"},
-            mt_plugins="monkeytester-ai=http://ignored:8091")
+            {"visual_plugin": "AI", "visual_endpoint": "http://old:1/v1/chat/completions"},
+            mt_plugins="AI=http://ignored:8091")
         self.assertEqual(out["VISION_MODEL_API_URL"], "http://old:1/v1/chat/completions")
         self.assertIn("Settings → Device Plugins", err)
 
@@ -203,7 +203,7 @@ class RunnerConfigTests(unittest.TestCase):
         result = self.run_with_config({"visual_provider": "copilot", "copilot_model": "gpt-4o"})
         self.assertEqual(result.returncode, 2)
         self.assertIn("GitHub Copilot is now configured on the MonkeyTester-Plugin-AI plugin: Settings → "
-                      "Device Plugins → monkeytester-ai → Configure → GitHub Copilot", result.stderr)
+                      "Device Plugins → AI → Configure → GitHub Copilot", result.stderr)
 
 
 class ParseTests(unittest.TestCase):

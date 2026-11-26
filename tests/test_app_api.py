@@ -245,12 +245,12 @@ class PluginSettingsTests(ServerCase):
     def test_nothing_configured_lists_only_the_ai_row(self):
         with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             out = self.get_json("/api/plugins")
-        entry = out["plugins"][0]  # the always-listed monkeytester-ai row
+        entry = out["plugins"][0]  # the always-listed AI row
         self.assertEqual((entry["name"], entry["source"], entry["url"], entry["ok"],
                           entry["config"]),
-                         ("monkeytester-ai", "settings", "", False, None))
+                         ("AI", "settings", "", False, None))
         self.assertIn("not configured", entry["error"])
-        self.assertEqual(out["ai_plugin"], {"name": "monkeytester-ai", "url": "", "configured": False,
+        self.assertEqual(out["ai_plugin"], {"name": "AI", "url": "", "configured": False,
                                             "token": {"configured": False, "last4": ""},
                                             "managed": False})
         self.assertFalse(entry["managed"])
@@ -263,7 +263,7 @@ class PluginSettingsTests(ServerCase):
         with patch.dict(os.environ, {"MT_PLUGINS": f"esp32={self.peer_url}"}):
             out = self.get_json("/api/plugins")
         by_name = {p["name"]: p for p in out["plugins"]}
-        self.assertEqual(sorted(by_name), ["esp32", "monkeytester-ai"])
+        self.assertEqual(sorted(by_name), ["AI", "esp32"])
         self.assertEqual(by_name["esp32"], {"name": "esp32", "url": self.peer_url, "ok": True,
                                            "source": "MT_PLUGINS",
                                            "contract_version": 1,
@@ -275,14 +275,14 @@ class PluginSettingsTests(ServerCase):
                                            "renamable": False,
                                            "devices": [{"id": "ab:cd", "model": "C3",
                                                         "state": "ready"}]})
-        self.assertFalse(by_name["monkeytester-ai"]["ok"])  # listed, not configured
-        self.assertEqual(by_name["monkeytester-ai"]["source"], "settings")
+        self.assertFalse(by_name["AI"]["ok"])  # listed, not configured
+        self.assertEqual(by_name["AI"]["source"], "settings")
 
     def test_dead_plugin_still_lists_with_its_error(self):
         with patch.dict(os.environ, {"MT_PLUGINS": "gone=http://127.0.0.1:9"}):
             out = self.get_json("/api/plugins")
         by_name = {p["name"]: p for p in out["plugins"]}
-        self.assertEqual(sorted(by_name), ["gone", "monkeytester-ai"])
+        self.assertEqual(sorted(by_name), ["AI", "gone"])
         self.assertFalse(by_name["gone"]["ok"])
         self.assertIn("error", by_name["gone"])
 
@@ -290,7 +290,7 @@ class PluginSettingsTests(ServerCase):
         with patch.dict(os.environ, {"MT_PLUGINS": "broken"}):
             out = self.get_json("/api/plugins")
         self.assertIn("MT_PLUGINS", out["error"])
-        self.assertEqual([p["name"] for p in out["plugins"]], ["monkeytester-ai"])
+        self.assertEqual([p["name"] for p in out["plugins"]], ["AI"])
 
     def test_plugins_are_checked_at_the_same_time(self):
         plugin_client = app._plugin_client()
@@ -307,7 +307,7 @@ class PluginSettingsTests(ServerCase):
             started = time.monotonic()
             out = self.get_json("/api/plugins")
             elapsed = time.monotonic() - started
-        self.assertEqual([p["name"] for p in out["plugins"]], ["p0", "p1", "p2", "monkeytester-ai"])
+        self.assertEqual([p["name"] for p in out["plugins"]], ["p0", "p1", "p2", "AI"])
         self.assertTrue(all(p["ok"] for p in out["plugins"] if p["source"] == "MT_PLUGINS"))
         self.assertLess(elapsed, 1.5)  # one after another would take 1.8 s
 
@@ -328,7 +328,7 @@ class PluginManageTests(ServerCase):
             raise
 
     @staticmethod
-    def health(name="esp32-sensor", **extra):
+    def health(name="ESP32-SENSOR", **extra):
         return {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
                 "plugin": {"name": name, "version": "0.1"}, **extra}
 
@@ -346,30 +346,30 @@ class PluginManageTests(ServerCase):
 
     def test_set_needs_a_live_contract_plugin(self):
         # No name in the op: the plugin's /health name is the registry key.
-        Peer.health = self.health("esp32-sensor")
+        Peer.health = self.health("ESP32-SENSOR")
         out = self.post("/api/config/plugins", {"set": {"url": self.peer_url + "/"}})
-        self.assertEqual(out["plugin"], {"name": "esp32-sensor", "url": self.peer_url,
+        self.assertEqual(out["plugin"], {"name": "ESP32-SENSOR", "url": self.peer_url,
                                          "ok": True, "contract_version": 1,
-                                         "plugin": {"name": "esp32-sensor",
+                                         "plugin": {"name": "ESP32-SENSOR",
                                                     "version": "0.1"},
                                          "token": {"configured": False, "last4": "",
                                                    "saved_at": None}})
         self.assertNotIn("renamed_from", out)
         cfg = json.loads((self.runs / "config.json").read_text())
-        self.assertEqual(cfg["plugins"], {"esp32-sensor": self.peer_url})
+        self.assertEqual(cfg["plugins"], {"ESP32-SENSOR": self.peer_url})
         listed = {p["name"]: p for p in self.get_json("/api/plugins")["plugins"]}
-        self.assertEqual(listed["esp32-sensor"]["source"], "config")
+        self.assertEqual(listed["ESP32-SENSOR"]["source"], "config")
 
     def test_string_plugin_form_names_the_plugin_too(self):
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
-                       "plugin": "hub"}
+                       "plugin": "HUB"}
         out = self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
-        self.assertEqual(out["plugin"]["name"], "hub")
-        self.assertEqual(self.registry(), {"hub": self.peer_url})
+        self.assertEqual(out["plugin"]["name"], "HUB")
+        self.assertEqual(self.registry(), {"HUB": self.peer_url})
 
     def test_name_in_set_is_refused(self):
-        Peer.health = self.health("hub")
-        status, body = self.refused({"set": {"name": "hub", "url": self.peer_url}})
+        Peer.health = self.health("HUB")
+        status, body = self.refused({"set": {"name": "HUB", "url": self.peer_url}})
         self.assertEqual((status, body["code"]), (400, "bad_request"))
         self.assertIn("/health", body["error"])
         self.assertFalse((self.runs / "config.json").exists())
@@ -384,83 +384,83 @@ class PluginManageTests(ServerCase):
         self.assertFalse((self.runs / "config.json").exists())
 
     def test_taken_name_at_another_address_is_refused(self):
-        self.write_config({"plugins": {"esp32-sensor": "http://127.0.0.1:9"}})
-        Peer.health = self.health("esp32-sensor")
+        self.write_config({"plugins": {"ESP32-SENSOR": "http://127.0.0.1:9"}})
+        Peer.health = self.health("ESP32-SENSOR")
         status, body = self.refused({"set": {"url": self.peer_url}})
         self.assertEqual((status, body["code"]), (400, "name_taken"))
         self.assertIn("http://127.0.0.1:9", body["error"])
-        self.assertEqual(self.registry(), {"esp32-sensor": "http://127.0.0.1:9"})
+        self.assertEqual(self.registry(), {"ESP32-SENSOR": "http://127.0.0.1:9"})
 
     def test_same_name_same_address_is_an_idempotent_update(self):
-        Peer.health = self.health("esp32-sensor")
+        Peer.health = self.health("ESP32-SENSOR")
         self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
         out = self.post("/api/config/plugins", {"set": {"url": self.peer_url + "/",
                                                         "token": "tok-abcd"}})
         self.assertEqual(out["plugin"]["token"]["last4"], "abcd")
-        self.assertEqual(self.registry(), {"esp32-sensor": self.peer_url})
-        self.assertEqual(auth.plugin_token("esp32-sensor"), "tok-abcd")
+        self.assertEqual(self.registry(), {"ESP32-SENSOR": self.peer_url})
+        self.assertEqual(auth.plugin_token("ESP32-SENSOR"), "tok-abcd")
 
     def test_edit_with_row_and_same_name_updates_the_address(self):
-        self.write_config({"plugins": {"esp32-sensor": "http://127.0.0.1:9", "z": "http://z:1"}})
-        Peer.health = self.health("esp32-sensor")
+        self.write_config({"plugins": {"ESP32-SENSOR": "http://127.0.0.1:9", "Z": "http://z:1"}})
+        Peer.health = self.health("ESP32-SENSOR")
         out = self.post("/api/config/plugins",
-                        {"set": {"url": self.peer_url}, "row": "esp32-sensor"})
+                        {"set": {"url": self.peer_url}, "row": "ESP32-SENSOR"})
         self.assertNotIn("renamed_from", out)
-        self.assertEqual(self.registry(), {"esp32-sensor": self.peer_url, "z": "http://z:1"})
+        self.assertEqual(self.registry(), {"ESP32-SENSOR": self.peer_url, "Z": "http://z:1"})
 
     def test_edit_renames_the_row_and_moves_its_token(self):
-        self.write_config({"plugins": {"a": "http://a:1", "old-name": "http://127.0.0.1:9",
-                                       "z": "http://z:1"}})
-        auth.set_service_token("plugin:old-name", "old-token-1234")
-        Peer.health = self.health("new-name")
+        self.write_config({"plugins": {"A": "http://a:1", "OLD-NAME": "http://127.0.0.1:9",
+                                       "Z": "http://z:1"}})
+        auth.set_service_token("plugin:OLD-NAME", "old-token-1234")
+        Peer.health = self.health("NEW-NAME")
         out = self.post("/api/config/plugins",
-                        {"set": {"url": self.peer_url}, "row": "old-name"})
-        self.assertEqual(out["renamed_from"], "old-name")
-        self.assertEqual(out["plugin"]["name"], "new-name")
+                        {"set": {"url": self.peer_url}, "row": "OLD-NAME"})
+        self.assertEqual(out["renamed_from"], "OLD-NAME")
+        self.assertEqual(out["plugin"]["name"], "NEW-NAME")
         self.assertEqual(out["plugin"]["token"]["last4"], "1234")
         # Same place in the list, under the new key.
         self.assertEqual(list(self.registry().items()),
-                         [("a", "http://a:1"), ("new-name", self.peer_url), ("z", "http://z:1")])
-        self.assertEqual(auth.plugin_token("new-name"), "old-token-1234")
-        self.assertEqual(auth.plugin_token("old-name"), "")
+                         [("A", "http://a:1"), ("NEW-NAME", self.peer_url), ("Z", "http://z:1")])
+        self.assertEqual(auth.plugin_token("NEW-NAME"), "old-token-1234")
+        self.assertEqual(auth.plugin_token("OLD-NAME"), "")
 
     def test_rename_with_a_new_token_uses_it(self):
-        self.write_config({"plugins": {"old-name": "http://127.0.0.1:9"}})
-        auth.set_service_token("plugin:old-name", "old-token-1234")
-        Peer.health = self.health("new-name")
+        self.write_config({"plugins": {"OLD-NAME": "http://127.0.0.1:9"}})
+        auth.set_service_token("plugin:OLD-NAME", "old-token-1234")
+        Peer.health = self.health("NEW-NAME")
         self.post("/api/config/plugins",
-                  {"set": {"url": self.peer_url, "token": "new-token-5678"}, "row": "old-name"})
-        self.assertEqual(auth.plugin_token("new-name"), "new-token-5678")
-        self.assertEqual(auth.plugin_token("old-name"), "")
+                  {"set": {"url": self.peer_url, "token": "new-token-5678"}, "row": "OLD-NAME"})
+        self.assertEqual(auth.plugin_token("NEW-NAME"), "new-token-5678")
+        self.assertEqual(auth.plugin_token("OLD-NAME"), "")
 
     def test_rename_onto_another_existing_row_is_name_taken(self):
-        self.write_config({"plugins": {"one": "http://127.0.0.1:9", "two": "http://two:1"}})
-        Peer.health = self.health("two")
-        status, body = self.refused({"set": {"url": self.peer_url}, "row": "one"})
+        self.write_config({"plugins": {"ONE": "http://127.0.0.1:9", "TWO": "http://two:1"}})
+        Peer.health = self.health("TWO")
+        status, body = self.refused({"set": {"url": self.peer_url}, "row": "ONE"})
         self.assertEqual((status, body["code"]), (400, "name_taken"))
-        self.assertEqual(self.registry(), {"one": "http://127.0.0.1:9", "two": "http://two:1"})
+        self.assertEqual(self.registry(), {"ONE": "http://127.0.0.1:9", "TWO": "http://two:1"})
 
     def test_edit_of_an_unregistered_row_is_nothing_to_edit(self):
-        Peer.health = self.health("esp32-sensor")
+        Peer.health = self.health("ESP32-SENSOR")
         status, body = self.refused({"set": {"url": self.peer_url}, "row": "ghost"})
         self.assertEqual((status, body["code"]), (400, "nothing_to_edit"))
         self.assertFalse((self.runs / "config.json").exists())
 
     def test_set_seeds_the_map_from_live_env_entries(self):
-        Peer.health = self.health("new")
-        with patch.dict(os.environ, {"MT_PLUGINS": "seed=http://127.0.0.1:9"}):
+        Peer.health = self.health("NEW")
+        with patch.dict(os.environ, {"MT_PLUGINS": "SEED=http://127.0.0.1:9"}):
             out = self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
-        self.assertEqual(out["plugins"], {"seed": "http://127.0.0.1:9",
-                                          "new": self.peer_url})
+        self.assertEqual(out["plugins"], {"SEED": "http://127.0.0.1:9",
+                                          "NEW": self.peer_url})
 
     def test_env_ignored_once_the_map_exists(self):
-        Peer.health = self.health("saved")
+        Peer.health = self.health("SAVED")
         self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
-        with patch.dict(os.environ, {"MT_PLUGINS": "stale=http://127.0.0.1:9"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "STALE=http://127.0.0.1:9"}):
             names = [p["name"] for p in self.get_json("/api/plugins")["plugins"]]
-        self.assertEqual(sorted(names), ["monkeytester-ai", "saved"])
+        self.assertEqual(sorted(names), ["AI", "SAVED"])
         with self.assertRaises(urllib.error.HTTPError) as caught:
-            self.post("/api/config/plugins", {"remove": "stale"})
+            self.post("/api/config/plugins", {"remove": "STALE"})
         self.assertEqual(caught.exception.code, 400)
         caught.exception.close()
 
@@ -477,15 +477,15 @@ class PluginManageTests(ServerCase):
         self.assertEqual((status, body["code"]), (400, "unreachable"))
 
     def test_set_rejects_bad_reserved_or_malformed_input(self):
-        Peer.health = self.health("hub")
-        bad = [{"set": {"name": "monkeytester-ai", "url": self.peer_url}},
-               {"set": {"url": "ftp://a"}},
+        Peer.health = self.health("HUB")
+        bad = [{"set": {"name": "AI", "url": self.peer_url}},
+               {"set": {"url": "ftp://A"}},
                {"set": {"url": ""}},
                {"set": {}},
-               {"set": "hub"},
+               {"set": "HUB"},
                {"set": {"url": self.peer_url, "extra": 1}},
                {"set": {"url": self.peer_url}, "row": "Bad Name"},
-               {"set": {"url": self.peer_url}, "remove": "other"}]
+               {"set": {"url": self.peer_url}, "remove": "OTHER"}]
         for payload in bad:
             with self.assertRaises(urllib.error.HTTPError) as caught:
                 self.post("/api/config/plugins", payload)
@@ -494,12 +494,12 @@ class PluginManageTests(ServerCase):
         self.assertFalse((self.runs / "config.json").exists())
 
     def test_remove_forgets_a_registration(self):
-        Peer.health = self.health("gone")
+        Peer.health = self.health("GONE")
         self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
-        out = self.post("/api/config/plugins", {"remove": "gone"})
+        out = self.post("/api/config/plugins", {"remove": "GONE"})
         self.assertEqual(out["plugins"], {})
         names = [p["name"] for p in self.get_json("/api/plugins")["plugins"]]
-        self.assertEqual(names, ["monkeytester-ai"])
+        self.assertEqual(names, ["AI"])
 
 
 class DeviceListTests(ServerCase):
@@ -757,7 +757,7 @@ def ai_state():
     return {"selected": "qwen-vl", "installed": ["qwen-vl", "llava"],
             "token": "secret-tok-9876", "rotations": 0, "provider": "local",
             "copilot_user": "", "copilot_token": "", "copilot_model": "gpt-4o",
-            "polls": 0, "require_token": False, "plugin_name": "monkeytester-ai",
+            "polls": 0, "require_token": False, "plugin_name": "AI",
             # Renamable AI builds (PLUGIN_API.md): default_name None = an
             # older build that sends no default_name / renamable.
             "default_name": None, "renamable": False,
@@ -768,7 +768,7 @@ REMOTE_MODELS = ["video-model", "qwen2.5-vl-7b"]
 
 
 class AiPlugin(BaseHTTPRequestHandler):
-    """Fake monkeytester-ai plugin (the config-owning plugin the Device Plugins
+    """Fake AI plugin (the config-owning plugin the Device Plugins
     panel proxies), including its GitHub Copilot provider. State lives on the
     class so tests can read what it got."""
     state = ai_state()
@@ -985,7 +985,7 @@ class AiPlugin(BaseHTTPRequestHandler):
 
 class VisualModelPluginTests(ServerCase):
     """The Device Plugins panel's Configure view is a thin proxy over the
-    monkeytester-ai plugin: the plugin owns endpoint, installed models,
+    AI plugin: the plugin owns endpoint, installed models,
     selection and pairing token (the standalone Models page is gone)."""
 
     def serve_plugin(self):
@@ -1003,7 +1003,7 @@ class VisualModelPluginTests(ServerCase):
         app._PLUGIN_SELECTED_CACHE.clear()  # no cross-test staleness
 
     def plugin_env(self, url):
-        """The monkeytester-ai address lives in config.json (set in Settings);
+        """The AI address lives in config.json (set in Settings);
         a MT_PLUGINS entry for it is ignored. Merges visual_plugin_url into
         whatever config.json the test already wrote."""
         path = self.runs / "config.json"
@@ -1020,16 +1020,16 @@ class VisualModelPluginTests(ServerCase):
         with self.plugin_env(url):
             info = self.get_json("/api/visual-model/plugin")
         self.assertTrue(info["ok"])
-        self.assertEqual((info["plugin"], info["selected"]), ("monkeytester-ai", "qwen-vl"))
+        self.assertEqual((info["plugin"], info["selected"]), ("AI", "qwen-vl"))
         self.assertEqual(info["installed"], ["qwen-vl", "llava"])
         self.assertEqual(info["token"], {"configured": True, "last4": "9876"})
         self.assertNotIn("secret-tok-9876", json.dumps(info))
 
     def test_plugins_endpoint_routes_the_ai_plugin_the_ai_way(self):
         """Settings → Plugins Add row: a set op whose address's /health names
-        plugin monkeytester-ai is stored as visual_plugin_url + visual_plugin
+        plugin AI is stored as visual_plugin_url + visual_plugin
         (token -> visual_api_key), never in the `plugins` map; {"remove":
-        "monkeytester-ai"} clears it like plugin_url: ""."""
+        "AI"} clears it like plugin_url: ""."""
         url = self.serve_plugin()
         AiPlugin.state["require_token"] = True
         with patch.dict(os.environ, {"MT_PLUGINS": ""}):
@@ -1039,36 +1039,36 @@ class VisualModelPluginTests(ServerCase):
                                                "token": "secret-tok-9876"}})
             self.assertEqual(status, 200, body)
             self.assertTrue(body["ai"])
-            self.assertEqual(body["plugin"]["name"], "monkeytester-ai")
+            self.assertEqual(body["plugin"]["name"], "AI")
             self.assertEqual(body["plugin"]["url"], url)
             self.assertEqual(body["plugin"]["token"]["last4"], "9876")
             cfg = self.config()
             self.assertEqual((cfg["visual_plugin_url"], cfg["visual_plugin"], cfg["visual_api_key"]),
-                             (url, "monkeytester-ai", "secret-tok-9876"))
+                             (url, "AI", "secret-tok-9876"))
             self.assertNotIn("vision", cfg.get("plugins") or {})
-            self.assertNotIn("monkeytester-ai", cfg.get("plugins") or {})
+            self.assertNotIn("AI", cfg.get("plugins") or {})
             self.assertIn("secret-tok-9876", AiPlugin.auth)  # /config validated with it
             out = self.get_json("/api/plugins")
             self.assertEqual(out["ai_plugin"]["url"], url)
             self.assertTrue(out["ai_plugin"]["configured"])
             # Save address on the AI row: same set op with row
-            # monkeytester-ai, no token -> the stored pairing token is used.
+            # AI, no token -> the stored pairing token is used.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"url": url}, "row": "monkeytester-ai"})
+                                      {"set": {"url": url}, "row": "AI"})
             self.assertEqual(status, 200, body)
             self.assertEqual(self.config()["visual_api_key"], "secret-tok-9876")
             # Remove clears the AI keys; the legacy endpoint keeps working too.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"remove": "monkeytester-ai"})
+                                      {"remove": "AI"})
             self.assertEqual(status, 200, body)
-            self.assertEqual(body["removed"], "monkeytester-ai")
+            self.assertEqual(body["removed"], "AI")
             cfg = self.config()
             self.assertNotIn("visual_plugin_url", cfg)
             self.assertNotIn("visual_plugin", cfg)
             self.assertFalse(self.get_json("/api/plugins")["ai_plugin"]["configured"])
             # Removing again: nothing to remove.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"remove": "monkeytester-ai"})
+                                      {"remove": "AI"})
             self.assertEqual(status, 400)
             self.assertEqual(body["code"], "nothing_to_remove")
             status, _, body = request(self.port, "POST", "/api/config/visual-model",
@@ -1083,11 +1083,11 @@ class VisualModelPluginTests(ServerCase):
         name_taken."""
         url = self.serve_plugin()
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
-                       "plugin": {"name": "esp32-sensor"}}
+                       "plugin": {"name": "ESP32-SENSOR"}}
         with patch.dict(os.environ, {"MT_PLUGINS": ""}):
-            # Row monkeytester-ai not configured yet: nothing to edit.
+            # Row AI not configured yet: nothing to edit.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"url": url}, "row": "monkeytester-ai"})
+                                      {"set": {"url": url}, "row": "AI"})
             self.assertEqual((status, body["code"]), (400, "nothing_to_edit"))
             status, _, body = request(self.port, "POST", "/api/config/plugins",
                                       {"set": {"url": url}})
@@ -1098,12 +1098,12 @@ class VisualModelPluginTests(ServerCase):
             before = self.config()
             # The AI row onto a device plugin's address.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"url": self.peer_url}, "row": "monkeytester-ai"})
+                                      {"set": {"url": self.peer_url}, "row": "AI"})
             self.assertEqual((status, body["code"]), (400, "bad_request"))
             self.assertIn("Add row", body["error"])
             # A device row onto the AI plugin's address.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"url": url}, "row": "esp32-sensor"})
+                                      {"set": {"url": url}, "row": "ESP32-SENSOR"})
             self.assertEqual((status, body["code"]), (400, "bad_request"))
             self.assertIn("Add row", body["error"])
             # Another AI address on the Add row while one is configured.
@@ -1113,7 +1113,7 @@ class VisualModelPluginTests(ServerCase):
             self.assertEqual(self.config(), before)
             # The AI row onto (another form of) an AI address keeps working.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"url": url + "/"}, "row": "monkeytester-ai"})
+                                      {"set": {"url": url + "/"}, "row": "AI"})
             self.assertEqual(status, 200, body)
             self.assertTrue(body["ai"])
 
@@ -1137,7 +1137,7 @@ class VisualModelPluginTests(ServerCase):
         with self.plugin_env(url):
             out = self.get_json("/api/plugins")
         entry = out["plugins"][0]
-        self.assertEqual(entry["name"], "monkeytester-ai")
+        self.assertEqual(entry["name"], "AI")
         self.assertTrue(entry["config"])
         self.assertEqual((entry["config"]["selected"], entry["config"]["installed"]),
                          ("qwen-vl", ["qwen-vl", "llava"]))
@@ -1151,9 +1151,9 @@ class VisualModelPluginTests(ServerCase):
                                       {"provider": "local", "model": "llava"})
         self.assertEqual(status, 200)
         self.assertTrue(body["saved"])
-        self.assertEqual((body["plugin"], body["plugin_url"]), ("monkeytester-ai", url))
+        self.assertEqual((body["plugin"], body["plugin_url"]), ("AI", url))
         cfg = json.loads((self.runs / "config.json").read_text())
-        self.assertEqual(cfg["visual_plugin"], "monkeytester-ai")
+        self.assertEqual(cfg["visual_plugin"], "AI")
         self.assertNotIn("visual_endpoint", cfg)
         self.assertNotIn("visual_model", cfg)
         self.assertIn(("/config", {"model": "llava"}), AiPlugin.posts)
@@ -1235,7 +1235,7 @@ class VisualModelPluginTests(ServerCase):
     def test_clear_token_drops_only_the_viewers_copy(self):
         url = self.serve_plugin()
         (self.runs / "config.json").write_text(json.dumps(
-            {"visual_provider": "local", "visual_plugin": "monkeytester-ai",
+            {"visual_provider": "local", "visual_plugin": "AI",
              "visual_api_key": "secret-tok-9876"}))
         with self.plugin_env(url):
             status, _, body = request(self.port, "POST", "/api/config/visual-model",
@@ -1244,13 +1244,13 @@ class VisualModelPluginTests(ServerCase):
         self.assertFalse(body["token"]["configured"])
         cfg = json.loads((self.runs / "config.json").read_text())
         self.assertNotIn("visual_api_key", cfg)
-        self.assertEqual(cfg["visual_plugin"], "monkeytester-ai")
+        self.assertEqual(cfg["visual_plugin"], "AI")
         self.assertNotIn(("/config", {"generate": True}), AiPlugin.posts)
 
     def test_vision_settings_resolves_the_plugin_endpoint(self):
         url = self.serve_plugin()
         (self.runs / "config.json").write_text(json.dumps(
-            {"visual_provider": "local", "visual_plugin": "monkeytester-ai"}))
+            {"visual_provider": "local", "visual_plugin": "AI"}))
         with self.plugin_env(url):
             endpoint, _, model = app.vision_settings()
         self.assertEqual(endpoint, url + "/v1/chat/completions")
@@ -1259,20 +1259,20 @@ class VisualModelPluginTests(ServerCase):
     def test_status_tolerates_the_richer_ai_health(self):
         url = self.serve_plugin()
         (self.runs / "config.json").write_text(json.dumps(
-            {"visual_provider": "local", "visual_plugin": "monkeytester-ai"}))
+            {"visual_provider": "local", "visual_plugin": "AI"}))
         with self.plugin_env(url):
             status = self.get_json("/api/status")
-        self.assertEqual(status["plugins"]["monkeytester-ai"],
+        self.assertEqual(status["plugins"]["AI"],
                          {"ok": True, "url": url, "contract_version": 1,
-                          "plugin": {"name": "monkeytester-ai", "version": "0.3.0"}})
+                          "plugin": {"name": "AI", "version": "0.3.0"}})
         self.assertTrue(status["vision"]["ok"])
-        self.assertEqual(status["vision"]["plugin"], "monkeytester-ai")
+        self.assertEqual(status["vision"]["plugin"], "AI")
         self.assertFalse(status["controller"]["ok"])
 
     def test_chat_test_goes_to_the_plugin(self):
         url = self.serve_plugin()
         (self.runs / "config.json").write_text(json.dumps(
-            {"visual_provider": "local", "visual_plugin": "monkeytester-ai"}))
+            {"visual_provider": "local", "visual_plugin": "AI"}))
         with self.plugin_env(url):
             status, _, body = request(self.port, "POST", "/api/visual-model/test",
                                       {"provider": "local", "messages":
@@ -1301,7 +1301,7 @@ class VisualModelPluginTests(ServerCase):
     def test_plugin_calls_send_the_pairing_token(self):
         url = self.serve_plugin()
         (self.runs / "config.json").write_text(json.dumps(
-            {"visual_provider": "local", "visual_plugin": "monkeytester-ai",
+            {"visual_provider": "local", "visual_plugin": "AI",
              "visual_api_key": "pair-tok-1111"}))
         with self.plugin_env(url):
             self.get_json("/api/visual-model/plugin")
@@ -1408,7 +1408,7 @@ class VisualModelPluginTests(ServerCase):
         AiPlugin.state.update(copilot_user="octo", copilot_token="gho_secretgithubtoken42",
                               provider="copilot", copilot_model="claude-sonnet-4")
         (self.runs / "config.json").write_text(json.dumps(
-            {"visual_provider": "local", "visual_plugin": "monkeytester-ai"}))
+            {"visual_provider": "local", "visual_plugin": "AI"}))
         with self.plugin_env(url):
             vision = self.get_json("/api/status")["vision"]
         self.assertEqual((vision["ok"], vision["provider"], vision["model"]),
@@ -1425,7 +1425,7 @@ class VisualModelPluginTests(ServerCase):
             info = self.get_json("/api/visual-model/plugin")
             vision = self.get_json("/api/status")["vision"]
         self.assertTrue(config["legacy_copilot"])
-        self.assertIn("monkeytester-ai → Configure → GitHub Copilot", config["legacy_hint"])
+        self.assertIn("AI → Configure → GitHub Copilot", config["legacy_hint"])
         self.assertTrue(info["legacy_copilot"])
         self.assertEqual(info["legacy_hint"], app.COPILOT_MOVED_MESSAGE)
         self.assertFalse(vision["ok"])
@@ -1437,7 +1437,7 @@ class VisualModelPluginTests(ServerCase):
                                    {"provider": "local", "model": "llava"})
         self.assertEqual(status, 200)
         cfg = json.loads((self.runs / "config.json").read_text())
-        self.assertEqual((cfg["visual_provider"], cfg["visual_plugin"]), ("local", "monkeytester-ai"))
+        self.assertEqual((cfg["visual_provider"], cfg["visual_plugin"]), ("local", "AI"))
         self.assertNotIn("copilot_model", cfg)
 
     def test_plugins_page_has_the_provider_choice_and_no_copilot_link(self):
@@ -1447,7 +1447,7 @@ class VisualModelPluginTests(ServerCase):
         self.assertNotIn(b'href="/copilot"', body)
         self.assertNotIn(b"onclick=", body.split(b"// Device plugins")[1])
 
-    # ── The monkeytester-ai address is set in Settings (config.json) ──
+    # ── The AI address is set in Settings (config.json) ──
 
     def test_address_save_validates_health_name_and_token(self):
         url = self.serve_plugin()
@@ -1457,12 +1457,12 @@ class VisualModelPluginTests(ServerCase):
             status, _, body = request(self.port, "POST", "/api/config/visual-model",
                                       {"plugin_url": url + "/", "api_key": "secret-tok-9876"})
         self.assertEqual(status, 200, body)
-        self.assertEqual((body["plugin"], body["plugin_url"]), ("monkeytester-ai", url))
+        self.assertEqual((body["plugin"], body["plugin_url"]), ("AI", url))
         self.assertEqual(body["token"], {"configured": True, "last4": "9876"})
         self.assertNotIn("secret-tok-9876", json.dumps(body))
         cfg = self.config()
         self.assertEqual((cfg["visual_plugin_url"], cfg["visual_plugin"], cfg["visual_api_key"]),
-                         (url, "monkeytester-ai", "secret-tok-9876"))
+                         (url, "AI", "secret-tok-9876"))
         self.assertEqual((cfg["theme"], cfg["video_size"]), ("dark", "75%"))  # unrelated keys kept
         # /config was read with the token (validation), /health without needing it.
         self.assertIn("secret-tok-9876", AiPlugin.auth)
@@ -1505,7 +1505,7 @@ class VisualModelPluginTests(ServerCase):
     def test_address_save_stores_nothing_on_failure(self):
         url = self.serve_plugin()
         AiPlugin.state["require_token"] = True
-        before = {"visual_plugin_url": "http://old:8091", "visual_plugin": "monkeytester-ai",
+        before = {"visual_plugin_url": "http://old:8091", "visual_plugin": "AI",
                   "visual_api_key": "old-tok-0000", "theme": "light"}
         (self.runs / "config.json").write_text(json.dumps(before))
         cases = [
@@ -1518,7 +1518,7 @@ class VisualModelPluginTests(ServerCase):
             self.assertEqual((status, body["code"]), (want_status, want_code), payload)
             self.assertTrue(body["error"])
             self.assertEqual(self.config(), before, payload)
-        # A plugin-contract service that is not monkeytester-ai is refused too.
+        # A plugin-contract service that is not AI is refused too.
         AiPlugin.state.update(require_token=False, plugin_name="esp32-sensor")
         status, _, body = request(self.port, "POST", "/api/config/visual-model", {"plugin_url": url})
         self.assertEqual((status, body["code"]), (400, "wrong_plugin"))
@@ -1532,16 +1532,16 @@ class VisualModelPluginTests(ServerCase):
 
     def test_empty_address_removes_the_plugin(self):
         (self.runs / "config.json").write_text(json.dumps(
-            {"visual_plugin_url": "http://x:8091", "visual_plugin": "monkeytester-ai",
+            {"visual_plugin_url": "http://x:8091", "visual_plugin": "AI",
              "visual_api_key": "tok-1234", "theme": "dark"}))
         status, _, body = request(self.port, "POST", "/api/config/visual-model", {"plugin_url": ""})
         self.assertEqual((status, body["plugin_url"]), (200, ""))
         self.assertEqual(self.config(), {"visual_api_key": "tok-1234", "theme": "dark"})
-        with patch.dict(os.environ, {"MT_PLUGINS": "monkeytester-ai=http://ignored:8091"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "AI=http://ignored:8091"}):
             out = self.get_json("/api/plugins")
         # The row is still listed ("not configured"), so the panel stays reachable;
         # the env entry does not come back.
-        self.assertEqual([p["name"] for p in out["plugins"]], ["monkeytester-ai"])
+        self.assertEqual([p["name"] for p in out["plugins"]], ["AI"])
         self.assertFalse(out["plugins"][0]["ok"])
         self.assertFalse(out["ai_plugin"]["configured"])
 
@@ -1556,18 +1556,18 @@ class VisualModelPluginTests(ServerCase):
         url = self.serve_plugin()
         Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
                        "plugin": {"name": "esp32-sensor"}}
-        env = f"esp32-sensor={self.peer_url},monkeytester-ai=http://127.0.0.1:9"
+        env = f"esp32-sensor={self.peer_url},AI=http://127.0.0.1:9"
         with self.plugin_env(url), patch.dict(os.environ, {"MT_PLUGINS": env}):
             out = self.get_json("/api/plugins")
             status = self.get_json("/api/status")
         by_name = {p["name"]: p for p in out["plugins"]}
-        self.assertEqual(sorted(by_name), ["esp32-sensor", "monkeytester-ai"])
-        self.assertEqual(by_name["monkeytester-ai"]["url"], url)  # not the env's :9
-        self.assertEqual(by_name["monkeytester-ai"]["source"], "settings")
+        self.assertEqual(sorted(by_name), ["AI", "esp32-sensor"])
+        self.assertEqual(by_name["AI"]["url"], url)  # not the env's :9
+        self.assertEqual(by_name["AI"]["source"], "settings")
         self.assertEqual(by_name["esp32-sensor"]["source"], "MT_PLUGINS")
-        self.assertTrue(by_name["monkeytester-ai"]["ok"])
+        self.assertTrue(by_name["AI"]["ok"])
         self.assertEqual(out["ai_plugin"]["url"], url)
-        self.assertEqual(status["plugins"]["monkeytester-ai"]["url"], url)
+        self.assertEqual(status["plugins"]["AI"]["url"], url)
         self.assertEqual(status["plugins"]["esp32-sensor"]["url"], self.peer_url)
 
     # ── Remote server provider: settings live on the plugin ──
@@ -1955,7 +1955,7 @@ class RunOrderTests(ServerCase):
             {"device_mode": "specific", "device": "10.0.0.1:5555", "build_request": BUILD_ID},
             [("apk", "app.apk", b"PK-not-really"),
              ("tests", "INSTRUCTION.txt", b"MODE: once\\n"),
-             ("tests", "a.txt", b"VERIFY: x\\n")])
+             ("tests", "a.txt", b"AI: VERIFY x\\n")])
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/run-test", data=body,
                                      method="POST", headers={"Content-Type": ctype})
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -2027,7 +2027,7 @@ class CombinedRunTests(ServerCase):
         spec.loader.exec_module(submit)
         ctype, body = submit.build_multipart(
             {"device_mode": mode, "device": "x", "build_request": BUILD_ID},
-            files + [("tests", "INSTRUCTION.txt", b"MODE: once\n"), ("tests", "a.txt", b"VERIFY: x\n")])
+            files + [("tests", "INSTRUCTION.txt", b"MODE: once\n"), ("tests", "a.txt", b"AI: VERIFY x\n")])
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/run-test", data=body,
                                      method="POST", headers={"Content-Type": ctype})
         result = (targets, None) if targets else (None, "Mobile Controller unreachable")
@@ -2128,11 +2128,11 @@ LIVE_CONFIG = {"theme": "dark", "video_size": "100%",
                "visual_endpoint": "http://192.168.1.20:8091/v1/chat/completions",
                "visual_model": "qwen2.5vl:7b", "visual_api_key": "live-pair-tok-4242"}
 LIVE_MT_PLUGINS = ("esp32-sensor=http://127.0.0.1:8091,esp32-server=http://127.0.0.1:8093,"
-                   "monkeytester-ai=http://192.168.1.20:8091")
+                   "AI=http://192.168.1.20:8091")
 
 
 class AiAddressImportTests(unittest.TestCase):
-    """At viewer start a monkeytester-ai MT_PLUGINS entry is moved once into
+    """At viewer start a AI MT_PLUGINS entry is moved once into
     config.json (visual_plugin_url); after that the entry is ignored."""
 
     def setUp(self):
@@ -2159,11 +2159,11 @@ class AiAddressImportTests(unittest.TestCase):
         env = {"MT_PLUGINS": LIVE_MT_PLUGINS}
         url, log = self.run_import(env)
         self.assertEqual(url, "http://192.168.1.20:8091")
-        self.assertIn("imported monkeytester-ai address from MT_PLUGINS; the MT_PLUGINS "
+        self.assertIn("imported AI plugin address from MT_PLUGINS; the MT_PLUGINS "
                       "entry is ignored from now on", log)
         cfg = json.loads(self.cfg_file.read_text())
         self.assertEqual(cfg, {**LIVE_CONFIG, "visual_plugin_url": "http://192.168.1.20:8091",
-                               "visual_plugin": "monkeytester-ai"})
+                               "visual_plugin": "AI"})
         # Idempotent: a second start imports nothing, writes nothing, says the
         # env entry is ignored.
         mtime = self.cfg_file.stat().st_mtime_ns
@@ -2181,8 +2181,8 @@ class AiAddressImportTests(unittest.TestCase):
         self.assertEqual({n: c.url for n, c in plugins.items()},
                          {"esp32-sensor": "http://127.0.0.1:8091",
                           "esp32-server": "http://127.0.0.1:8093",
-                          "monkeytester-ai": "http://192.168.1.20:8091"})
-        self.assertEqual(plugins["monkeytester-ai"].token, "live-pair-tok-4242")
+                          "AI": "http://192.168.1.20:8091"})
+        self.assertEqual(plugins["AI"].token, "live-pair-tok-4242")
 
     def test_import_without_env_entry_or_config_does_nothing_harmful(self):
         self.assertEqual(self.run_import({"MT_PLUGINS": "esp32-sensor=http://127.0.0.1:8091"})[0], "")
@@ -2190,10 +2190,10 @@ class AiAddressImportTests(unittest.TestCase):
         self.assertEqual(self.run_import({"MT_PLUGINS": "broken"})[0], "")
         self.assertFalse(self.cfg_file.exists())
         # No config.json at all yet: the import creates one with just the address.
-        url, _ = self.run_import({"MT_PLUGINS": "monkeytester-ai=http://m:8091/"})
+        url, _ = self.run_import({"MT_PLUGINS": "AI=http://m:8091/"})
         self.assertEqual(url, "http://m:8091")
         self.assertEqual(json.loads(self.cfg_file.read_text()),
-                         {"visual_plugin_url": "http://m:8091", "visual_plugin": "monkeytester-ai"})
+                         {"visual_plugin_url": "http://m:8091", "visual_plugin": "AI"})
 
     def test_config_write_is_atomic_and_private(self):
         # config.json holds the pairing and build-plugin tokens: every write
@@ -2207,7 +2207,7 @@ class AiAddressImportTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 app.save_config({"x": 1})
         # The old file is intact and no temp file is left behind.
-        self.assertEqual(json.loads(self.cfg_file.read_text())["visual_plugin"], "monkeytester-ai")
+        self.assertEqual(json.loads(self.cfg_file.read_text())["visual_plugin"], "AI")
         self.assertEqual([p.name for p in self.cfg_file.parent.iterdir()], ["config.json"])
 
 
@@ -2247,10 +2247,10 @@ class ManagedAiPluginTests(ServerCase):
         before = self.write_stale()
         with self.managed():
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"url": self.url}, "row": "monkeytester-ai"})
+                                      {"set": {"url": self.url}, "row": "AI"})
             self.assertEqual(status, 409, body)
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"remove": "monkeytester-ai"})
+                                      {"remove": "AI"})
             self.assertEqual(status, 409, body)
         self.assertEqual(self.cfg_path.read_bytes(), before)
 
@@ -2259,7 +2259,7 @@ class ManagedAiPluginTests(ServerCase):
         with self.managed():
             self.assertEqual(app.ai_plugin_url(), self.url)
             self.assertEqual(app.ai_pairing_token(), "secret-tok-9876")
-            self.assertEqual(app.visual_plugin_name(), "monkeytester-ai")
+            self.assertEqual(app.visual_plugin_name(), "AI")
             endpoint, key, _ = app.vision_settings()
             info = self.get_json("/api/visual-model/plugin")
             out = self.get_json("/api/plugins")
@@ -2268,16 +2268,16 @@ class ManagedAiPluginTests(ServerCase):
         # The token-enforcing plugin answered: the env token was sent, not config.json's.
         self.assertTrue(info["ok"], info)
         self.assertTrue(info["managed"])
-        self.assertEqual((info["plugin"], info["url"]), ("monkeytester-ai", self.url))
+        self.assertEqual((info["plugin"], info["url"]), ("AI", self.url))
         self.assertIn("secret-tok-9876", AiPlugin.auth)
         self.assertNotIn("stale-tok-0000", AiPlugin.auth)
-        row = {p["name"]: p for p in out["plugins"]}["monkeytester-ai"]
+        row = {p["name"]: p for p in out["plugins"]}["AI"]
         self.assertEqual((row["url"], row["ok"], row["managed"]), (self.url, True, True))
         self.assertTrue(row["config"])
         self.assertEqual(out["ai_plugin"]["url"], self.url)
         self.assertTrue(out["ai_plugin"]["managed"])
         self.assertEqual((vm["plugin"], vm["plugin_url"], vm["managed"]),
-                         ("monkeytester-ai", self.url, True))
+                         ("AI", self.url, True))
         self.assertNotIn("secret-tok-9876", json.dumps([info, out, vm]))
         self.assertEqual(self.cfg_path.read_bytes(), before)  # config.json untouched
 
@@ -2285,9 +2285,9 @@ class ManagedAiPluginTests(ServerCase):
         with self.managed():  # no config.json at all
             out = self.get_json("/api/plugins")
             status = self.get_json("/api/status")
-        self.assertTrue({p["name"]: p for p in out["plugins"]}["monkeytester-ai"]["ok"])
+        self.assertTrue({p["name"]: p for p in out["plugins"]}["AI"]["ok"])
         self.assertEqual((status["vision"]["plugin"], status["vision"]["endpoint"]),
-                         ("monkeytester-ai", self.url))
+                         ("AI", self.url))
         self.assertTrue(status["vision"]["ok"])
         self.assertFalse(self.cfg_path.exists())
 
@@ -2325,7 +2325,7 @@ class ManagedAiPluginTests(ServerCase):
         import io
         err = io.StringIO()
         with self.managed(), contextlib.redirect_stderr(err):
-            url = app.import_ai_plugin_address({"MT_PLUGINS": "monkeytester-ai=http://m:8091",
+            url = app.import_ai_plugin_address({"MT_PLUGINS": "AI=http://m:8091",
                                                 "MT_MANAGED_AI_PLUGIN_URL": self.url,
                                                 "MT_MANAGED_AI_PLUGIN_TOKEN": "t"})
         self.assertEqual(url, "")
@@ -2340,16 +2340,16 @@ class ManagedAiPluginTests(ServerCase):
                 self.assertEqual(app.ai_plugin_url(), "http://127.0.0.1:9")
                 self.assertEqual(app.ai_pairing_token(), "stale-tok-0000")
                 out = self.get_json("/api/plugins")
-                row = {p["name"]: p for p in out["plugins"]}["monkeytester-ai"]
+                row = {p["name"]: p for p in out["plugins"]}["AI"]
                 self.assertEqual((row["url"], row["managed"]), ("http://127.0.0.1:9", False))
                 self.assertFalse(out["ai_plugin"]["managed"])
                 status, _, body = request(self.port, "POST", "/api/config/visual-model",
                                           {"clear_token": True})
                 self.assertNotEqual(status, 409, body)
                 self.cfg_path.write_bytes(before)
-        with patch.dict(os.environ, {"MT_PLUGINS": "monkeytester-ai=http://m:8091"}):
+        with patch.dict(os.environ, {"MT_PLUGINS": "AI=http://m:8091"}):
             self.cfg_path.unlink()
-            self.assertEqual(app.import_ai_plugin_address({"MT_PLUGINS": "monkeytester-ai=http://m:8091",
+            self.assertEqual(app.import_ai_plugin_address({"MT_PLUGINS": "AI=http://m:8091",
                                                            "MT_MANAGED_AI_PLUGIN_URL": self.url}),
                              "http://m:8091")
 

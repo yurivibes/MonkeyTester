@@ -9,13 +9,14 @@ Implementations:
 
 | Plugin | Repo | Default port |
 |---|---|---|
-| `esp32` | MonkeyTester-Plugin-Esp32 | 8091 |
-| `monkeytester-ai` | MonkeyTester-Plugin-AI | 8091 (on the Mac, e.g. `http://192.168.1.20:8091`, an example address; use your Mac's); address set in Settings → Device Plugins, not `MT_PLUGINS` |
+| `ESP32-SENSOR` | MonkeyTester-Plugin-Esp32 | 8091 |
+| `ESP32-SERVER` | MonkeyTester-Plugin-Server | 8093 |
+| `AI` | MonkeyTester-Plugin-AI | 8091 (on the Mac, e.g. `http://192.168.1.20:8091`, an example address; use your Mac's); address set in Settings → Device Plugins, not `MT_PLUGINS` |
 
 The Mobile Controller still uses its own API (`API.md` in that repo); moving it onto
 this contract is a later step.
 
-`monkeytester-ai` is a **config-owning plugin**: it does not drive hardware per test
+`AI` is a **config-owning plugin**: it does not drive hardware per test
 step, it owns the vision provider — its local Ollama model, a remote OpenAI-compatible
 server or GitHub Copilot. These
 endpoints extend the contract for that purpose (all authenticated with the pairing
@@ -43,7 +44,7 @@ token as `Authorization: Bearer` or `X-Plugin-Token`):
   `POST /copilot/remove` → the public copilot block (falls back to `local`).
 - `POST /v1/chat/completions` — routed to the active provider.
 
-Settings → Device Plugins → monkeytester-ai → **Configure** proxies these through
+Settings → Device Plugins → AI → **Configure** proxies these through
 the viewer (`plugin_client.py` is the only caller). The plugin's address is set on the
 same page (in the row's **Configure** panel: its **Plugin address** field, checked against
 `/health` and an authenticated `/config` before it is saved; the row itself is read-only)
@@ -51,11 +52,13 @@ and stored as `visual_plugin_url` in
 `Run/config.json`; device plugins are registered in the Settings → Device Plugins
 **Manage device plugins** box (saved as the `plugins` map {name: url} in
 `Run/config.json`; `MT_PLUGINS` entries are imported into that map once at viewer
-start and the variable is ignored after that; a `monkeytester-ai` entry there is
+start and the variable is ignored after that; an `AI` (or legacy `monkeytester-ai`) entry there is
 imported once into `visual_plugin_url`, then ignored). The viewer stores only a copy of the
 pairing token (`visual_api_key`) so it can call the service over the LAN, never displays
-it again, and holds no GitHub token and no remote API key. A `PLUGIN:` step against it is `set-model` only — its
-actions are not test-step device drives.
+it again, and holds no GitHub token and no remote API key. Tests drive the vision steps under its CURRENT name (default `AI`):
+`AI: VERIFY <text>`, `AI: CLICK <text>`, `AI: INPUT <field> "<text>"` run the runner's
+vision code paths; any other action after its name (`AI: set-model …`) is relayed to it as a
+plugin action. Its actions are not test-step device drives.
 
 ## Model
 
@@ -106,9 +109,14 @@ Readiness. Never blocks on hardware.
 }
 ```
 
-`plugin.name` is **required** and must match `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`
-(`PLUGIN_NAME_RE`; the string form `"plugin": "esp32"` is accepted too). It is the name
-tests use (`PLUGIN: <name> …`): the viewer registers the plugin under it — the Add row
+`plugin.name` is **required** and must match `[A-Z0-9][A-Z0-9_-]{0,63}` — UPPERCASE
+(`PLUGIN_NAME_RE`; the string form `"plugin": "ESP32"` is accepted too). It is the step
+command tests use (`ESP32-SERVER: expect …`): the viewer registers the plugin under it — the
+Add row refuses a lowercase name (400 `bad_request`, saying names must be uppercase) and a
+built-in step command such as `CLICK`, `VERIFY`, `WAIT`, `IF`, `END`, `PLUGIN` or an
+INSTRUCTION key (400 `reserved_name`; the set is `RESERVED_STEP_NAMES` in
+`mt-tests/scripts/plugin_client.py`). A test plugin may not take the AI plugin's name (`AI`
+or its current name: 400 `name_taken`). The Add row
 takes only the address, and a `/health` without a valid name is refused
 (`no_plugin_name`). If the name changes, the next **Save address** on the plugin's row
 renames the row (the pairing token moves with it); a name already registered at another
@@ -122,15 +130,16 @@ Two optional fields let a plugin offer a **user-chosen name** (a renamable plugi
   call below (`POST /config {"name"}`).
 
 ```json
-"plugin": {"name": "vision", "default_name": "monkeytester-ai", "renamable": true, "version": "1.0.0"}
+"plugin": {"name": "VISION", "default_name": "AI", "renamable": true, "version": "1.0.0"}
 ```
 
 `plugin.name` is then the CURRENT name. The plugin owns it: it stores the custom name in
 its own persisted settings, reports it on `/health` right after the rename and after a
 restart; the viewer keeps no alias of its own. The viewer **identifies** a plugin by
-`default_name` (falling back to `name`) — monkeytester-ai is recognised by
-`default_name: "monkeytester-ai"` however the user named it — and **shows** `name` in the
-Plugins page's Name column (monkeytester-ai's row shows `monkeytester-ai` while it can't
+`default_name` (falling back to `name`) — the AI plugin is recognised by
+`default_name: "AI"` (compared case-insensitively; the legacy `monkeytester-ai` default of
+older AI builds is accepted too) however the user named it — and **shows** `name` in the
+Plugins page's Name column (AI's row shows `AI` while it can't
 be reached).
 
 `capabilities` lists the optional parts of this contract the plugin supports.
@@ -149,7 +158,8 @@ Only a plugin whose `/health` says `plugin.renamable: true` gets this call; any 
 plugin never receives it (the viewer answers a rename for it with 400 `not_renamable`
 itself). Auth like every non-`/health` route.
 
-- `POST /config {"name": "<new>"}`: a valid name (a string matching `PLUGIN_NAME_RE`) is
+- `POST /config {"name": "<new>"}`: a valid name (a string matching `PLUGIN_NAME_RE`,
+  i.e. uppercase) is
   persisted and the reply is `{"ok": true, "config": {…, "name", "default_name"}}`;
   `/health` reports the new `plugin.name` at once and after a restart. Not a string, or
   not matching the regex → 400 `bad_request`. Posting the `default_name` value restores
@@ -160,15 +170,21 @@ itself). Auth like every non-`/health` route.
 The user renames a plugin in its **Configure** panel on Settings → Plugins (a **Name**
 field, a "Default: <default_name>" hint and **Reset to default**; the panel's Save sends
 it). The viewer relays the call: `POST /api/config/visual-model {name}` for
-monkeytester-ai (no re-key: its row key stays `monkeytester-ai`), `POST
+AI (no re-key: its row key stays `AI`), `POST
 /api/config/plugins/<row>/config {name}` for a device plugin, whose registry row is then
 re-keyed to the new name like an address-edit rename (pairing token moved, response
 `renamed_from`). Before calling the plugin the viewer refuses a name another registered
-row (device, build or the vision-model plugin) already uses (400 `name_taken`); the
+row (device, build or the vision-model plugin) already uses (400 `name_taken`), a
+non-uppercase name (400 `bad_request`) and a built-in step command (400 `reserved_name`); the
 plugin's current name is a no-op. Both routes are admin-only.
 
-**`PLUGIN: <name>` steps use the current name**, so renaming a device plugin means
-updating the tests that call it.
+**`<NAME>: <action>` steps use the current name**, so renaming a plugin (the AI
+included: `VISION: CLICK …` after renaming it to VISION) means updating the tests that call it.
+
+On its first start after this change the viewer migrates config.json once: lowercase
+device-plugin keys of `plugins` are uppercased in place (service token `plugin:<old>` moves
+to `plugin:<NEW>`), `visual_plugin` `monkeytester-ai` becomes `AI`, and `MT_PLUGINS`
+names are uppercased when imported. Build plugin rows keep their names.
 
 ### `GET /docs` (optional)
 
@@ -192,7 +208,7 @@ plugin with the plugin's saved token (no redirects followed, `text/html` only, a
 it can run on the viewer's origin. The viewer accepts `docs` only as a path: a string
 starting with `/` (not `//`), no `\`, no scheme, no CR/LF, at most 256 characters.
 
-The same applies to monkeytester-ai (pairing token as `X-Plugin-Token`), to build
+The same applies to the AI plugin (pairing token as `X-Plugin-Token`), to build
 plugins ([BUILD_PLUGIN_API.md](BUILD_PLUGIN_API.md)) and to the Mobile Controller: its
 `GET /health` may carry `"docs": "/docs"` and its `GET /docs` takes `X-Controller-Token`
 like its other routes; its row's link is `/plugins/docs/controller`.
@@ -339,16 +355,22 @@ MonkeyTester reads the plugins it may call from the `plugins` map {name: url} in
 `Run/config.json` — registered on the Plugins page's **Test Plugins** Add row
 (add / edit address / remove; an address is stored only when its `GET /health`
 speaks this contract, under the `plugin.name` that `/health` reports). A `MT_PLUGINS=name=url[,name=url…]` environment variable is
-imported into that map ONCE at viewer start and ignored after that; the monkeytester-ai
+imported into that map ONCE at viewer start and ignored after that; the AI
 plugin's address is set in Settings → Device Plugins instead. A test step calls an
 action with:
 
 ```
-PLUGIN: <plugin> <action> [key=value …] [device=<id>] [timeout=<seconds>]
+<PLUGIN-NAME>: <action> [key=value …] [device=<id>] [timeout=<seconds>]
 ```
 
-`<plugin>` is the name the plugin reports in `/health` `plugin.name` (shown in the
-Name column on the Plugins page).
+`<PLUGIN-NAME>` is the name the plugin reports in `/health` `plugin.name` (shown in the
+Name column on the Plugins page), e.g. `ESP32-SERVER: expect`. It is written in any case in
+the test and uppercased like built-in commands; the colon is required (so `KEY=value`
+variable lines stay distinct). Any step may carry an `IF IOS:` / `IF ANDROID:` prefix
+(`IF IOS: ESP32-SERVER: expect`). An unknown name fails the step with
+`Unknown plugin 'X'. Configured plugins: …`. The old `PLUGIN: <plugin> <action>` form was
+removed: it is a parse error naming the line and the replacement
+(`PLUGIN: steps were removed; write "ESP32-SERVER: expect" (line 4)`).
 
 Values may be quoted (`pattern="WiFi connected"`). The step starts a job, waits for
 it, prints the job's `log` into the run's console log, and passes only if the job
@@ -363,7 +385,7 @@ in the order they arrive; a run waits until the run before it has completed.
 
 ### Inline blocks
 
-A `PLUGIN:` step may carry a block of free text: the lines after it, up to a line
+A plugin step may carry a block of free text: the lines after it, up to a line
 that is exactly `END`. MonkeyTester doesn't interpret the block. It strips each
 line's surrounding whitespace, drops blank lines, substitutes `${VAR}`s, and sends
 the lines joined with `\n` as the param `script`. An action that takes a block
@@ -403,23 +425,23 @@ knowing the device's language. Example, for an app test against a sensor board
 the sensor firmware):
 
 ```
-PLUGIN: esp32 flash firmware_dir=${FIRMWARE_DIR}
-PLUGIN: esp32 factory-reset
-PLUGIN: esp32 broadcast-ssid seconds=0
-PLUGIN: esp32 expect
+ESP32: flash firmware_dir=${FIRMWARE_DIR}
+ESP32: factory-reset
+ESP32: broadcast-ssid seconds=0
+ESP32: expect
   GET /temperature.json -> 200 {"device":"{device}","temperature_c":22.5,"ok":true,"err":0,"ip":"{ip}"}
   POST /setup -> 500
 END
-VERIFY: The temperature card shows 22.5 °C
-PLUGIN: esp32 expect
+AI: VERIFY The temperature card shows 22.5 °C
+ESP32: expect
   GET /temperature.json -> 500
 END
-VERIFY: The temperature card shows an error
-PLUGIN: esp32 expect
+AI: VERIFY The temperature card shows an error
+ESP32: expect
   GET /temperature.json -> normal
 END
-VERIFY: The temperature card shows a live reading
-PLUGIN: esp32 clear
+AI: VERIFY The temperature card shows a live reading
+ESP32: clear
 ```
 
 A block states only what changes. What the device keeps from earlier blocks is
