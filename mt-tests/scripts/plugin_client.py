@@ -493,9 +493,9 @@ def ai_validate_address(url, token=None, timeout=5):
 
 def validate_device_plugin(name, url, token=None, timeout=5):
     """Check a device-plugin address before saving it: `url` answers GET /health
-    speaking the plugin contract at a supported version (the registration name
-    is the viewer's own choice, so the plugin's /health name is NOT compared to
-    it). Returns (normalised url, /health body); raises PluginError with the
+    speaking the plugin contract at a supported version. The viewer passes the
+    name the plugin's own /health reported (it registers the plugin under
+    that name). Returns (normalised url, /health body); raises PluginError with the
     reason (the caller stores nothing then)."""
     url = normalize_plugin_url(url)
     client = PluginClient(name, url, token=token or None, timeout=timeout)

@@ -64,6 +64,14 @@ Same as [PLUGIN_API.md](PLUGIN_API.md):
 
 `viewer_url` above (`http://192.168.1.10:8089`) is an example address; the real value is your viewer's own address.
 
+- `plugin.name` is **required** and must match `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`
+  (`PLUGIN_NAME_RE`; the string form `"plugin": "build-local"` is accepted too). The viewer
+  registers the plugin under it (the Add row takes only the address; a `/health` without
+  a valid name is refused with `no_plugin_name`), and Build & Test projects refer to the
+  plugin by it, as tests do with `PLUGIN: <name>`. If the name changes, the next **Save
+  address** on its row renames the row: the pairing token moves and every project on the
+  old name is re-pointed. A name already registered at another address is refused
+  (`name_taken`).
 - `forge` is the code host the plugin reads from (`kind`: `gitea` or `github`).
 - `platforms`: what this host can build (detected at start: Xcode → `ios`, an Android SDK
   → `android`). Build & Test offers only these.

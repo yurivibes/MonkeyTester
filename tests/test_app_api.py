@@ -324,32 +324,135 @@ class PluginManageTests(ServerCase):
             e.close()
             raise
 
+    @staticmethod
+    def health(name="esp32-sensor", **extra):
+        return {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
+                "plugin": {"name": name, "version": "0.1"}, **extra}
+
+    def refused(self, payload):
+        """(status, body) of a POST that must fail."""
+        status, _, body = request(self.port, "POST", "/api/config/plugins", payload)
+        self.assertNotEqual(status, 200, body)
+        return status, body
+
+    def registry(self):
+        return json.loads((self.runs / "config.json").read_text())["plugins"]
+
+    def write_config(self, cfg):
+        (self.runs / "config.json").write_text(json.dumps(cfg))
+
     def test_set_needs_a_live_contract_plugin(self):
-        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
-                       "plugin": {"name": "monkeytester-esp32-sensor", "version": "0.1"}}
-        out = self.post("/api/config/plugins",
-                        {"set": {"name": "esp32-sensor", "url": self.peer_url + "/"}})
+        # No name in the op: the plugin's /health name is the registry key.
+        Peer.health = self.health("esp32-sensor")
+        out = self.post("/api/config/plugins", {"set": {"url": self.peer_url + "/"}})
         self.assertEqual(out["plugin"], {"name": "esp32-sensor", "url": self.peer_url,
                                          "ok": True, "contract_version": 1,
-                                         "plugin": {"name": "monkeytester-esp32-sensor",
+                                         "plugin": {"name": "esp32-sensor",
                                                     "version": "0.1"},
                                          "token": {"configured": False, "last4": "",
                                                    "saved_at": None}})
+        self.assertNotIn("renamed_from", out)
         cfg = json.loads((self.runs / "config.json").read_text())
         self.assertEqual(cfg["plugins"], {"esp32-sensor": self.peer_url})
         listed = {p["name"]: p for p in self.get_json("/api/plugins")["plugins"]}
         self.assertEqual(listed["esp32-sensor"]["source"], "config")
 
+    def test_string_plugin_form_names_the_plugin_too(self):
+        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
+                       "plugin": "hub"}
+        out = self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
+        self.assertEqual(out["plugin"]["name"], "hub")
+        self.assertEqual(self.registry(), {"hub": self.peer_url})
+
+    def test_name_in_set_is_refused(self):
+        Peer.health = self.health("hub")
+        status, body = self.refused({"set": {"name": "hub", "url": self.peer_url}})
+        self.assertEqual((status, body["code"]), (400, "bad_request"))
+        self.assertIn("/health", body["error"])
+        self.assertFalse((self.runs / "config.json").exists())
+
+    def test_health_without_a_usable_name_is_no_plugin_name(self):
+        for plugin in (None, {"version": "1"}, {"name": "Bad Name"}, "x!"):
+            Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
+            if plugin is not None:
+                Peer.health["plugin"] = plugin
+            status, body = self.refused({"set": {"url": self.peer_url}})
+            self.assertEqual((status, body["code"]), (400, "no_plugin_name"), plugin)
+        self.assertFalse((self.runs / "config.json").exists())
+
+    def test_taken_name_at_another_address_is_refused(self):
+        self.write_config({"plugins": {"esp32-sensor": "http://127.0.0.1:9"}})
+        Peer.health = self.health("esp32-sensor")
+        status, body = self.refused({"set": {"url": self.peer_url}})
+        self.assertEqual((status, body["code"]), (400, "name_taken"))
+        self.assertIn("http://127.0.0.1:9", body["error"])
+        self.assertEqual(self.registry(), {"esp32-sensor": "http://127.0.0.1:9"})
+
+    def test_same_name_same_address_is_an_idempotent_update(self):
+        Peer.health = self.health("esp32-sensor")
+        self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
+        out = self.post("/api/config/plugins", {"set": {"url": self.peer_url + "/",
+                                                        "token": "tok-abcd"}})
+        self.assertEqual(out["plugin"]["token"]["last4"], "abcd")
+        self.assertEqual(self.registry(), {"esp32-sensor": self.peer_url})
+        self.assertEqual(auth.plugin_token("esp32-sensor"), "tok-abcd")
+
+    def test_edit_with_row_and_same_name_updates_the_address(self):
+        self.write_config({"plugins": {"esp32-sensor": "http://127.0.0.1:9", "z": "http://z:1"}})
+        Peer.health = self.health("esp32-sensor")
+        out = self.post("/api/config/plugins",
+                        {"set": {"url": self.peer_url}, "row": "esp32-sensor"})
+        self.assertNotIn("renamed_from", out)
+        self.assertEqual(self.registry(), {"esp32-sensor": self.peer_url, "z": "http://z:1"})
+
+    def test_edit_renames_the_row_and_moves_its_token(self):
+        self.write_config({"plugins": {"a": "http://a:1", "old-name": "http://127.0.0.1:9",
+                                       "z": "http://z:1"}})
+        auth.set_service_token("plugin:old-name", "old-token-1234")
+        Peer.health = self.health("new-name")
+        out = self.post("/api/config/plugins",
+                        {"set": {"url": self.peer_url}, "row": "old-name"})
+        self.assertEqual(out["renamed_from"], "old-name")
+        self.assertEqual(out["plugin"]["name"], "new-name")
+        self.assertEqual(out["plugin"]["token"]["last4"], "1234")
+        # Same place in the list, under the new key.
+        self.assertEqual(list(self.registry().items()),
+                         [("a", "http://a:1"), ("new-name", self.peer_url), ("z", "http://z:1")])
+        self.assertEqual(auth.plugin_token("new-name"), "old-token-1234")
+        self.assertEqual(auth.plugin_token("old-name"), "")
+
+    def test_rename_with_a_new_token_uses_it(self):
+        self.write_config({"plugins": {"old-name": "http://127.0.0.1:9"}})
+        auth.set_service_token("plugin:old-name", "old-token-1234")
+        Peer.health = self.health("new-name")
+        self.post("/api/config/plugins",
+                  {"set": {"url": self.peer_url, "token": "new-token-5678"}, "row": "old-name"})
+        self.assertEqual(auth.plugin_token("new-name"), "new-token-5678")
+        self.assertEqual(auth.plugin_token("old-name"), "")
+
+    def test_rename_onto_another_existing_row_is_name_taken(self):
+        self.write_config({"plugins": {"one": "http://127.0.0.1:9", "two": "http://two:1"}})
+        Peer.health = self.health("two")
+        status, body = self.refused({"set": {"url": self.peer_url}, "row": "one"})
+        self.assertEqual((status, body["code"]), (400, "name_taken"))
+        self.assertEqual(self.registry(), {"one": "http://127.0.0.1:9", "two": "http://two:1"})
+
+    def test_edit_of_an_unregistered_row_is_nothing_to_edit(self):
+        Peer.health = self.health("esp32-sensor")
+        status, body = self.refused({"set": {"url": self.peer_url}, "row": "ghost"})
+        self.assertEqual((status, body["code"]), (400, "nothing_to_edit"))
+        self.assertFalse((self.runs / "config.json").exists())
+
     def test_set_seeds_the_map_from_live_env_entries(self):
-        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
+        Peer.health = self.health("new")
         with patch.dict(os.environ, {"MT_PLUGINS": "seed=http://127.0.0.1:9"}):
-            out = self.post("/api/config/plugins", {"set": {"name": "new", "url": self.peer_url}})
+            out = self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
         self.assertEqual(out["plugins"], {"seed": "http://127.0.0.1:9",
                                           "new": self.peer_url})
 
     def test_env_ignored_once_the_map_exists(self):
-        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
-        self.post("/api/config/plugins", {"set": {"name": "saved", "url": self.peer_url}})
+        Peer.health = self.health("saved")
+        self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
         with patch.dict(os.environ, {"MT_PLUGINS": "stale=http://127.0.0.1:9"}):
             names = [p["name"] for p in self.get_json("/api/plugins")["plugins"]]
         self.assertEqual(sorted(names), ["monkeytester-ai", "saved"])
@@ -361,35 +464,35 @@ class PluginManageTests(ServerCase):
     def test_set_refused_when_health_does_not_speak_the_contract(self):
         Peer.health = {}
         with self.assertRaises(urllib.error.HTTPError) as caught:
-            self.post("/api/config/plugins", {"set": {"name": "hub", "url": self.peer_url}})
+            self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
         self.assertEqual(caught.exception.code, 400)
+        caught.exception.close()
         self.assertFalse((self.runs / "config.json").exists())
 
     def test_set_refused_when_the_address_is_dead(self):
-        with self.assertRaises(urllib.error.HTTPError) as caught:
-            self.post("/api/config/plugins",
-                      {"set": {"name": "hub", "url": "http://127.0.0.1:9"}})
-        self.assertEqual(caught.exception.code, 400)
+        status, body = self.refused({"set": {"url": "http://127.0.0.1:9"}})
+        self.assertEqual((status, body["code"]), (400, "unreachable"))
 
     def test_set_rejects_bad_reserved_or_malformed_input(self):
-        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
+        Peer.health = self.health("hub")
         bad = [{"set": {"name": "monkeytester-ai", "url": self.peer_url}},
-               {"set": {"name": "Bad Name", "url": self.peer_url}},
-               {"set": {"name": "x!", "url": self.peer_url}},
-               {"set": {"name": "hub", "url": "ftp://a"}},
-               {"set": {"name": "hub"}},
+               {"set": {"url": "ftp://a"}},
+               {"set": {"url": ""}},
+               {"set": {}},
                {"set": "hub"},
-               {"set": {"name": "hub", "url": self.peer_url}, "remove": "other"}]
+               {"set": {"url": self.peer_url, "extra": 1}},
+               {"set": {"url": self.peer_url}, "row": "Bad Name"},
+               {"set": {"url": self.peer_url}, "remove": "other"}]
         for payload in bad:
             with self.assertRaises(urllib.error.HTTPError) as caught:
                 self.post("/api/config/plugins", payload)
-            self.assertEqual(caught.exception.code, 400)
+            self.assertEqual(caught.exception.code, 400, payload)
             caught.exception.close()
         self.assertFalse((self.runs / "config.json").exists())
 
     def test_remove_forgets_a_registration(self):
-        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1}
-        self.post("/api/config/plugins", {"set": {"name": "gone", "url": self.peer_url}})
+        Peer.health = self.health("gone")
+        self.post("/api/config/plugins", {"set": {"url": self.peer_url}})
         out = self.post("/api/config/plugins", {"remove": "gone"})
         self.assertEqual(out["plugins"], {})
         names = [p["name"] for p in self.get_json("/api/plugins")["plugins"]]
@@ -897,9 +1000,9 @@ class VisualModelPluginTests(ServerCase):
         url = self.serve_plugin()
         AiPlugin.state["require_token"] = True
         with patch.dict(os.environ, {"MT_PLUGINS": ""}):
-            # Any typed name: the /health plugin name decides.
+            # No name in the op: the /health plugin name decides.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"name": "vision", "url": url + "/",
+                                      {"set": {"url": url + "/",
                                                "token": "secret-tok-9876"}})
             self.assertEqual(status, 200, body)
             self.assertTrue(body["ai"])
@@ -915,10 +1018,10 @@ class VisualModelPluginTests(ServerCase):
             out = self.get_json("/api/plugins")
             self.assertEqual(out["ai_plugin"]["url"], url)
             self.assertTrue(out["ai_plugin"]["configured"])
-            # Save address on the AI row: same set op, name monkeytester-ai,
-            # no token -> the stored pairing token is used.
+            # Save address on the AI row: same set op with row
+            # monkeytester-ai, no token -> the stored pairing token is used.
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"name": "monkeytester-ai", "url": url}})
+                                      {"set": {"url": url}, "row": "monkeytester-ai"})
             self.assertEqual(status, 200, body)
             self.assertEqual(self.config()["visual_api_key"], "secret-tok-9876")
             # Remove clears the AI keys; the legacy endpoint keeps working too.
@@ -940,12 +1043,53 @@ class VisualModelPluginTests(ServerCase):
             self.assertEqual(status, 200, body)
             self.assertEqual(self.config()["visual_plugin_url"], url)
 
+    def test_plugins_endpoint_ai_row_edits_stay_ai_to_ai(self):
+        """The vision-model plugin is added/removed through the Add row: an
+        address edit never turns the AI row into another plugin or another
+        row into the AI plugin; a second AI address on the Add row is
+        name_taken."""
+        url = self.serve_plugin()
+        Peer.health = {"ok": True, "contract": "monkeytester-plugin", "contract_version": 1,
+                       "plugin": {"name": "esp32-sensor"}}
+        with patch.dict(os.environ, {"MT_PLUGINS": ""}):
+            # Row monkeytester-ai not configured yet: nothing to edit.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"url": url}, "row": "monkeytester-ai"})
+            self.assertEqual((status, body["code"]), (400, "nothing_to_edit"))
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"url": url}})
+            self.assertEqual(status, 200, body)
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"url": self.peer_url}})
+            self.assertEqual(status, 200, body)
+            before = self.config()
+            # The AI row onto a device plugin's address.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"url": self.peer_url}, "row": "monkeytester-ai"})
+            self.assertEqual((status, body["code"]), (400, "bad_request"))
+            self.assertIn("Add row", body["error"])
+            # A device row onto the AI plugin's address.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"url": url}, "row": "esp32-sensor"})
+            self.assertEqual((status, body["code"]), (400, "bad_request"))
+            self.assertIn("Add row", body["error"])
+            # Another AI address on the Add row while one is configured.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"url": url.replace("127.0.0.1", "localhost")}})
+            self.assertEqual((status, body["code"]), (400, "name_taken"))
+            self.assertEqual(self.config(), before)
+            # The AI row onto (another form of) an AI address keeps working.
+            status, _, body = request(self.port, "POST", "/api/config/plugins",
+                                      {"set": {"url": url + "/"}, "row": "monkeytester-ai"})
+            self.assertEqual(status, 200, body)
+            self.assertTrue(body["ai"])
+
     def test_plugins_endpoint_ai_set_stores_nothing_when_the_token_is_rejected(self):
         url = self.serve_plugin()
         AiPlugin.state["require_token"] = True
         with patch.dict(os.environ, {"MT_PLUGINS": ""}):
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"name": "vision", "url": url, "token": "wrong"}})
+                                      {"set": {"url": url, "token": "wrong"}})
         self.assertNotEqual(status, 200, body)
         self.assertEqual(body["code"], "unauthorized")
         path = self.runs / "config.json"
@@ -2070,7 +2214,7 @@ class ManagedAiPluginTests(ServerCase):
         before = self.write_stale()
         with self.managed():
             status, _, body = request(self.port, "POST", "/api/config/plugins",
-                                      {"set": {"name": "monkeytester-ai", "url": self.url}})
+                                      {"set": {"url": self.url}, "row": "monkeytester-ai"})
             self.assertEqual(status, 409, body)
             status, _, body = request(self.port, "POST", "/api/config/plugins",
                                       {"remove": "monkeytester-ai"})

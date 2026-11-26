@@ -4402,8 +4402,19 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
     def handle_plugin_config(self):
         """POST /api/config/plugins — one action per request, in the shared
         Settings → Plugins registry (config.json `plugins`):
-        {"set": {"name": n, "url": u[, "token": t]}} registers/updates one
-        plugin — its /health contract decides the kind: a device plugin
+        {"set": {"url": u[, "token": t]}} registers/updates one plugin under
+        the name its GET /health reports (`plugin.name`, or the string form
+        `"plugin": "x"`, matching PLUGIN_NAME_RE — the only source of the
+        name; a "name" key in set is refused, a /health without a usable
+        name is 400 no_plugin_name). That name already registered at another
+        address is 400 name_taken; the same name at the same address is an
+        idempotent update. {"set": {...}, "row": current} edits that row's
+        address (400 nothing_to_edit when `row` is not registered); when the
+        new address reports another name the row is RENAMED: the key moves,
+        the service token plugin:<old> moves to plugin:<new> (unless the op
+        brings a token), build projects on the old name are re-pointed, and
+        the response carries "renamed_from"; renaming onto another existing
+        row is name_taken. The /health contract decides the kind: a device plugin
         (contract 'monkeytester-plugin') is stored as name: url, a build
         plugin (contract 'monkeytester-build-plugin') as name: {"url", "token"}
         (token: a string sets the pairing token, null clears it, absent or
@@ -4412,10 +4423,13 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         a project refuses. The first write seeds the map from the MT_PLUGINS
         entries still live then, and afterwards Settings owns the list.
         monkeytester-ai goes through the same Add row: a set op whose
-        address's /health names plugin monkeytester-ai (or whose name is
+        address's /health names plugin monkeytester-ai (or whose row is
         monkeytester-ai) is stored the AI way (_ai_plugin_address_op:
         visual_plugin_url + visual_plugin, token -> visual_api_key), and
-        {"remove": "monkeytester-ai"} clears it; managed mode refuses (409)."""
+        {"remove": "monkeytester-ai"} clears it; managed mode refuses (409).
+        Editing another row onto a monkeytester-ai address, or the
+        monkeytester-ai row onto a non-AI address, is 400 bad_request (the
+        vision-model plugin is added/removed through the Add row)."""
         try:
             data = json.loads(self._body())
         except ValueError:
@@ -4492,116 +4506,175 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
                 auth.set_service_token(f"plugin:{name}", "")
             self.send_json({"ok": True, "removed": name, "plugins": safe_plugins(base)})
             return
-        if set(data) == {"set"}:
-            op = data["set"]
-            if not isinstance(op, dict) or not {"name", "url"} <= set(op) \
-                    or set(op) - {"name", "url", "token"}:
-                bad('set must be {"name": ..., "url": ...} (plus an optional "token")')
+        if set(data) in ({"set"}, {"set", "row"}):
+            self._plugin_set_op(data, pc, bpc, bad, safe_plugins, base_and_save)
+            return
+        bad('expected exactly one of {"set": ...} (plus an optional "row") / {"remove": ...}')
+
+    def _plugin_set_op(self, data, pc, bpc, bad, safe_plugins, base_and_save):
+        """The set op of POST /api/config/plugins (see handle_plugin_config):
+        {"set": {"url", "token"?}[, "row": current name]}. The plugin's
+        /health `plugin.name` is its registry name; with `row` the existing
+        row's address is edited, and a different health name renames it."""
+        op = data["set"]
+        if isinstance(op, dict) and "name" in op:
+            bad('plugin names come from the plugin\'s /health; drop "name"')
+            return
+        if not isinstance(op, dict) or "url" not in op or set(op) - {"url", "token"}:
+            bad('set must be {"url": ...} (plus an optional "token")')
+            return
+        url = op["url"]
+        if not isinstance(url, str) or not url.strip():
+            bad("url must be an http(s):// address", "bad_url")
+            return
+        row = data.get("row")
+        if "row" in data and not (isinstance(row, str) and pc.PLUGIN_NAME_RE.fullmatch(row)):
+            bad(f"row {row!r} must be the name of a registered plugin")
+            return
+        token_given = "token" in op
+        token_val = op.get("token")
+        if token_given and not (token_val is None or isinstance(token_val, str)):
+            bad("token must be a string or null")
+            return
+        ai = pc.AI_PLUGIN_NAME
+        same_addr = url.strip().rstrip("/")
+        # One /health read: the contract decides the kind, plugin.name the name.
+        status, health = _get_json(f"{same_addr}/health", timeout=5)
+        answered = status is not None and status < 300 and isinstance(health, dict)
+        contract = health.get("contract") if answered else None
+        hplugin = health.get("plugin") if answered else None
+        hname = hplugin.get("name") if isinstance(hplugin, dict) else hplugin
+        if not (isinstance(hname, str) and pc.PLUGIN_NAME_RE.fullmatch(hname)):
+            hname = None
+        if hname == ai or row == ai:
+            # monkeytester-ai is added through the same Add row, but it is
+            # stored the AI way (config.json visual_plugin_url +
+            # visual_plugin, the op's token becomes visual_api_key) and
+            # validated by ai_validate_address — never in `plugins`.
+            if managed_ai_plugin():
+                self.send_json_status(409, {"error": MANAGED_AI_MESSAGE})
                 return
-            name, url = op["name"], op["url"]
-            if not isinstance(name, str) or not pc.PLUGIN_NAME_RE.fullmatch(name):
-                bad(f"plugin name {name!r} must match {pc.PLUGIN_NAME_RE.pattern}")
+            if row is not None and (row != ai or (hname is not None and hname != ai)):
+                bad("the vision-model plugin is added/removed through the Add row")
                 return
-            token_given = "token" in op
-            token_val = op.get("token")
-            if token_given and not (token_val is None or isinstance(token_val, str)):
-                bad("token must be a string or null")
-                return
-            # One /health read decides which contract the address speaks.
-            status, health = _get_json(f"{(url or '').strip().rstrip('/')}/health", timeout=5)
-            contract = (health or {}).get("contract") if isinstance(health, dict) else None
-            hplugin = (health or {}).get("plugin") if isinstance(health, dict) else None
-            hname = hplugin.get("name") if isinstance(hplugin, dict) else hplugin
-            if hname == pc.AI_PLUGIN_NAME or name == pc.AI_PLUGIN_NAME:
-                # monkeytester-ai is added through the same Add row, but it is
-                # stored the AI way (config.json visual_plugin_url +
-                # visual_plugin, the op's token becomes visual_api_key) and
-                # validated by ai_validate_address — never in `plugins`.
-                if managed_ai_plugin():
-                    self.send_json_status(409, {"error": MANAGED_AI_MESSAGE})
+            with _CONFIG_LOCK:
+                current = ai_plugin_url(load_config())
+                if row == ai and not current:
+                    bad(f"no plugin {row!r} registered", "nothing_to_edit")
                     return
-                if not isinstance(url, str) or not url.strip():
-                    bad("url must be an http(s):// address", "bad_url")
+                if row is None and current and current.rstrip("/") != same_addr:
+                    bad(f"a plugin named {ai} is already registered at {current}; "
+                        "edit that row's address instead", "name_taken")
                     return
-                with _CONFIG_LOCK:
-                    status, body = _ai_plugin_address_op(
-                        url, token_val if isinstance(token_val, str) else None)
-                if status != 200:
-                    self.send_json_status(status, body)
-                    return
-                self.send_json({"ok": True, "ai": True,
-                                "plugin": {"name": pc.AI_PLUGIN_NAME,
-                                           "url": body["plugin_url"],
-                                           "token": body["token"]}})
+                status, body = _ai_plugin_address_op(
+                    url, token_val if isinstance(token_val, str) else None)
+            if status != 200:
+                self.send_json_status(status, body)
                 return
-            if contract == bpc.CONTRACT:
-                with _CONFIG_LOCK:
-                    config = load_config()
-                    base = base_and_save(config)
-                    saved_token = auth.plugin_token(name)
-                    if not token_given or token_val == "":
-                        use = saved_token
-                    elif token_val is None:
-                        use = ""
-                    else:
-                        use = str(token_val).strip()
-                    try:
-                        url, body = bpc.validate(name, url, token=use or None,
-                                                 timeout=builds.HEALTH_TIMEOUT + 2)
-                    except bpc.BuildPluginError as e:
-                        bad(e.message, e.code)
-                        return
+            self.send_json({"ok": True, "ai": True,
+                            "plugin": {"name": ai, "url": body["plugin_url"],
+                                       "token": body["token"]}})
+            return
+        if hname is None:
+            if not answered or contract not in (pc.CONTRACT, bpc.CONTRACT):
+                # Unreachable / not a plugin: the contract check says why.
+                try:
+                    pc.validate_device_plugin(row or "plugin", url)
+                except pc.PluginError as e:
+                    bad(e.message, e.code)
+                    return
+            bad(f"{same_addr}/health reports no plugin name: a plugin names itself "
+                f"with plugin.name matching {pc.PLUGIN_NAME_RE.pattern}", "no_plugin_name")
+            return
+        name = hname
+        build = contract == bpc.CONTRACT
+        b = _builds()
+        # A build-plugin rename re-points projects: hold builds' lock too.
+        with _CONFIG_LOCK, (b._LOCK if build else threading.RLock()):
+            config = load_config()
+            base = base_and_save(config)
+            if row is not None and row not in base:
+                bad(f"no plugin {row!r} registered", "nothing_to_edit")
+                return
+            old = row if row is not None else name
+
+            def entry_url(entry):
+                return (entry.get("url") if isinstance(entry, dict) else entry) or ""
+
+            if name in base and (name != old or (row is None and
+                                 entry_url(base[name]).rstrip("/") != same_addr)):
+                bad(f"a plugin named {name} is already registered at "
+                    f"{entry_url(base[name])}; edit that row's address instead", "name_taken")
+                return
+            if row is not None and isinstance(base[row], dict) != build:
+                bad(f"{row} is a {'build' if isinstance(base[row], dict) else 'test'} plugin "
+                    f"but {same_addr} is a {'build' if build else 'test'} plugin; "
+                    "add it with the other section's Add row")
+                return
+            saved_token = auth.plugin_token(old)  # carried across a rename
+            if not token_given or token_val == "":
+                use = saved_token
+            elif token_val is None:
+                use = ""
+            else:
+                use = str(token_val).strip()
+            try:
+                if build:
+                    url, body = bpc.validate(name, url, token=use or None,
+                                             timeout=builds.HEALTH_TIMEOUT + 2)
                     # The pairing token lives in service_tokens.json (0600),
                     # never in config.json.
-                    base[name] = {"url": url, "token": ""}
-                    config["plugins"] = base
-                    save_config(config)
-                    if use != saved_token:
-                        auth.set_service_token(f"plugin:{name}", use)
-                self.send_json({"ok": True,
-                                "plugin": {"name": name, "url": url,
-                                           "ok": bool(body.get("ok")),
-                                           "contract_version": body.get("contract_version"),
-                                           "plugin": body.get("plugin"),
-                                           "forge": body.get("forge"),
-                                           "token": builds.token_info(use)},
-                                "plugins": safe_plugins(base)})
+                    entry = {"url": url, "token": ""}
+                else:
+                    url, body = pc.validate_device_plugin(name, url, token=use or None)
+                    if use and use != saved_token:
+                        # The token must open an authenticated route, not just /health.
+                        pc.PluginClient(name, url, token=use, timeout=5).devices(timeout=5)
+                    entry = url
+            except bpc.BuildPluginError as e:
+                bad(e.message, e.code)
                 return
-            saved_token = auth.plugin_token(name)
-            if not token_given or token_val == "":
-                token = saved_token
-            elif token_val is None:
-                token = ""
-            else:
-                token = str(token_val).strip()
-            try:
-                url, body = pc.validate_device_plugin(name, url, token=token or None)
-                if token and token != saved_token:
-                    # The token must open an authenticated route, not just /health.
-                    pc.PluginClient(name, url, token=token, timeout=5).devices(timeout=5)
             except pc.PluginError as e:
                 if e.status == 401:
                     bad("the plugin rejected the token (GET /devices: 401)", "unauthorized")
                 else:
                     bad(e.message, e.code)
                 return
-            with _CONFIG_LOCK:
-                config = load_config()
-                base = base_and_save(config)
-                base[name] = url
-                config["plugins"] = base
-                save_config(config)
-            if token != saved_token:
-                auth.set_service_token(f"plugin:{name}", token)
-            self.send_json({"ok": True,
-                            "plugin": {"name": name, "url": url,
-                                       "ok": bool(body.get("ok")),
-                                       "contract_version": body.get("contract_version"),
-                                       "plugin": body.get("plugin"),
-                                       "token": auth.token_info({"token": token})},
-                            "plugins": safe_plugins(base)})
-            return
-        bad('expected exactly one of {"set": ...} / {"remove": ...}')
+            renamed = old != name
+            # Rebuilt in order so a renamed row keeps its place.
+            base = {(name if k == old else k): (entry if k == old else v)
+                    for k, v in base.items()}
+            base[name] = entry
+            config["plugins"] = base
+            save_config(config)
+            if renamed:
+                if build:
+                    bcfg = b.load_config()
+                    moved = [p for p in bcfg["projects"] if p["plugin"] == old]
+                    for p in moved:
+                        p["plugin"] = name
+                    if moved:
+                        b.save_config(bcfg)
+                if auth.plugin_token(old):
+                    auth.set_service_token(f"plugin:{old}", "")
+                if use != auth.plugin_token(name):
+                    auth.set_service_token(f"plugin:{name}", use)
+                _PLUGIN_SELECTED_CACHE.pop(old, None)
+                print(f"plugin {old} renamed to {name} (its /health name) at {url}",
+                      file=sys.stderr, flush=True)
+            elif use != saved_token:
+                auth.set_service_token(f"plugin:{name}", use)
+        info = {"name": name, "url": url, "ok": bool(body.get("ok")),
+                "contract_version": body.get("contract_version"),
+                "plugin": body.get("plugin")}
+        if build:
+            info.update(forge=body.get("forge"), token=builds.token_info(use))
+        else:
+            info["token"] = auth.token_info({"token": use})
+        out = {"ok": True, "plugin": info, "plugins": safe_plugins(base)}
+        if renamed:
+            out["renamed_from"] = old
+        self.send_json(out)
 
     def handle_delete_runs(self):
         """POST /api/runs/delete — body: {"runs": ["run_1", "run_2", ...]}.
