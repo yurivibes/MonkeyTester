@@ -410,10 +410,13 @@ class CiTokenTests(AuthCase):
         self.assertEqual(request(self.port, "GET", "/api/runs/run_1/result", headers=wrong,
                                  auth=False)[0], 401)
 
-    def upload(self, headers):
+    def upload(self, headers, build_request=BUILD_ID):
         submit = load_submit()
+        fields = {"device_mode": "android"}
+        if build_request:
+            fields["build_request"] = build_request
         ctype, body = submit.build_multipart(
-            {"device_mode": "android", "build_request": BUILD_ID},
+            fields,
             [("apk", "app.apk", b"PK-not-really"),
              ("tests", "INSTRUCTION.txt", b"MODE: once\n"), ("tests", "a.txt", b"AI: VERIFY x\n")])
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/run-test", data=body,
@@ -448,6 +451,25 @@ class CiTokenTests(AuthCase):
         self.assertEqual(status, 200, body)
         status, body = self.upload({**anon, "Authorization": "Bearer wrong"})
         self.assertEqual(status, 401)
+
+    def test_ci_token_may_start_a_run_without_a_build(self):
+        # An app repo's PR workflow submits with the CI token and no build.
+        self.runner()
+        anon = {"Cookie": "none=1"}
+        token = self.generate()
+        bearer = {**anon, "Authorization": f"Bearer {token}"}
+        status, body = self.upload(bearer, build_request="")
+        self.assertEqual(status, 200, body)
+        self.assertTrue(body.get("run_id"), body)
+        # Without the token, or with a signed-in session, it is still refused.
+        status, body = self.upload(anon, build_request="")
+        self.assertEqual(status, 400, body)
+        self.assertIn("Runs start from Build & Test", body.get("error", ""))
+        status, body = self.upload({}, build_request="")
+        self.assertEqual(status, 400, body)
+        # An unknown build id is refused even with the token.
+        status, body = self.upload(bearer, build_request="build_000000000000")
+        self.assertEqual(status, 400, body)
 
     def test_a_pending_build_may_upload_once_without_a_token(self):
         # The build-local plugin uploads with --build-request and no CI token.
