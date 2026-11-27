@@ -319,9 +319,11 @@ renamed `gitea_config.json.migrated`, so the viewer no longer holds a code host 
 
 ## Upload
 
-Every run starts from Build & Test: the viewer accepts an upload only when its
-`build_request` names a build it started (anything else is refused with "Runs start from
-Build & Test"). Build & Test asks the plugin to build with three inputs — `platforms`, `cases`
+Runs start from Build & Test: the viewer accepts an upload when its `build_request` names a
+build it started. The one exception is CI holding the viewer's CI token (`MT_CI_TOKEN`): an
+app repo's own PR workflow may upload with no `build_request` at all, and that run belongs
+to no build. Anything else is refused with "Runs start from Build & Test", and an unknown
+`build_request` is refused even with the token. Build & Test asks the plugin to build with three inputs — `platforms`, `cases`
 and `request_id` — and the plugin sends the built apps back with `build_request` = `request_id`,
 so the run attaches to the build.
 

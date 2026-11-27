@@ -4091,14 +4091,18 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             self.send_json_status(400, {"error": str(e)})
             return
 
-        # Runs come only from a Build & Test build (the viewer's build, or CI
-        # submitting for one). A manual upload of an app is not accepted.
+        # Runs come from a Build & Test build (the viewer's build, or CI
+        # submitting for one), or from CI with the CI token and no
+        # build_request (an app repo's own PR workflow). A manual upload of an
+        # app is not accepted, and an unknown build_request is refused even
+        # with the token.
         build_request = (fields.get("build_request") or "").strip()
         try:
             known_build = bool(build_request) and _builds().load_build(build_request)
         except builds.BuildError:
             known_build = False
-        if not known_build:
+        ci_without_build = not build_request and self.auth_via == "ci_token"
+        if not known_build and not ci_without_build:
             self.send_json_status(400, {
                 "error": "Runs start from Build & Test: send a build_request naming a build"})
             return
