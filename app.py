@@ -3334,7 +3334,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
         # Theme endpoint — public: the index/build pages read the saved theme
         elif path == "/api/theme":
-            self.send_json({"theme": load_config().get("theme", "dark")})
+            self.send_json(theme_info(saved_theme()))
 
         # Config endpoint
         elif path == "/api/config":
@@ -3489,15 +3489,16 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         if filepath.exists():
             content_type = "text/html"
             body = filepath.read_text()
-            body = body.replace("{{CSS}}", SHARED_CSS)
+            body = body.replace("{{CSS}}", SHARED_CSS + THEMES_CSS)
             body = body.replace("{{SETTINGS_CSS}}", SETTINGS_CSS)
             body = body.replace("{{JS}}", SHARED_JS)
             # Apply the saved theme before first paint: the server knows the
             # theme, so a light-mode page never flashes dark on page switches —
             # no dependence on this browser's localStorage.
-            if load_config().get("theme", "dark") == "light":
+            theme = saved_theme()
+            if theme != "dark":
                 body = body.replace('<html lang="en">',
-                                    '<html lang="en" data-theme="light">', 1)
+                                    f'<html lang="en" data-theme="{theme}">', 1)
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Cache-Control", "no-store")
@@ -4402,7 +4403,7 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode())
 
     def update_theme(self):
-        """POST /api/theme — body: {"theme": "light"|"dark"}.
+        """POST /api/theme — body: {"theme": <a THEMES id>}.
 
         Public: every page offers a theme toggle, and the theme is a
         cosmetic preference, not sensitive state.
@@ -4411,13 +4412,14 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
         try:
             data = json.loads(body)
             theme = data.get("theme")
-            if theme not in ("light", "dark"):
-                self.send_json_status(400, {"error": "theme must be 'light' or 'dark'"})
+            if theme not in THEMES:
+                self.send_json_status(400, {"error": "unknown theme"})
                 return
-            config = load_config()
-            config["theme"] = theme
-            save_config(config)
-            self.send_json({"theme": theme})
+            with _CONFIG_LOCK:
+                config = load_config()
+                config["theme"] = theme
+                save_config(config)
+            self.send_json(theme_info(theme))
         except Exception:
             self.send_error(400)
 
@@ -4427,6 +4429,9 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
             data = json.loads(body)
             if not isinstance(data, dict):
                 self.send_json_status(400, {"error": "Expected a JSON object"})
+                return
+            if "theme" in data and data["theme"] not in THEMES:
+                self.send_json_status(400, {"error": "unknown theme"})
                 return
             # Settings -> Test Variables: `test_variables` is the one key with
             # a shape to check, so a mistyped save is rejected with a message
@@ -5397,6 +5402,175 @@ class TestViewerHandler(SimpleHTTPRequestHandler):
 
     # ─── Shared CSS & JS template string for all pages ───
 
+# ─── Colour themes (Settings → Configuration → Appearance) ───
+# "dark" and "light" are the MonkeyTester palettes in SHARED_CSS. The others
+# are common editor themes mapped onto the same tokens: each keeps its own
+# accent and status colours, but any colour that missed WCAG 4.5:1 on the
+# theme's backgrounds had only its lightness moved until it passed, and every
+# accent stays clearly apart from PASS/FAIL (ThemeRegistryTests). "pair" is
+# the opposite-mode theme of the same family (the login page's toggle).
+THEMES = {
+    "dark": {"label": "MonkeyTester Dark", "mode": "dark", "pair": "light"},
+    "light": {"label": "MonkeyTester Light", "mode": "light", "pair": "dark"},
+    "catppuccin-latte": {"label": "Catppuccin Latte", "mode": "light", "pair": "catppuccin-mocha", "vars": {
+        "--bg": "#eff1f5", "--surface": "#e6e9ef", "--card": "#dce0e8", "--card-hover": "#ccd0da",
+        "--text": "#4c4f69", "--text-muted": "#5e6175", "--accent": "#7f31e1", "--accent-dim": "#d5c3f3",
+        "--acid": "#8839ef", "--on-acid": "#eff1f5", "--border": "#bcc0cc", "--border-strong": "#4c4f69",
+        "--shadow": "#4c4f69", "--grid": "rgba(76,79,105,0.045)", "--pass": "#1e7105", "--fail": "#c50032",
+        "--running": "#1357dd", "--warn": "#8f5300", "--pass-bg": "rgba(30,113,5,0.12)", "--fail-bg": "rgba(197,0,50,0.1)",
+        "--skip": "#5e6175", "--skip-bg": "rgba(94,97,117,0.15)", "--on-status": "#ffffff", "--pop": "#8839ef",
+        "--brand-2": "#c50032",
+    }},
+    "catppuccin-frappe": {"label": "Catppuccin Frappé", "mode": "dark", "pair": "catppuccin-latte", "vars": {
+        "--bg": "#303446", "--surface": "#292c3c", "--card": "#414559", "--card-hover": "#51576d",
+        "--text": "#c6d0f5", "--text-muted": "#adb5d5", "--accent": "#d0a5ec", "--accent-dim": "#524b69",
+        "--acid": "#ca9ee6", "--on-acid": "#303446", "--border": "#51576d", "--border-strong": "#c6d0f5",
+        "--shadow": "#c6d0f5", "--grid": "rgba(198,208,245,0.035)", "--pass": "#a6d189", "--fail": "#fb9b9c",
+        "--running": "#98b5f8", "--warn": "#e5c890", "--pass-bg": "rgba(166,209,137,0.15)", "--fail-bg": "rgba(251,155,156,0.15)",
+        "--skip": "#adb5d5", "--skip-bg": "rgba(173,181,213,0.15)", "--on-status": "#303446", "--pop": "#ca9ee6",
+        "--brand-2": "#fb9b9c",
+    }},
+    "catppuccin-macchiato": {"label": "Catppuccin Macchiato", "mode": "dark", "pair": "catppuccin-latte", "vars": {
+        "--bg": "#24273a", "--surface": "#1e2030", "--card": "#363a4f", "--card-hover": "#494d64",
+        "--text": "#cad3f5", "--text-muted": "#a5adcb", "--accent": "#c6a0f6", "--accent-dim": "#484263",
+        "--acid": "#c6a0f6", "--on-acid": "#24273a", "--border": "#494d64", "--border-strong": "#cad3f5",
+        "--shadow": "#cad3f5", "--grid": "rgba(202,211,245,0.035)", "--pass": "#a6da95", "--fail": "#ee8998",
+        "--running": "#8aadf4", "--warn": "#eed49f", "--pass-bg": "rgba(166,218,149,0.15)", "--fail-bg": "rgba(238,137,152,0.15)",
+        "--skip": "#a5adcb", "--skip-bg": "rgba(165,173,203,0.15)", "--on-status": "#24273a", "--pop": "#c6a0f6",
+        "--brand-2": "#ee8998",
+    }},
+    "catppuccin-mocha": {"label": "Catppuccin Mocha", "mode": "dark", "pair": "catppuccin-latte", "vars": {
+        "--bg": "#1e1e2e", "--surface": "#181825", "--card": "#313244", "--card-hover": "#45475a",
+        "--text": "#cdd6f4", "--text-muted": "#a6adc8", "--accent": "#cba6f7", "--accent-dim": "#443c5a",
+        "--acid": "#cba6f7", "--on-acid": "#1e1e2e", "--border": "#45475a", "--border-strong": "#cdd6f4",
+        "--shadow": "#cdd6f4", "--grid": "rgba(205,214,244,0.035)", "--pass": "#a6e3a1", "--fail": "#f38ba8",
+        "--running": "#89b4fa", "--warn": "#f9e2af", "--pass-bg": "rgba(166,227,161,0.15)", "--fail-bg": "rgba(243,139,168,0.15)",
+        "--skip": "#a6adc8", "--skip-bg": "rgba(166,173,200,0.15)", "--on-status": "#1e1e2e", "--pop": "#cba6f7",
+        "--brand-2": "#f38ba8",
+    }},
+    "dracula": {"label": "Dracula", "mode": "dark", "pair": "light", "vars": {
+        "--bg": "#282a36", "--surface": "#21222c", "--card": "#343746", "--card-hover": "#44475a",
+        "--text": "#f8f8f2", "--text-muted": "#a3acd0", "--accent": "#bd93f9", "--accent-dim": "#494161",
+        "--acid": "#bd93f9", "--on-acid": "#282a36", "--border": "#44475a", "--border-strong": "#f8f8f2",
+        "--shadow": "#f8f8f2", "--grid": "rgba(248,248,242,0.035)", "--pass": "#50fa7b", "--fail": "#ff7a75",
+        "--running": "#8be9fd", "--warn": "#f1fa8c", "--pass-bg": "rgba(80,250,123,0.15)", "--fail-bg": "rgba(255,122,117,0.15)",
+        "--skip": "#a3acd0", "--skip-bg": "rgba(163,172,208,0.15)", "--on-status": "#282a36", "--pop": "#bd93f9",
+        "--brand-2": "#ff7a75",
+    }},
+    "nord": {"label": "Nord", "mode": "dark", "pair": "light", "vars": {
+        "--bg": "#2e3440", "--surface": "#3b4252", "--card": "#3b4252", "--card-hover": "#434c5e",
+        "--text": "#eceff4", "--text-muted": "#d8dee9", "--accent": "#95b4d2", "--accent-dim": "#404c5c",
+        "--acid": "#81a1c1", "--on-acid": "#2e3440", "--border": "#4c566a", "--border-strong": "#eceff4",
+        "--shadow": "#eceff4", "--grid": "rgba(236,239,244,0.035)", "--pass": "#a3be8c", "--fail": "#ee999f",
+        "--running": "#c9a5c2", "--warn": "#ebcb8b", "--pass-bg": "rgba(163,190,140,0.15)", "--fail-bg": "rgba(238,153,159,0.15)",
+        "--skip": "#d8dee9", "--skip-bg": "rgba(216,222,233,0.15)", "--on-status": "#2e3440", "--pop": "#81a1c1",
+        "--brand-2": "#ee999f",
+    }},
+    "gruvbox-dark": {"label": "Gruvbox Dark", "mode": "dark", "pair": "gruvbox-light", "vars": {
+        "--bg": "#282828", "--surface": "#1d2021", "--card": "#3c3836", "--card-hover": "#504945",
+        "--text": "#ebdbb2", "--text-muted": "#b1a28e", "--accent": "#8aab9e", "--accent-dim": "#3c4441",
+        "--acid": "#83a598", "--on-acid": "#282828", "--border": "#504945", "--border-strong": "#ebdbb2",
+        "--shadow": "#ebdbb2", "--grid": "rgba(235,219,178,0.035)", "--pass": "#b8bb26", "--fail": "#ff7d66",
+        "--running": "#da8ea3", "--warn": "#fabd2f", "--pass-bg": "rgba(184,187,38,0.15)", "--fail-bg": "rgba(255,125,102,0.15)",
+        "--skip": "#b1a28e", "--skip-bg": "rgba(177,162,142,0.15)", "--on-status": "#282828", "--pop": "#83a598",
+        "--brand-2": "#ff7d66",
+    }},
+    "gruvbox-light": {"label": "Gruvbox Light", "mode": "light", "pair": "gruvbox-dark", "vars": {
+        "--bg": "#fbf1c7", "--surface": "#f9f5d7", "--card": "#ebdbb2", "--card-hover": "#d5c4a1",
+        "--text": "#3c3836", "--text-muted": "#685d53", "--accent": "#076678", "--accent-dim": "#beceb3",
+        "--acid": "#076678", "--on-acid": "#fbf1c7", "--border": "#d5c4a1", "--border-strong": "#3c3836",
+        "--shadow": "#3c3836", "--grid": "rgba(60,56,54,0.045)", "--pass": "#676200", "--fail": "#9d0006",
+        "--running": "#8f3f71", "--warn": "#885400", "--pass-bg": "rgba(103,98,0,0.12)", "--fail-bg": "rgba(157,0,6,0.1)",
+        "--skip": "#685d53", "--skip-bg": "rgba(104,93,83,0.15)", "--on-status": "#ffffff", "--pop": "#076678",
+        "--brand-2": "#9d0006",
+    }},
+    "solarized-dark": {"label": "Solarized Dark", "mode": "dark", "pair": "solarized-light", "vars": {
+        "--bg": "#002b36", "--surface": "#00212b", "--card": "#073642", "--card-hover": "#0a4252",
+        "--text": "#93a1a1", "--text-muted": "#8c9d9f", "--accent": "#8d94e1", "--accent-dim": "#183a55",
+        "--acid": "#6c71c4", "--on-acid": "#000000", "--border": "#0a4252", "--border-strong": "#93a1a1",
+        "--shadow": "#93a1a1", "--grid": "rgba(147,161,161,0.035)", "--pass": "#90a426", "--fail": "#fe6a5e",
+        "--running": "#4aa1e4", "--warn": "#bf9427", "--pass-bg": "rgba(144,164,38,0.15)", "--fail-bg": "rgba(254,106,94,0.15)",
+        "--skip": "#8c9d9f", "--skip-bg": "rgba(140,157,159,0.15)", "--on-status": "#002b36", "--pop": "#6c71c4",
+        "--brand-2": "#fe6a5e",
+    }},
+    "solarized-light": {"label": "Solarized Light", "mode": "light", "pair": "solarized-dark", "vars": {
+        "--bg": "#fdf6e3", "--surface": "#fffbf0", "--card": "#eee8d5", "--card-hover": "#e4ddc8",
+        "--text": "#546a70", "--text-muted": "#556971", "--accent": "#5c60ac", "--accent-dim": "#d9d5db",
+        "--acid": "#6c71c4", "--on-acid": "#000000", "--border": "#d6cfb8", "--border-strong": "#546a70",
+        "--shadow": "#546a70", "--grid": "rgba(84,106,112,0.045)", "--pass": "#5e6e00", "--fail": "#c62524",
+        "--running": "#086ba8", "--warn": "#856100", "--pass-bg": "rgba(94,110,0,0.12)", "--fail-bg": "rgba(198,37,36,0.1)",
+        "--skip": "#556971", "--skip-bg": "rgba(85,105,113,0.15)", "--on-status": "#ffffff", "--pop": "#6c71c4",
+        "--brand-2": "#c62524",
+    }},
+    "tokyo-night": {"label": "Tokyo Night", "mode": "dark", "pair": "light", "vars": {
+        "--bg": "#1a1b26", "--surface": "#16161e", "--card": "#24283b", "--card-hover": "#292e42",
+        "--text": "#c0caf5", "--text-muted": "#a9b1d6", "--accent": "#bb9af7", "--accent-dim": "#3d3754",
+        "--acid": "#bb9af7", "--on-acid": "#1a1b26", "--border": "#3b4261", "--border-strong": "#c0caf5",
+        "--shadow": "#c0caf5", "--grid": "rgba(192,202,245,0.035)", "--pass": "#9ece6a", "--fail": "#f7768e",
+        "--running": "#7aa2f7", "--warn": "#e0af68", "--pass-bg": "rgba(158,206,106,0.15)", "--fail-bg": "rgba(247,118,142,0.15)",
+        "--skip": "#a9b1d6", "--skip-bg": "rgba(169,177,214,0.15)", "--on-status": "#1a1b26", "--pop": "#bb9af7",
+        "--brand-2": "#f7768e",
+    }},
+    "one-dark": {"label": "One Dark", "mode": "dark", "pair": "light", "vars": {
+        "--bg": "#282c34", "--surface": "#21252b", "--card": "#2c313c", "--card-hover": "#3b4048",
+        "--text": "#abb2bf", "--text-muted": "#9da5b4", "--accent": "#c97ce0", "--accent-dim": "#4b3d59",
+        "--acid": "#c678dd", "--on-acid": "#282c34", "--border": "#3e4451", "--border-strong": "#abb2bf",
+        "--shadow": "#abb2bf", "--grid": "rgba(171,178,191,0.035)", "--pass": "#98c379", "--fail": "#ea7981",
+        "--running": "#61afef", "--warn": "#e5c07b", "--pass-bg": "rgba(152,195,121,0.15)", "--fail-bg": "rgba(234,121,129,0.15)",
+        "--skip": "#9da5b4", "--skip-bg": "rgba(157,165,180,0.15)", "--on-status": "#282c34", "--pop": "#c678dd",
+        "--brand-2": "#ea7981",
+    }},
+    "github-dark": {"label": "GitHub Dark", "mode": "dark", "pair": "github-light", "vars": {
+        "--bg": "#0d1117", "--surface": "#010409", "--card": "#161b22", "--card-hover": "#1c2128",
+        "--text": "#e6edf3", "--text-muted": "#8d96a0", "--accent": "#58a6ff", "--accent-dim": "#1e324a",
+        "--acid": "#58a6ff", "--on-acid": "#0d1117", "--border": "#30363d", "--border-strong": "#e6edf3",
+        "--shadow": "#e6edf3", "--grid": "rgba(230,237,243,0.035)", "--pass": "#3fb950", "--fail": "#f85149",
+        "--running": "#a371f7", "--warn": "#d29922", "--pass-bg": "rgba(63,185,80,0.15)", "--fail-bg": "rgba(248,81,73,0.15)",
+        "--skip": "#8d96a0", "--skip-bg": "rgba(141,150,160,0.15)", "--on-status": "#0d1117", "--pop": "#58a6ff",
+        "--brand-2": "#f85149",
+    }},
+    "github-light": {"label": "GitHub Light", "mode": "light", "pair": "github-dark", "vars": {
+        "--bg": "#ffffff", "--surface": "#f6f8fa", "--card": "#f6f8fa", "--card-hover": "#eaeef2",
+        "--text": "#1f2328", "--text-muted": "#59636e", "--accent": "#0969da", "--accent-dim": "#c2daf6",
+        "--acid": "#0969da", "--on-acid": "#ffffff", "--border": "#d0d7de", "--border-strong": "#1f2328",
+        "--shadow": "#1f2328", "--grid": "rgba(31,35,40,0.045)", "--pass": "#1a7f37", "--fail": "#d1242f",
+        "--running": "#8250df", "--warn": "#986600", "--pass-bg": "rgba(26,127,55,0.12)", "--fail-bg": "rgba(209,36,47,0.1)",
+        "--skip": "#59636e", "--skip-bg": "rgba(89,99,110,0.15)", "--on-status": "#ffffff", "--pop": "#0969da",
+        "--brand-2": "#d1242f",
+    }},
+}
+
+
+def theme_css():
+    """One `:root[data-theme=<id>]` block per extra theme (not dark/light,
+    which live in SHARED_CSS)."""
+    out = []
+    for key, theme in THEMES.items():
+        if "vars" not in theme:
+            continue
+        body = "\n".join(f"    {name}: {value};" for name, value in theme["vars"].items())
+        # color-scheme themes the native parts (dropdown lists, scrollbars).
+        out.append(f'/* {theme["label"]} */\n:root[data-theme="{key}"] {{\n'
+                   f'    color-scheme: {theme["mode"]};\n{body}\n}}')
+    return "\n".join(out) + "\n"
+
+
+THEMES_CSS = theme_css()
+
+
+def saved_theme():
+    """The saved theme id, falling back to dark for a missing/unknown value."""
+    theme = load_config().get("theme", "dark")
+    return theme if theme in THEMES else "dark"
+
+
+def theme_info(theme):
+    """GET/POST /api/theme answer: the theme plus its mode, pair and the list
+    the Settings dropdown renders."""
+    return {"theme": theme, "mode": THEMES[theme]["mode"], "pair": THEMES[theme]["pair"],
+            "themes": [{"id": k, "label": v["label"], "mode": v["mode"]} for k, v in THEMES.items()]}
+
+
 SHARED_CSS = r"""
 /* Palette shared with the MonkeyTester website: ink, bone and orange.
    Dark is the default; light (Settings → Configuration) is the bone-paper version.
@@ -5404,6 +5578,7 @@ SHARED_CSS = r"""
    as the text drawn on it. PASS keeps its own green so it never reads as
    "accent". */
 :root {
+    color-scheme: dark;
     --bg: #060606;
     --surface: #0e0e0e;
     --card: #161616;
@@ -5430,8 +5605,9 @@ SHARED_CSS = r"""
     --pop: #ff6a00;
     --brand-2: #ff1f4f;
 }
-/* Light theme (opt-in via Settings → Light Mode) */
+/* Light theme (opt-in via Settings → Appearance → Theme) */
 :root[data-theme="light"] {
+    color-scheme: light;
     --bg: #efece4;
     --surface: #f7f5ef;
     --card: #e4e0d5;
@@ -5773,8 +5949,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--acid); }
 .btn-run:disabled, .settings-save-btn:disabled, .save-btn:disabled, .config-save-all button:disabled { box-shadow: none; transform: none; }
 
 /* Inputs */
-.settings-field input, .stream-controls select { border-width: 2px; }
-.settings-field input:focus, .stream-controls select:focus { border-color: var(--acid); box-shadow: 3px 3px 0 var(--pop); }
+.settings-field input, .settings-field select, .stream-controls select { border-width: 2px; }
+.settings-field input:focus, .settings-field select:focus, .stream-controls select:focus { border-color: var(--acid); box-shadow: 3px 3px 0 var(--pop); }
 
 @media (prefers-reduced-motion: reduce) {
     .run-item, .btn-run, .settings-save-btn, .save-btn, .config-save-all button { transition: none; }
@@ -5791,7 +5967,7 @@ SETTINGS_CSS = r"""
 .settings-section h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; }
 .settings-field { margin-bottom: 16px; }
 .settings-field label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
-.settings-field input {
+.settings-field input, .settings-field select {
     width: 100%;
     max-width: 480px;
     background: var(--card);
@@ -5801,7 +5977,7 @@ SETTINGS_CSS = r"""
     border-radius: 6px;
     font-size: 0.9rem;
 }
-.settings-field input:focus { outline: none; border-color: var(--accent); }
+.settings-field input:focus, .settings-field select:focus { outline: none; border-color: var(--accent); }
 .settings-field input::placeholder { color: var(--text-muted); opacity: 0.6; }
 .settings-field .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
 .settings-status { font-size: 0.75rem; min-height: 16px; margin-bottom: 12px; }
@@ -5857,10 +6033,10 @@ function renderDefaultPasswordBanner() {
     document.body.insertBefore(el, document.body.firstChild);
 }
 
-// ── Theme (dark by default; light mode is opt-in from Settings) ──
+// ── Theme (dark by default; other themes are picked in Settings) ──
 function applyTheme(theme) {
-    if (theme === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
+    if (theme && theme !== 'dark') {
+        document.documentElement.setAttribute('data-theme', theme);
     } else {
         document.documentElement.removeAttribute('data-theme');
     }
@@ -5873,7 +6049,7 @@ Promise.resolve().then(() => fetchJSON('/api/config')).then(cfg => {
     applyTheme(cfg.theme);
 }).catch(() => {});
 function setTheme(theme) {
-    theme = theme === 'light' ? 'light' : 'dark';
+    theme = theme || 'dark';
     applyTheme(theme);
     fetch('/api/config', {
         method: 'POST',

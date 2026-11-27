@@ -160,11 +160,9 @@
     <div class="settings-section" id="appearanceSection">
         <h3>Appearance</h3>
         <div class="settings-field">
-            <label for="light_mode" class="settings-toggle-label">
-                <input type="checkbox" id="light_mode" style="width:auto;margin-right:8px;vertical-align:middle;" />
-                Light Mode
-            </label>
-            <div class="hint">Switches the viewer from the dark theme to a light theme. Applies immediately and is remembered.</div>
+            <label for="theme_select">Theme</label>
+            <select id="theme_select"></select>
+            <div class="hint">Colour theme for every page: the MonkeyTester palettes or a common editor theme (Catppuccin, Dracula, Nord, Gruvbox, Solarized, Tokyo Night, One Dark, GitHub). Applies immediately and is remembered.</div>
         </div>
         <div class="settings-actions">
             <span class="settings-status" id="appearanceStatus"></span>
@@ -495,18 +493,31 @@ async function saveTestVars() {
 loadBuildSettings(false);
 loadTestVars();
 
-// Appearance: the Light Mode toggle (moved here from the retired Appearance page).
-function syncLightModeCheckbox() {
-    const cb = document.getElementById("light_mode");
-    if (cb) cb.checked = document.documentElement.getAttribute("data-theme") === "light";
+// Appearance: the Theme dropdown. The list comes from /api/theme (the
+// server's THEMES registry), grouped into dark and light themes.
+function renderThemeSelect(info) {
+    const sel = document.getElementById("theme_select");
+    if (!sel) return;
+    sel.textContent = "";
+    for (const [mode, label] of [["dark", "Dark themes"], ["light", "Light themes"]]) {
+        const group = document.createElement("optgroup");
+        group.label = label;
+        for (const t of info.themes.filter(t => t.mode === mode)) {
+            const opt = document.createElement("option");
+            opt.value = t.id;
+            opt.textContent = t.label;
+            group.appendChild(opt);
+        }
+        sel.appendChild(group);
+    }
+    sel.value = info.theme;
 }
-document.getElementById("light_mode").addEventListener("change", (e) => {
-    setTheme(e.target.checked ? "light" : "dark");
-    setStatus("appearanceStatus", e.target.checked ? "Light mode on" : "Dark mode on", "saved");
+document.getElementById("theme_select").addEventListener("change", (e) => {
+    setTheme(e.target.value);
+    const label = e.target.selectedOptions[0] ? e.target.selectedOptions[0].textContent : e.target.value;
+    setStatus("appearanceStatus", "Theme: " + label, "saved");
 });
-Promise.resolve().then(() => fetchJSON("/api/config")).then(() => {
-    syncLightModeCheckbox();
-}).catch(() => {});
+Promise.resolve().then(() => fetchJSON("/api/theme")).then(renderThemeSelect).catch(() => {});
 
 // ── Account: own password + logout ──
 function updatePasswordSaveBtn() {

@@ -52,20 +52,22 @@ fetch("/api/auth/status").then(r => r.json()).then(s => {
 }).catch(() => {});
 
 const themeToggle = document.getElementById("themeToggle");
-function applyTheme(theme) {
-    if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+// The toggle switches between the light and dark theme of the saved theme's
+// family (e.g. Catppuccin Mocha <-> Latte); /api/theme names the pair.
+let themePair = "light";
+function applyTheme(info) {
+    if (info.theme && info.theme !== "dark") document.documentElement.setAttribute("data-theme", info.theme);
     else document.documentElement.removeAttribute("data-theme");
-    themeToggle.textContent = theme === "light" ? "Light" : "Dark";
+    themeToggle.textContent = info.mode === "light" ? "Light" : "Dark";
+    themePair = info.pair || (info.mode === "light" ? "dark" : "light");
 }
 themeToggle.addEventListener("click", function() {
-    const theme = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
-    applyTheme(theme);
-    try { localStorage.setItem("mt-theme", theme); } catch (e) {}
     fetch("/api/theme", { method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ theme: theme }) }).catch(() => {});
+                          body: JSON.stringify({ theme: themePair }) })
+        .then(r => r.json()).then(applyTheme).catch(() => {});
 });
-fetch("/api/theme").then(r => r.json()).then(cfg => applyTheme(cfg.theme || "dark"))
-    .catch(() => applyTheme("dark"));
+fetch("/api/theme").then(r => r.json()).then(applyTheme)
+    .catch(() => applyTheme({ theme: "dark", mode: "dark", pair: "light" }));
 
 document.getElementById("loginForm").addEventListener("submit", function(e) {
     e.preventDefault();
