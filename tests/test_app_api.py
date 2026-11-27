@@ -680,15 +680,113 @@ class ThemeFontsTests(ServerCase):
             self.assertFalse(old in app.SHARED_CSS, old)
 
 
+def _lin(x):
+    return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
+
+
+def _rgb(h):
+    h = h.lstrip("#")
+    return [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+
+
+def _contrast(a, b):
+    la, lb = (0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(bl)
+              for r, g, bl in (_rgb(a), _rgb(b)))
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _oklab_distance(a, b):
+    def oklab(h):
+        r, g, bl = (_lin(x) for x in _rgb(h))
+        l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * bl) ** (1 / 3)
+        m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * bl) ** (1 / 3)
+        s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * bl) ** (1 / 3)
+        return (0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+                1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+                0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s)
+    return sum((x - y) ** 2 for x, y in zip(oklab(a), oklab(b))) ** 0.5
+
+
+class ThemeRegistryTests(ServerCase):
+    """Settings offers the MonkeyTester palettes plus common editor themes
+    (Catppuccin, Dracula, Nord, Gruvbox, Solarized, Tokyo Night, One Dark,
+    GitHub). Each extra theme defines every colour token, passes WCAG AA and
+    keeps its accent clearly apart from the status colours."""
+    EXPECTED = {"dark", "light", "catppuccin-latte", "catppuccin-frappe", "catppuccin-macchiato",
+                "catppuccin-mocha", "dracula", "nord", "gruvbox-dark", "gruvbox-light",
+                "solarized-dark", "solarized-light", "tokyo-night", "one-dark",
+                "github-dark", "github-light"}
+
+    def extra(self):
+        return {k: v for k, v in app.THEMES.items() if "vars" in v}
+
+    def test_registry_lists_the_offered_themes(self):
+        self.assertEqual(set(app.THEMES), self.EXPECTED)
+
+    def test_every_extra_theme_defines_every_token_of_the_default_palette(self):
+        dark_block = app.SHARED_CSS.split(":root {", 1)[1].split("}", 1)[0]
+        tokens = set(re.findall(r"(--[a-z0-9-]+):", dark_block))
+        for key, theme in self.extra().items():
+            self.assertEqual(set(theme["vars"]), tokens, key)
+            self.assertIn(f':root[data-theme="{key}"] {{', app.THEMES_CSS)
+
+    def test_pairs_are_the_opposite_mode(self):
+        for key, theme in app.THEMES.items():
+            pair = app.THEMES[theme["pair"]]
+            self.assertNotEqual(pair["mode"], theme["mode"], key)
+
+    def test_wcag_aa_text_and_badges(self):
+        for key, theme in self.extra().items():
+            v = theme["vars"]
+            for fg in ("--text", "--text-muted", "--accent", "--pass", "--fail", "--running", "--warn"):
+                for bg in ("--bg", "--surface", "--card"):
+                    self.assertGreaterEqual(_contrast(v[fg], v[bg]), 4.5, (key, fg, bg))
+            self.assertGreaterEqual(_contrast(v["--on-acid"], v["--acid"]), 4.5, key)
+            for status in ("--pass", "--fail", "--running", "--warn"):
+                self.assertGreaterEqual(_contrast(v["--on-status"], v[status]), 4.5, (key, status))
+
+    def test_accent_never_reads_as_a_status(self):
+        # Benchmark: MonkeyTester's own orange vs its FAIL crimson (user-accepted).
+        bench = min(_oklab_distance("#ff6a00", "#ff1f4f"), _oklab_distance("#9a3d00", "#b3083a"))
+        for key, theme in self.extra().items():
+            v = theme["vars"]
+            for acc in ("--accent", "--acid"):
+                for status in ("--pass", "--fail"):
+                    self.assertGreaterEqual(_oklab_distance(v[acc], v[status]), bench, (key, acc, status))
+                for status in ("--running", "--warn"):
+                    self.assertGreaterEqual(_oklab_distance(v[acc], v[status]), 0.07, (key, acc, status))
+
+    def test_api_theme_round_trip_and_first_paint(self):
+        status, _, body = request(self.port, "POST", "/api/theme", {"theme": "catppuccin-mocha"})
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["theme"], body["mode"], body["pair"]),
+                         ("catppuccin-mocha", "dark", "catppuccin-latte"))
+        self.assertEqual({t["id"] for t in body["themes"]}, self.EXPECTED)
+        status, page = raw_get(self.port, "/")
+        self.assertIn(b'<html lang="en" data-theme="catppuccin-mocha">', page)
+        self.assertIn(b':root[data-theme="catppuccin-mocha"]', page)
+
+    def test_unknown_theme_is_refused_everywhere(self):
+        self.assertEqual(request(self.port, "POST", "/api/theme", {"theme": "bogus"})[0], 400)
+        self.assertEqual(request(self.port, "POST", "/api/config", {"theme": "bogus"})[0], 400)
+        self.assertEqual(request(self.port, "POST", "/api/config", {"theme": "nord"})[0], 200)
+        # A stale/unknown saved value falls back to dark (plain html tag).
+        (self.runs / "config.json").write_text(json.dumps({"theme": "bogus"}))
+        status, page = raw_get(self.port, "/")
+        self.assertIn(b'<html lang="en">', page)
+        self.assertEqual(request(self.port, "GET", "/api/theme")[2]["theme"], "dark")
+
+
 class SettingsPagesTests(ServerCase):
     """The settings sections are one page each (login required: these tests
     run signed in as an admin). The Models page is retired: the picker lives inside
     the Device Plugins panel, so /models redirects there. The Appearance page
-    is retired the same way: its Light Mode toggle lives on /config. The Device
+    is retired the same way: its Theme dropdown lives on /config. The Device
     Config page is retired too: its options live in the Device Config section
     on /plugins."""
     PAGES = {
-        "/config": [b'id="buildSection"', b'id="light_mode"'],
+        "/config": [b'id="buildSection"', b'id="theme_select"'],
         "/plugins": [b'id="pluginsTable"', b'id="buildPluginsTable"', b'id="controllerTable"',
                      b'id="controllerConfigure"'],
         "/run-status": [b'id="runStatusPanel"'],
