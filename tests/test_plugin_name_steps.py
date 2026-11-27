@@ -202,7 +202,7 @@ class NameRuleTests(unittest.TestCase):
         src = (SCRIPTS / "test_runner_core.py").read_text()
         body = src[src.index("def execute_step("):src.index("\ndef run_single_test(")]
         dispatched = set(re.findall(r'cmd == "([A-Z_]+)"', body))
-        self.assertTrue({"VERIFY", "CLICK", "INPUT", "WAIT", "SNAPSHOT", "LAUNCH"} <= dispatched)
+        self.assertTrue({"VERIFY", "CLICK", "INPUT", "WAIT", "LAUNCH"} <= dispatched)
         self.assertLessEqual(dispatched, pc.RESERVED_STEP_NAMES)
         self.assertLessEqual(set(pc.AI_VISION_VERBS), pc.RESERVED_STEP_NAMES)
         self.assertLessEqual({"PLUGIN", "IF", "END", "MODE", "CLEAR_DATA", "REINSTALL_APP"},

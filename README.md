@@ -49,7 +49,8 @@ standard library, so there is no `pip install` step. They need:
 Phones are driven by MonkeyTester-Plugin-Mobile-Controller
 on a Mac and the vision model by MonkeyTester-Plugin-AI;
 ESP32 boards by MonkeyTester-Plugin-Esp32
-and MonkeyTester-Plugin-Server.
+and MonkeyTester-Plugin-Server; `DIFF: SNAPSHOT` / `DIFF: ASSERT_LAYOUT` steps by
+MonkeyTester-Plugin-Diff.
 Build & Test builds your app through a build plugin (see [Build & Test](#build--test)).
 Each is a separate repo with its own install steps, and none of them is needed to install
 the viewer or run its tests.
@@ -251,9 +252,16 @@ AI: VERIFY The temperature card shows a live reading
 ESP32: clear
 ```
 
-Fonts, styles and asset placement are checked with `SNAPSHOT` (compare against a baseline kept
-in the test case, per screen class) and `ASSERT_LAYOUT` (positions of tagged elements in pt/dp).
-See [SNAPSHOTS.md](SNAPSHOTS.md).
+Fonts, styles and asset placement are checked with `DIFF: SNAPSHOT` (compare against a baseline
+kept in the test case, per screen class) and `DIFF: ASSERT_LAYOUT` (positions of tagged elements in
+pt/dp). Both run in the DIFF plugin (MonkeyTester-Plugin-Diff, added on Settings → Plugins);
+without it these steps fail with `DIFF plugin is not configured: add MonkeyTester-Plugin-Diff on
+Settings → Plugins`. See [SNAPSHOTS.md](SNAPSHOTS.md).
+
+```
+DIFF: ASSERT_LAYOUT eula_agree below eula_terms gap>=8
+DIFF: SNAPSHOT eula mask=status_bar
+```
 
 ## Build & Test
 
@@ -429,9 +437,7 @@ Setup:
 | `mt-tests/scripts/vision_analyzer.py` | HTTP client for the vision model |
 | `mt-tests/scripts/plugin_client.py` | HTTP client for device plugins (`PLUGIN_API.md`) |
 | `PLUGIN_API.md` | the device plugin contract |
-| `mt-tests/scripts/snapshots.py` | `SNAPSHOT`: screen classes, 1x PNG compare, masks (stdlib only) |
-| `mt-tests/scripts/layout.py` | `ASSERT_LAYOUT` checks |
-| `SNAPSHOTS.md` | snapshot and layout steps, baselines, record mode |
+| `SNAPSHOTS.md` | `DIFF: SNAPSHOT` / `DIFF: ASSERT_LAYOUT` steps (compare code in MonkeyTester-Plugin-Diff), baselines, record mode |
 | `mt-tests/scripts/press_events.py` | fire-and-forget press event emitter |
 
 ## Notes

@@ -11,6 +11,7 @@ Implementations:
 |---|---|---|
 | `ESP32-SENSOR` | MonkeyTester-Plugin-Esp32 | 8091 |
 | `ESP32-SERVER` | MonkeyTester-Plugin-Server | 8093 |
+| `DIFF` | MonkeyTester-Plugin-Diff | 8095 (`DIFF: SNAPSHOT …`, `DIFF: ASSERT_LAYOUT …`; see SNAPSHOTS.md) |
 | `AI` | MonkeyTester-Plugin-AI | 8091 (on the Mac, e.g. `http://192.168.1.20:8091`, an example address; use your Mac's); address set in Settings → Device Plugins, not `MT_PLUGINS` |
 
 The Mobile Controller still uses its own API (`API.md` in that repo); moving it onto
@@ -263,6 +264,39 @@ Parameter `type` is one of `string`, `int`, `float`, `bool`, `enum` (with
 `needs_device: false` marks actions that don't target a board (for example a
 plugin-wide reset); for those `device` may be omitted.
 
+#### Runner-supplied params (`source`)
+
+A param spec may carry `"source": "<kind>"`. MonkeyTester then fills that param itself
+before it starts the job; the test author never writes it, and a step that sets it
+(`DIFF: ECHO platform=ios`) fails before any job with `platform= is filled by MonkeyTester
+(source: platform); remove it from the step`. The runner fills params by `source` only,
+never by plugin or action name, so any plugin can use them:
+
+| `source` | Param type | Value |
+|---|---|---|
+| `screenshot` | `path` | A fresh controller screenshot (PNG, device pixels), sent as the raw PNG body (`Content-Type: image/png`) to the plugin's `POST /uploads`; the param is the returned `upload:<id>` |
+| `screen` | `json` | The controller's `GET /devices/<id>/screen` dict (`{width, height, scale}`, device px) |
+| `elements` | `json` | The controller's `GET /devices/<id>/elements` list `[{id, x, y, w, h, …}]` (device px) |
+| `platform` | `string` | `android` or `ios` (the device under test) |
+| `baselines` | `path` | The current test case's baselines as a zip (`Content-Type: application/zip`) to `POST /uploads`: members `snapshots/<android\|ios>/<W>x<H>@<scale>x/<name>.png` (regular files matching that layout only; other files and symlinks are left out; an empty zip when the case has none) |
+| `record` | `bool` | `true` in record mode (`--record-snapshots`) |
+| `args` | `string` | The raw rest of the step line after the action, `${VAR}` resolved (`DIFF: SNAPSHOT eula mask=status_bar` → `eula mask=status_bar`) |
+
+- An action with a `source: args` param takes its arguments as free text: the step line is
+  NOT split into `key=value` params, so `device=` / `timeout=` step options don't apply;
+  the plugin parses the text itself.
+- `"when": "<condition>"` (optional) fills the param only when the condition holds for
+  the step's `args` text. Known conditions: `tag_mask` (the text has a `tag:<id>` mask,
+  e.g. `"elements": {"type": "json", "source": "elements", "when": "tag_mask"}`). An
+  unknown condition fills the param anyway.
+- `"required": true`: when the value can't be made (controller down, screenshot failed,
+  upload refused) the step fails before the job, naming the param. A param that is not
+  required is left out instead, and the console log says why.
+- An unknown `source` fails the step (the plugin needs a newer MonkeyTester).
+- `screenshot` and `baselines` need the `uploads` capability.
+- Action names are matched exactly first, then case-insensitively when exactly one action
+  matches (`DIFF: snapshot` runs `SNAPSHOT`).
+
 ### `POST /jobs`
 
 Start an action.
@@ -344,10 +378,33 @@ logs. Each event's `data` is:
 ### `POST /uploads`
 
 Optional (capability `uploads`). For when MonkeyTester and the plugin run on
-different hosts. The body is a zip archive (`Content-Type: application/zip`); the
-plugin unpacks it and returns `201 {"upload": "upload:<id>", "path": "<host path>"}`.
+different hosts. The body is a zip archive (`Content-Type: application/zip`), or — for
+a plugin with a `screenshot` source param — a single PNG (`Content-Type: image/png`); the
+plugin unpacks / stores it and returns `201 {"upload": "upload:<id>", "path": "<host path>"}`.
 `upload:<id>` can then be passed to any `path` parameter. Uploads are deleted after
-an hour.
+an hour. MonkeyTester uses it for the `screenshot` and `baselines` runner-supplied params
+(one upload per param per step, see above); the plugin resolves `upload:<id>` to the
+stored file or unpacked folder.
+
+### Result shapes MonkeyTester understands
+
+`job.result` is action-specific, but the runner recognises two shapes and turns them into
+the step's result detail (what `test.html` shows under the step):
+
+- **Snapshot** — a result with `actual_png_b64`: `{name, status: match|mismatch|missing|recorded,
+  message, screen_class, diff_percent, tolerance, baseline_path (relative to the case's
+  snapshots/, e.g. "ios/375x667@2x/eula.png"), actual_png_b64, diff_png_b64 (or null)}`.
+  The runner writes `outputs/[<case>/]snapshots/<name>.actual.png`, `<name>.diff.png` (when
+  `diff_png_b64` is set) and `<name>.baseline.png` (its own copy of the case's baseline, when
+  the status is `match` or `mismatch`), then sets `step.snapshot = {name, status,
+  screen_class, baseline_path, diff_percent, tolerance, message, actual, baseline, diff}`
+  (file paths relative to the run). `name` must match `[A-Za-z0-9][A-Za-z0-9_.-]{0,99}` and
+  `baseline_path` `<android|ios>/<W>x<H>@<scale>x/<name>.png`, else nothing is written. The
+  base64 fields are shortened to their length in the console log.
+- **Layout** — a result with exactly `passed` (bool) and `message`: `step.layout = {passed,
+  message}`.
+
+The step's pass/fail still comes only from the job state (`passed`).
 
 ## Using plugins from tests
 

@@ -118,10 +118,14 @@ class PluginClient:
 
     # ── HTTP ──
 
-    def _request(self, method, path, payload=None, timeout=None):
+    def _request(self, method, path, payload=None, timeout=None, raw_body=None,
+                 content_type=None):
         headers = {"Accept": "application/json"}
         data = None
-        if payload is not None:
+        if raw_body is not None:
+            data = bytes(raw_body)
+            headers["Content-Type"] = content_type or "application/octet-stream"
+        elif payload is not None:
             data = json.dumps(payload).encode()
             headers["Content-Type"] = "application/json"
         if self.token:
@@ -200,6 +204,31 @@ class PluginClient:
             raise PluginError(f"unknown action {name!r} (actions: {known})", "unknown_action",
                               plugin=self.name)
         return action
+
+    def resolve_action(self, name):
+        """The action `name` names: the exact name, else the one action whose
+        name matches in any case (`DIFF: snapshot` finds `SNAPSHOT`). Raises
+        PluginError(unknown_action) like action() when there is none."""
+        actions = self.actions()
+        if name in actions:
+            return name
+        matches = [key for key in actions if key.lower() == str(name).lower()]
+        if len(matches) == 1:
+            return matches[0]
+        self.action(name)  # raises unknown_action with the list
+        return name
+
+    def upload(self, data, content_type="application/zip", timeout=60):
+        """POST /uploads (contract capability `uploads`): the body is a zip
+        archive, or a single PNG (`image/png`, the `screenshot` source);
+        returns the `upload:<id>` reference a `path` param accepts."""
+        body = self._request("POST", "/uploads", timeout=timeout, raw_body=data,
+                             content_type=content_type)
+        ref = body.get("upload")
+        if not isinstance(ref, str) or not ref.startswith("upload:"):
+            raise PluginError("POST /uploads returned no upload:<id>", "bad_response",
+                              plugin=self.name)
+        return ref
 
     def coerce_params(self, action, params):
         """Convert string values to the types in the action's param schema.
@@ -371,6 +400,20 @@ RESERVED_STEP_NAMES = frozenset({
     "IF", "END",
     "MODE", "CLEAR_DATA", "REINSTALL_APP",
 })
+
+
+# Steps that moved out of the runner into a plugin: the bare `SNAPSHOT:` /
+# `ASSERT_LAYOUT:` lines are parse errors naming `DIFF: <STEP> ...`, and a
+# DIFF step with no DIFF plugin configured names the repo to add.
+DIFF_PLUGIN_NAME = "DIFF"
+DIFF_PLUGIN_STEPS = ("SNAPSHOT", "ASSERT_LAYOUT")
+
+# Plugin name -> the repo that provides it, for the "not configured" message.
+PLUGIN_REPOS = {DIFF_PLUGIN_NAME: "MonkeyTester-Plugin-Diff"}
+
+# `source` values an action's param spec may carry: the runner fills such a
+# param itself before the job starts (PLUGIN_API.md "Runner-supplied params").
+PARAM_SOURCES = ("screenshot", "screen", "elements", "platform", "baselines", "record", "args")
 
 
 def valid_plugin_name(value):

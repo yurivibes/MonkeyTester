@@ -36,6 +36,8 @@ Device plugins (Linux or Mac) — separate repos, contract in PLUGIN_API.md
   . MonkeyTester-Plugin-AI (Mac, port 8091): the vision model; address set in Settings → Device Plugins
   . MonkeyTester-Plugin-Esp32 (port 8091 on the Linux host): esp32-sensor, the sensor boards
   . MonkeyTester-Plugin-Server (port 8093, fake server 8092): esp32-server, the hub boards
+  . MonkeyTester-Plugin-Diff (port 8095): DIFF, compares SNAPSHOT / ASSERT_LAYOUT statelessly
+    (the runner captures and sends frame, screen, elements and baselines)
   . Reached by PLUGIN test steps through mt-tests/scripts/plugin_client.py
 
 Build plugins (Linux or Mac) — separate repos, contract in BUILD_PLUGIN_API.md
@@ -303,8 +305,8 @@ Test files are `.txt` in `mt-tests/tests/`. Each step is `COMMAND: args`.
 | `UNINSTALL` | package_name | Uninstall app |
 | `INSTALL` | apk_path | Install APK |
 | `DIAGNOSE` | shell command | Diagnostic, never fails test |
-| `SNAPSHOT` | `<name> [mask=status_bar,nav_bar,tag:<id>,rect:x,y,w,h] [tolerance=<%>]` | Compare the screen at 1x with `<case>/snapshots/<platform>/<W>x<H>@<scale>x/<name>.png`. A missing baseline fails, like a mismatch; record mode saves and passes. See `SNAPSHOTS.md`. |
-| `ASSERT_LAYOUT` | `<tag> <check> [<tag2>] [tol=N] [gap>=N] [gap<=N]` | Check tagged element positions in pt/dp: `visible`, `inside screen/<tag>`, `centered-x/-y`, `below/above/left-of/right-of`, `no-overlap`, `aligned-left/-right/-top/-bottom/-center-x/-center-y`. See `SNAPSHOTS.md`. |
+| `DIFF: SNAPSHOT` | `<name> [mask=status_bar,nav_bar,tag:<id>,rect:x,y,w,h] [tolerance=<%>]` | A plugin step on the **DIFF plugin** (MonkeyTester-Plugin-Diff, spec `vt-specs/diff-plugin.md`): compare the screen at 1x with `<case>/snapshots/<platform>/<W>x<H>@<scale>x/<name>.png`. A missing baseline fails, like a mismatch; record mode saves and passes. The runner captures (runner-supplied `source` params: screenshot + baselines zips via the plugin's `POST /uploads`, `/screen`, `/elements` only when `when_args_match` hits, platform, record, raw args), the plugin compares statelessly; from its result (`actual_png_b64` shape) `_record_result_detail` writes `<name>.actual/.diff/.baseline.png` into `_test_outputs_dir()/snapshots/` and the same `step.snapshot` detail as before (viewer unchanged). Bare `SNAPSHOT:` is a parse error: `SNAPSHOT: steps were removed; write "DIFF: SNAPSHOT eula mask=status_bar" (line N)`. No DIFF plugin configured → `DIFF plugin is not configured: add MonkeyTester-Plugin-Diff on Settings → Plugins` (`plugin_client.PLUGIN_REPOS`). See `SNAPSHOTS.md`, PLUGIN_API.md "Runner-supplied params" / "Result shapes". Tests: `tests/test_diff_plugin_steps.py` (stdlib fake DIFF plugin). |
+| `DIFF: ASSERT_LAYOUT` | `<tag> <check> [<tag2>] [tol=N] [gap>=N] [gap<=N]` | DIFF plugin action: check tagged element positions in pt/dp: `visible`, `inside screen/<tag>`, `centered-x/-y`, `below/above/left-of/right-of`, `no-overlap`, `aligned-left/-right/-top/-bottom/-center-x/-center-y`. A `{passed, message}` result becomes `step.layout`. Bare `ASSERT_LAYOUT:` is a parse error like `SNAPSHOT:`. `SNAPSHOT`, `ASSERT_LAYOUT` and `MOTION` stay in `RESERVED_STEP_NAMES`. See `SNAPSHOTS.md`. |
 | `PLUGIN` | — | **Removed** (parse error naming the replacement); the rules below now apply to `<PLUGIN-NAME>:` steps. Runs an action on a device plugin (`PLUGIN_API.md`) and pass only if the job ends `passed`. Args are split shell-style, so values may be double-quoted (`pattern="WiFi connected"`); `${VAR}` is resolved first. `device=` and `timeout=` are step options, everything else is a param, converted to the type in the action's schema from `GET /actions` (int, float, bool, json). The job's log is printed to the console log. If the job isn't finished 15 s after its timeout, it is cancelled and the step fails. An unknown plugin or action fails the step with the list of known ones. Optional inline block: when the next non-blank line is indented deeper than the step, the lines up to a line that is exactly `END` are the block (stripped, blank lines dropped, `#` lines kept, `${VAR}` resolved) and are sent joined with `\n` as the param `script`. The action's schema must list `script`, and `script=` on the step line can't be combined with a block; either fails the step before a job is started. A block without `END`, or an `END` outside a block, fails at that step with its line number. |
 
 Example with an inline block (ESP32 plugin actions: `flash`, `reset`, `factory-reset`, `broadcast-ssid`, `expect` (takes the block), `clear`; start a test with `factory-reset`):
@@ -330,8 +332,8 @@ Several platform-only steps can share one condition with a block: a line that is
 
 ```
 IF IOS:
-  SNAPSHOT: local_network_prompt mask=status_bar
-  CLICK: Allow button
+  DIFF: SNAPSHOT local_network_prompt mask=status_bar
+  AI: CLICK Allow button
   WAIT: 2
 END IF
 ```
@@ -363,14 +365,12 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 | `mt-tests/scripts/run_on_device.py` | CLI: run tests on devices the Mobile Controller serves. Thin shim over `test_runner_core.py`. |
 | `mt-tests/scripts/test_runner_core.py` | Shared test engine: reads `.txt` test files, executes steps, runs vision model, writes results. |
 | `mt-tests/scripts/controller_client.py` | HTTP client for the Mobile Controller: click, input, swipe, screenshot, recording, install. |
-| `mt-tests/scripts/plugin_client.py` | HTTP client for device plugins (`PLUGIN_API.md`): `PluginClient` (health, devices, actions, jobs), `load_plugins_from_env()`, `plugins_status()`, and the MonkeyTester-Plugin-AI config calls (`ai_config`, `ai_save_config`, `ai_copilot_device_start/poll`, `ai_copilot_remove`, reduced to public shapes). |
+| `mt-tests/scripts/plugin_client.py` | HTTP client for device plugins (`PLUGIN_API.md`): `PluginClient` (health, devices, actions, `resolve_action` (exact, else the one case-insensitive match), `upload` (zip → `POST /uploads` → `upload:<id>`), jobs), `load_plugins_from_env()`, `plugins_status()`, `PARAM_SOURCES` / `DIFF_PLUGIN_STEPS` / `PLUGIN_REPOS`, and the MonkeyTester-Plugin-AI config calls (`ai_config`, `ai_save_config`, `ai_copilot_device_start/poll`, `ai_copilot_remove`, reduced to public shapes). `snapshots.py` / `layout.py` moved to MonkeyTester-Plugin-Diff (with their unit tests); `test_runner_core.record_mode()` replaces `snapshots.record_mode()`. |
 | `mt-tests/scripts/apk_manifest.py` | Reads package and version from an APK's binary manifest (no aapt needed). |
 | `mt-tests/scripts/ios_app_archive.py` | Reads the bundle ID from an `.ipa` or `.zip` without unpacking it. |
 | `mt-tests/scripts/device_lock.py` | Per-device run queue (`flock`). |
 | `mt-tests/scripts/vision_analyzer.py` | Vision model API calls (verify, find, check_input, describe), always to the configured endpoint — normally the MonkeyTester-Plugin-AI plugin, which picks local or Copilot itself. |
 | `mt-tests/scripts/screenshot_diff.py` | Compares two screenshots. |
-| `mt-tests/scripts/snapshots.py` | SNAPSHOT step: stdlib PNG decode/encode, 1x box downscale, screen class, masks, compare. |
-| `mt-tests/scripts/layout.py` | ASSERT_LAYOUT step: parses and checks element relations in pt/dp. |
 | `mt-tests/scripts/generate_placeholders.py` | Placeholder generation. |
 
 ### HTML Pages
@@ -428,6 +428,7 @@ Variables: a bare `KEY=VALUE` step (no space before `=`) stores a value and ever
 | 8092 | Fake server of MonkeyTester-Plugin-Server (separate repo) |
 | 8093 | MonkeyTester-Plugin-Server (`esp32-server`) device plugin (separate repo) |
 | 8094 | MonkeyTester-Plugin-Build-Local (`build-local`) build plugin (separate repo) |
+| 8095 | MonkeyTester-Plugin-Diff (`DIFF`) device plugin on `127.0.0.1` (separate repo): `DIFF: SNAPSHOT` / `DIFF: ASSERT_LAYOUT` |
 
 ### Settings files
 | File | Holds |

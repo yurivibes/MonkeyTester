@@ -135,11 +135,17 @@ lines get `${VAR}` substitution and are sent joined with `\n` as the `script` pa
 only to an action whose schema has `script`. A block without `END` or a stray `END` gives
 a step with an `error` that fails when it runs.
 
-`SNAPSHOT` and `ASSERT_LAYOUT` steps (see `SNAPSHOTS.md`) read `GET /devices/<id>/screen`
-(including `scale`) and `GET /devices/<id>/elements` through `controller_client.py`.
-`snapshots.py` decodes the screenshot, scales it to 1x, and compares it with
-`<test dir>/snapshots/<platform>/<W>x<H>@<scale>x/<name>.png`. The baselines arrive with the
-upload. A missing baseline fails like a mismatch. `--record-snapshots` saves candidates without
+`DIFF: SNAPSHOT` and `DIFF: ASSERT_LAYOUT` steps (see `SNAPSHOTS.md`) are plugin steps on the
+DIFF plugin (MonkeyTester-Plugin-Diff, a separate repo, default `127.0.0.1:8095`), which compares
+and keeps no state. The runner captures: the actions' params marked with a `source`
+(PLUGIN_API.md, "Runner-supplied params") are filled from the controller (`/frame` uploaded
+as a PNG through the plugin's `POST /uploads`, `/screen` with `scale`, `/elements`), the
+platform, record mode, the step's raw arguments and a zip of the baselines in
+`<test dir>/snapshots/` (they arrive with the upload). The plugin picks the
+`<platform>/<W>x<H>@<scale>x/<name>.png` baseline itself. From a SNAPSHOT-shaped result the
+runner writes `<name>.actual.png` / `.diff.png` / `.baseline.png` into the test's outputs and
+the same `step.snapshot` detail as before, so the viewer is unchanged. A missing baseline fails
+like a mismatch. `--record-snapshots` saves candidates without
 comparing and marks the run `record_snapshots` in its metadata, so `/api/runs/<run>/result`
 reports `recording`, never `passed`. `--case` stores the case name, which
 `/api/runs/<run>/snapshots.zip` uses to lay out new baselines.
@@ -260,6 +266,7 @@ same command is in `flake.nix` (`nix run .#tests`) and `.github/workflows/test.y
 - `ffmpeg`, for WebM conversion of saved videos
 - Vision model API (Qwen2.5-VL or similar), called by `vision_analyzer.py`
 - Device plugins such as MonkeyTester-Plugin-Esp32, optional, only for tests with plugin steps
+- MonkeyTester-Plugin-Diff (`DIFF`, port 8095 on `127.0.0.1`), only for tests with `DIFF: SNAPSHOT` / `DIFF: ASSERT_LAYOUT` steps: compares what the runner captured, keeps no state
 - A build plugin (MonkeyTester-Plugin-Build-Local, `build-local`, port 8094), for Build & Test: it fetches the code from Gitea or GitHub and builds it on its own host
 
 ## Nix Flake
