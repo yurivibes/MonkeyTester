@@ -1,4 +1,4 @@
 # Simple login test
 
-SNAPSHOT: login_screen mask=status_bar
+DIFF: SNAPSHOT login_screen mask=status_bar
 AI: VERIFY Login screen is visible

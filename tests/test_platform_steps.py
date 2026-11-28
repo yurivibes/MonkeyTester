@@ -46,7 +46,7 @@ class BlockParseTests(unittest.TestCase):
         steps = core.parse_steps([
             "WAIT: 1",
             "IF IOS:",
-            " SNAPSHOT: prompt",
+            " DIFF: SNAPSHOT prompt",
             " # a comment",
             " AI: CLICK Allow button",
             "END IF IOS",
@@ -56,7 +56,7 @@ class BlockParseTests(unittest.TestCase):
             "WAIT: 3",
         ])
         self.assertEqual([(s["command"], s.get("platform")) for s in steps], [
-            ("WAIT", None), ("SNAPSHOT", "ios"), ("AI", "ios"),
+            ("WAIT", None), ("DIFF", "ios"), ("AI", "ios"),
             ("WAIT", "android"), ("WAIT", None),
         ])
         self.assertFalse(any("error" in s for s in steps))

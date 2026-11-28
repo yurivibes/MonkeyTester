@@ -19,6 +19,9 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import base64
+import io
+import zipfile
 from pathlib import Path
 from datetime import datetime
 
@@ -29,8 +32,6 @@ import vision_analyzer
 import controller_client as controller
 import apk_manifest
 import plugin_client
-import snapshots
-import layout
 
 
 # Package/bundle ID of the app under test, set per device by _run_device_tests.
@@ -46,6 +47,14 @@ _app_path_under_test = None
 _last_case_by_output = {}
 
 
+def record_mode():
+    """True when the run records SNAPSHOT baselines instead of comparing
+    (`--record-snapshots`: run_on_device.py sets MT_RECORD_SNAPSHOTS). Sent to
+    plugins as a `source: record` param and recorded in run metadata."""
+    return (os.environ.get("MT_RECORD_SNAPSHOTS") or "").strip().lower() not in (
+        "", "0", "false", "off", "no")
+
+
 def _device_platform():
     """'ios' or 'android' for DEVICE_ID. run_on_device sets DEVICE_PLATFORM;
     otherwise a UDID (hex with a dash) is an iPhone, anything else Android."""
@@ -59,7 +68,7 @@ def _device_platform():
 def run_flags():
     """Run-level settings recorded in run_metadata.json."""
     flags = {}
-    if snapshots.record_mode():
+    if record_mode():
         flags['record_snapshots'] = True
     case = (os.environ.get("MT_CASE") or "").strip()
     if case:
@@ -1261,6 +1270,15 @@ def _removed_plugin_step_error(args, line_num):
     return f'PLUGIN: steps were removed; write "{example}" (line {line_num})'
 
 
+def _removed_diff_step_error(step, args, line_num):
+    """The parse error for a bare `SNAPSHOT:` / `ASSERT_LAYOUT:` line: those
+    steps run in the DIFF plugin now (`DIFF: SNAPSHOT eula mask=status_bar`),
+    so it names the line and the replacement with the same arguments."""
+    rest = f" {args.strip()}" if args.strip() else " <args>"
+    return (f'{step}: steps were removed; write '
+            f'"{plugin_client.DIFF_PLUGIN_NAME}: {step}{rest}" (line {line_num})')
+
+
 def parse_steps(lines, test_dir=None):
     """Turn test-file lines into steps: {line, command, args, raw}.
 
@@ -1275,7 +1293,8 @@ def parse_steps(lines, test_dir=None):
     The retired `PLUGIN: <name> <action>` form is a parse error naming the
     line and the replacement (its inline block is still consumed, so the
     block lines don't turn into steps); so are bare `VERIFY:` / `CLICK:` /
-    `INPUT:` lines (replacement `AI: CLICK <text>`).
+    `INPUT:` lines (replacement `AI: CLICK <text>`) and bare `SNAPSHOT:` /
+    `ASSERT_LAYOUT:` lines (replacement `DIFF: SNAPSHOT <args>`).
 
     Blank and `#` lines are skipped. A plugin step whose next non-blank line is
     indented deeper than the step carries an inline block: the lines up to a
@@ -1362,6 +1381,8 @@ def parse_steps(lines, test_dir=None):
             step['error'] = _removed_plugin_step_error(args, line_num)
         elif cmd in plugin_client.AI_VISION_VERBS:
             step['error'] = _removed_vision_step_error(cmd, args, line_num)
+        elif cmd in plugin_client.DIFF_PLUGIN_STEPS:
+            step['error'] = _removed_diff_step_error(cmd, args, line_num)
         if block_platform and platform and platform != block_platform:
             step['error'] = (f"Line {line_num} is for {platform.upper()} but sits inside the "
                              f"IF {block_platform.upper()}: block opened at line {block_line}")
@@ -1550,15 +1571,141 @@ def _find_plugin(plugins, name):
     return None
 
 
+def _source_params(schema):
+    """{param: spec} for the params of an action's schema that carry a
+    `source` key: the runner fills those itself (PLUGIN_API.md
+    "Runner-supplied params"), the test author never writes them."""
+    return {key: spec for key, spec in (schema or {}).items()
+            if isinstance(spec, dict) and spec.get("source")}
+
+
+def _zip_bytes(files):
+    """A zip archive (bytes) of [(arcname, path)]."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for arcname, path in files:
+            zf.write(path, arcname)
+    return buf.getvalue()
+
+
+def _baseline_files():
+    """[(arcname, path)] of the current case's baselines, arcnames
+    `snapshots/<android|ios>/<W>x<H>@<scale>x/<name>.png` (the layout uploads
+    use, SNAPSHOT_BASELINE_RE); regular files only, no symlinks, anything else
+    in the folder (.DS_Store, notes) left out. Empty when the case has none."""
+    root = Path(_current_test_dir or ".") / "snapshots"
+    if not root.is_dir() or root.is_symlink():
+        return []
+    files = []
+    for path in sorted(root.rglob("*.png")):
+        rel = path.relative_to(root).as_posix()
+        if path.is_symlink() or not path.is_file() or not SNAPSHOT_BASELINE_RE.fullmatch(rel):
+            continue
+        files.append((f"snapshots/{rel}", path))
+    return files
+
+
+# Named `when` conditions a source param may carry (fill it only then):
+# `tag_mask` = the step text has a `tag:<id>` mask (only then do SNAPSHOT
+# masks need the element list, which can take seconds to read on iOS).
+SOURCE_WHEN = {"tag_mask": re.compile(r"(?:^|[\s,=])tag:\S")}
+
+
+def _source_wanted(when, raw_args):
+    """False when a source param's `when` condition says it isn't needed for
+    this step; an unknown condition (newer plugin) fills it anyway."""
+    rule = SOURCE_WHEN.get(when) if when else None
+    return rule is None or rule.search(raw_args) is not None
+
+
+def _fill_source(kind, client, raw_args):
+    """The value of one runner-supplied param (`source: <kind>`). Raises
+    RuntimeError / plugin_client.PluginError / OSError when it can't be made."""
+    if kind == "args":
+        return raw_args
+    if kind == "platform":
+        return _device_platform()
+    if kind == "record":
+        return record_mode()
+    if kind == "screen":
+        return controller.get_screen_info()
+    if kind == "elements":
+        return controller.get_elements()
+    if kind == "screenshot":
+        with tempfile.TemporaryDirectory(prefix="mt-plugin-shot-") as tmp:
+            shot = Path(tmp) / "screenshot.png"
+            if not controller.screenshot(shot) or not shot.is_file():
+                raise RuntimeError("screenshot capture failed")
+            data = shot.read_bytes()
+        if not data.startswith(PNG_MAGIC):
+            raise RuntimeError("the controller's screenshot is not a PNG")
+        return client.upload(data, content_type="image/png")
+    if kind == "baselines":
+        return client.upload(_zip_bytes(_baseline_files()))
+    raise RuntimeError(f"unknown param source {kind!r} (this MonkeyTester knows "
+                       f"{', '.join(plugin_client.PARAM_SOURCES)}); update MonkeyTester")
+
+
+def _shown_source_value(value):
+    """A runner-supplied value as the console log shows it (no element dumps)."""
+    if isinstance(value, list):
+        return f"<{len(value)} item{'s' if len(value) != 1 else ''}>"
+    if isinstance(value, str) and len(value) > 120:
+        return value[:117] + "..."
+    return value
+
+
+def _shown_result(result):
+    """The job result for the console log: base64 image fields (`*_b64`)
+    replaced by their size, so a PNG never floods the log."""
+    if isinstance(result, dict):
+        return {k: (f"<{len(v)} chars base64>" if k.endswith("_b64") and isinstance(v, str)
+                    else _shown_result(v)) for k, v in result.items()}
+    if isinstance(result, list):
+        return [_shown_result(v) for v in result]
+    return result
+
+
+def _plugin_not_configured(plugin, plugins, args):
+    """Print why `plugin` can't be called (not in the configured list)."""
+    repo = plugin_client.PLUGIN_REPOS.get(plugin.upper())
+    if repo:
+        print(f"  [{_ts()}] -> ERROR: {plugin.upper()} plugin is not configured: "
+              f"add {repo} on Settings → Plugins")
+        return
+    known = ", ".join(sorted(plugins)) or "none (set MT_PLUGINS=name=url)"
+    print(f"  [{_ts()}] -> ERROR: Unknown plugin '{plugin}'. Configured plugins: {known}")
+    if plugin_client.is_ai_identity(plugin) and plugin != ai_plugin_name():
+        print(f"  [{_ts()}] -> The AI plugin is named {ai_plugin_name()} now; write "
+              f"\"{ai_plugin_name()}: {args.strip()}\"")
+
+
 def _run_plugin_step(step, args):
     """A plugin step (`<NAME>: <action> ...`): run an action on the device
-    plugin step['plugin'] names; passes only on `passed`."""
+    plugin step['plugin'] names; passes only on `passed`.
+
+    The action's param schema decides two things before the job starts:
+    params with a `source` key are filled by the runner (screenshot, screen,
+    elements, platform, baselines, record, args — see PLUGIN_API.md) and may
+    not be written on the step; an action with a `source: args` param gets
+    the raw rest of the line after the action in it, instead of key=value
+    parsing (`DIFF: SNAPSHOT eula mask=status_bar`). After the job, a result
+    of a known shape is turned into the step's result detail (see
+    _record_result_detail)."""
     plugin = step.get('plugin') or "PLUGIN"
-    try:
-        action, params, device, timeout_s = parse_plugin_args(args, plugin)
-    except ValueError as e:
-        print(f"  [{_ts()}] -> ERROR: {e}")
+    head = re.match(r'\s*(\S+)\s*(.*)$', args, re.S)
+    if not head:
+        try:
+            parse_plugin_args(args, plugin)  # raises the "needs <action>" message
+        except ValueError as e:
+            print(f"  [{_ts()}] -> ERROR: {e}")
         return False
+    action, raw_args = head.group(1), head.group(2).strip()
+    try:
+        parsed = parse_plugin_args(args, plugin)
+        parse_error = None
+    except ValueError as e:
+        parsed, parse_error = None, e
     try:
         plugins = _get_plugins()
     except plugin_client.PluginError as e:
@@ -1566,23 +1713,40 @@ def _run_plugin_step(step, args):
         return False
     client = _find_plugin(plugins, plugin)
     if client is None:
-        known = ", ".join(sorted(plugins)) or "none (set MT_PLUGINS=name=url)"
-        print(f"  [{_ts()}] -> ERROR: Unknown plugin '{plugin}'. Configured plugins: {known}")
-        if plugin_client.is_ai_identity(plugin) and plugin != ai_plugin_name():
-            print(f"  [{_ts()}] -> The AI plugin is named {ai_plugin_name()} now; write "
-                  f"\"{ai_plugin_name()}: {args.strip()}\"")
+        _plugin_not_configured(plugin, plugins, args)
+        return False
+    schema, sources = {}, {}
+    try:
+        client.ensure_compatible()
+        action = client.resolve_action(action)
+        schema = client.action(action).get("params") or {}
+        sources = _source_params(schema)
+    except plugin_client.PluginError as e:
+        if parse_error is not None:
+            print(f"  [{_ts()}] -> ERROR: {parse_error}")
+            return False
+        if step.get('block') is not None:
+            print(f"  [{_ts()}] -> ERROR: {e}")
+            return False
+        sources = None  # client.run reports it, as before
+    if sources and any(spec.get("source") == "args" for spec in sources.values()):
+        params, device, timeout_s = {}, None, None
+    elif parse_error is not None:
+        print(f"  [{_ts()}] -> ERROR: {parse_error}")
+        return False
+    else:
+        _, params, device, timeout_s = parsed
+    set_by_author = sorted(set(params) & set(sources or {}))
+    if set_by_author:
+        key = set_by_author[0]
+        print(f"  [{_ts()}] -> ERROR: {plugin}: {key}= is filled by MonkeyTester "
+              f"(source: {sources[key]['source']}); remove it from the step")
         return False
     block = step.get('block')
     if block is not None:
         if "script" in params:
             print(f"  [{_ts()}] -> ERROR: {plugin}: step at line {step['line']} has both an inline "
                   f"block and script= on the step line; use one")
-            return False
-        try:
-            client.ensure_compatible()
-            schema = client.action(action).get("params") or {}
-        except plugin_client.PluginError as e:
-            print(f"  [{_ts()}] -> ERROR: {e}")
             return False
         if "script" not in schema:
             print(f"  [{_ts()}] -> ERROR: {plugin} action '{action}' takes no inline block "
@@ -1598,6 +1762,21 @@ def _run_plugin_step(step, args):
         print(f"  [{_ts()}]   script ({len(block)} line{'s' if len(block) != 1 else ''}):")
         for line in block:
             print(f"  [{_ts()}]       {line}")
+    for key, spec in (sources or {}).items():
+        kind = spec.get("source")
+        if not _source_wanted(spec.get("when"), raw_args):
+            continue
+        try:
+            params[key] = _fill_source(kind, client, raw_args)
+        except (RuntimeError, OSError, plugin_client.PluginError) as e:
+            if spec.get("required"):
+                print(f"  [{_ts()}] -> ERROR: {plugin}: could not fill {key} "
+                      f"(source: {kind}): {e}")
+                return False
+            print(f"  [{_ts()}]   {key} (source: {kind}) left out: {e}")
+            continue
+        print(f"  [{_ts()}]   {key} (source: {kind}) = "
+              f"{json.dumps(_shown_source_value(params[key]))}")
 
     def on_log(line):
         print(f"  [{_ts()}]   [{plugin}] {line}")
@@ -1610,13 +1789,14 @@ def _run_plugin_step(step, args):
     state = job.get("state")
     print(f"  [{_ts()}] -> {plugin} job {job.get('id')} {state}")
     if job.get("result") is not None:
-        print(f"  [{_ts()}] -> Result: {json.dumps(job['result'])}")
+        print(f"  [{_ts()}] -> Result: {json.dumps(_shown_result(job['result']))}")
     error = job.get("error")
     if error:
         if isinstance(error, dict):
             print(f"  [{_ts()}] -> Error: {error.get('message')} ({error.get('code')})")
         else:
             print(f"  [{_ts()}] -> Error: {error}")
+    _record_result_detail(job.get("result"))
     return state == "passed"
 
 
@@ -1624,60 +1804,82 @@ def _rel_to_project(path):
     return os.path.relpath(path, PROJECT_ROOT) if path else None
 
 
-def _run_snapshot_step(step, args):
-    """SNAPSHOT: compare the screen with the case's baseline (see snapshots.py).
-    A missing baseline fails, like a mismatch; record mode saves and passes."""
-    global _step_detail
-    try:
-        name, masks, tolerance = snapshots.parse_args(args)
-    except snapshots.SnapshotError as e:
-        print(f"  [{_ts()}] -> ERROR: {e}")
-        return False
-    detail = {'name': name, 'status': 'error'}
-    _step_detail = {'snapshot': detail}
-    try:
-        screen = controller.get_screen_info()
-        elements = None
-        if any(m[0] == 'tag' for m in masks):
-            elements = controller.get_elements()
-        capture = _test_outputs_dir() / "snapshots" / f"{name}.capture.png"
-        capture.parent.mkdir(parents=True, exist_ok=True)
-        if not controller.screenshot(capture):
-            raise RuntimeError("screenshot capture failed")
-        root = Path(_current_test_dir or ".") / "snapshots"
-        result = snapshots.take(
-            name, capture_png=capture.read_bytes(), platform=_device_platform(),
-            scale=screen['scale'], snapshot_root=root, out_dir=capture.parent,
-            masks=masks, tolerance=tolerance, elements=elements,
-            record=snapshots.record_mode())
-        capture.unlink(missing_ok=True)
-    except (RuntimeError, snapshots.SnapshotError, OSError) as e:
-        detail['message'] = str(e)
-        print(f"  [{_ts()}] -> SNAPSHOT ERROR: {e}")
-        return False
-    for key in ('actual', 'baseline', 'diff'):
-        result[key] = _rel_to_project(result[key])
-    detail.update(result)
-    print(f"  [{_ts()}] -> SNAPSHOT {name} [{result['screen_class']}]: "
-          f"{result['status'].upper()} - {result['message']}")
-    return result['status'] in ('match', 'recorded')
+# Names and case-relative baseline paths a SNAPSHOT result may carry; anything
+# else is refused before it becomes a file name.
+SNAPSHOT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")
+SNAPSHOT_BASELINE_RE = re.compile(
+    r"(android|ios)/\d{2,5}x\d{2,5}@\d+(\.\d+)?x/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\.png")
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+# The step.snapshot keys the viewer reads (test.html, snapshots.zip, mismatch list).
+SNAPSHOT_DETAIL_KEYS = ("name", "status", "screen_class", "baseline_path", "diff_percent",
+                        "tolerance", "message")
 
 
-def _run_layout_step(step, args):
-    """ASSERT_LAYOUT: check tagged element positions (see layout.py)."""
-    global _step_detail
+def _decode_png_b64(value):
+    """PNG bytes from a base64 string, or None when it isn't one."""
+    if not isinstance(value, str) or not value:
+        return None
     try:
-        layout.parse(args)
-        screen = controller.get_screen_info()
-        elements = controller.get_elements()
-        passed, message = layout.check(args, screen, elements)
-    except (layout.LayoutError, RuntimeError) as e:
-        print(f"  [{_ts()}] -> ERROR: {e}")
-        _step_detail = {'layout': {'passed': False, 'message': str(e)}}
-        return False
-    _step_detail = {'layout': {'passed': passed, 'message': message}}
-    print(f"  [{_ts()}] -> LAYOUT {'OK' if passed else 'FAILED'}: {message}")
-    return passed
+        data = base64.b64decode(value, validate=True)
+    except (ValueError, TypeError):
+        return None
+    return data if data.startswith(PNG_MAGIC) else None
+
+
+def _record_result_detail(result):
+    """Turn a plugin job's result into the step's result detail, by shape:
+
+    - SNAPSHOT shape (has `actual_png_b64`): writes outputs/[<case>/]snapshots/
+      <name>.actual.png, <name>.diff.png (when `diff_png_b64`) and
+      <name>.baseline.png (a copy of the case's baseline, when compared) and
+      sets step.snapshot = {name, status, screen_class, baseline_path,
+      diff_percent, tolerance, message, actual, baseline, diff} with paths
+      relative to the project (what the viewer reads).
+    - layout shape (exactly `passed` (bool) and `message`): step.layout.
+
+    Any other result leaves no detail."""
+    global _step_detail
+    if not isinstance(result, dict):
+        return
+    if "actual_png_b64" in result:
+        detail = {key: result.get(key) for key in SNAPSHOT_DETAIL_KEYS}
+        detail.update(actual=None, baseline=None, diff=None)
+        _step_detail = {'snapshot': detail}
+        name = result.get("name")
+        if not isinstance(name, str) or not SNAPSHOT_NAME_RE.fullmatch(name):
+            if result.get("actual_png_b64") or result.get("diff_png_b64"):
+                detail['status'] = 'error'
+                detail['message'] = f"plugin returned an invalid snapshot name {name!r}"
+            # else: an error result (bad args) with no images: keep its message
+            print(f"  [{_ts()}] -> SNAPSHOT {str(detail.get('status')).upper()}: "
+                  f"{detail.get('message')}")
+            return
+        out = _test_outputs_dir() / "snapshots"
+        out.mkdir(parents=True, exist_ok=True)
+        actual = _decode_png_b64(result.get("actual_png_b64"))
+        if actual is not None:
+            path = out / f"{name}.actual.png"
+            path.write_bytes(actual)
+            detail['actual'] = _rel_to_project(path)
+        diff = _decode_png_b64(result.get("diff_png_b64"))
+        if diff is not None:
+            path = out / f"{name}.diff.png"
+            path.write_bytes(diff)
+            detail['diff'] = _rel_to_project(path)
+        baseline_path = result.get("baseline_path")
+        if (detail['status'] not in ("recorded", "missing") and isinstance(baseline_path, str)
+                and SNAPSHOT_BASELINE_RE.fullmatch(baseline_path)):
+            source = Path(_current_test_dir or ".") / "snapshots" / baseline_path
+            if source.is_file() and not source.is_symlink():
+                path = out / f"{name}.baseline.png"
+                shutil.copyfile(source, path)
+                detail['baseline'] = _rel_to_project(path)
+        print(f"  [{_ts()}] -> SNAPSHOT {name} [{detail.get('screen_class')}]: "
+              f"{str(detail.get('status')).upper()} - {detail.get('message')}")
+    elif set(result) == {"passed", "message"} and isinstance(result["passed"], bool):
+        _step_detail = {'layout': {'passed': result["passed"], 'message': result["message"]}}
+        print(f"  [{_ts()}] -> LAYOUT {'OK' if result['passed'] else 'FAILED'}: "
+              f"{result['message']}")
 
 
 def execute_step(step):
@@ -1971,12 +2173,6 @@ def execute_step(step):
         except Exception as e:
             print(f"     [{_ts()}] ERROR: {e}")
             return True
-
-    elif cmd == "SNAPSHOT":
-        return _run_snapshot_step(step, args)
-
-    elif cmd == "ASSERT_LAYOUT":
-        return _run_layout_step(step, args)
 
     elif cmd == "LAUNCH":
         # Launch the app using restart (force-stop, clear data, start)
